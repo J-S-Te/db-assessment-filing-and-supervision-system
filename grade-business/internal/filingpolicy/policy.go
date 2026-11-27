@@ -22,6 +22,7 @@ type Rule struct {
 	Kind             string `json:"kind"`
 	Label            string `json:"label"`
 	FilenameContains string `json:"filenameContains,omitempty"`
+	Disabled         bool   `json:"disabled,omitempty"`
 }
 
 type Material struct {
@@ -65,13 +66,13 @@ func Replace(ctx context.Context, db queryRower, expected int64, rules []Rule) (
 	return policy, err
 }
 
-// For 返回当前阶段使用的材料规则，保持监管配置顺序。
+// For 返回当前阶段已启用的材料规则，保持监管配置顺序。
 // 参数 stage 为首报、变更或注销。
-// 返回值 固定阶段的规则切片。
+// 返回值 参与详情、提交及预审的规则切片。
 func (policy Policy) For(stage string) []Rule {
 	rules := make([]Rule, 0)
 	for _, rule := range policy.Rules {
-		if rule.Stage == stage {
+		if rule.Stage == stage && !rule.Disabled {
 			rules = append(rules, rule)
 		}
 	}

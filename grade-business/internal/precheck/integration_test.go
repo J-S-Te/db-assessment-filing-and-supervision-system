@@ -74,6 +74,48 @@ func TestStoredJobRevision(t *testing.T) {
 	}
 }
 
+// TestPrecheckSkipsDisabledPolicyRule 验证关闭规则只影响新预审，历史结果保留原有检查项。
+// 参数 t 为隔离测试上下文。
+// 返回值 无。
+func TestPrecheckSkipsDisabledPolicyRule(t *testing.T) {
+	pool := isolatedPool(t)
+	const filing = "00000000-0000-4000-8000-000000000003"
+	service := New(pool, func(context.Context, string) (Snapshot, error) {
+		return Snapshot{Revision: 1}, nil
+	})
+	rules := []filingpolicy.Rule{{Stage: filingpolicy.Initial, Kind: "supporting", Label: "评审意见"}}
+	policy, err := filingpolicy.Replace(t.Context(), pool, 1, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.Start(t.Context(), filing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules[0].Disabled = true
+	if _, err := filingpolicy.Replace(t.Context(), pool, policy.Version, rules); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.runOne(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := service.Get(t.Context(), filing, first.ID)
+	if err != nil || !previous.Stale || len(previous.Findings) != 3 {
+		t.Fatalf("历史结果未保留原规则快照：%+v，%v", previous, err)
+	}
+	updated, err := service.Start(t.Context(), filing)
+	if err != nil || updated.ID == first.ID {
+		t.Fatalf("关闭规则后未创建新任务：%+v，%v", updated, err)
+	}
+	if err := service.runOne(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.Get(t.Context(), filing, updated.ID)
+	if err != nil || current.Stale || current.Status != "succeeded" || len(current.Findings) != 2 {
+		t.Fatalf("新预审未正确排除关闭规则：%+v，%v", current, err)
+	}
+}
+
 // isolatedPool 在专用业务测试库建立独立 schema 并应用迁移。
 // 参数 t 控制访问和清理期限。
 // 返回值 指向本测试 schema 的连接池。

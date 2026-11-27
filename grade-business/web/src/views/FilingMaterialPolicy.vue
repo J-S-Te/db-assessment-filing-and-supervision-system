@@ -11,7 +11,7 @@ const failure = ref('')
 const notice = ref('')
 
 /**
- * 用途 加载当前正式启用的备案材料规则和版本。
+ * 用途 加载已保存的备案材料规则、启用状态和版本。
  * 参数 无。
  * 返回值 请求完成后填充编辑草稿，失败时显示原因。
  */
@@ -47,7 +47,7 @@ async function save() {
     })
     policy.value = result
     rules.value = result.rules.map(rule => ({ ...rule }))
-    notice.value = '已保存规则，适用于之后提交的对应事项。'
+    notice.value = '已保存材料规则。对应事项的提交和新发起的预审将按当前启用状态检查。'
   } catch (error) {
     failure.value = errorText(error)
   } finally {
@@ -63,7 +63,8 @@ onMounted(() => { void load() })
     <div class="policy-heading">
       <div>
         <h2 id="material-policy-heading">备案附加必传材料</h2>
-        <p class="muted">按办理事项配置附加材料。填写文件名关键词后，仅使用类别及文件名同时匹配的材料。</p>
+        <p class="muted">已启用的规则参与材料预审和缺件校验。关闭后保留配置，保存后生效。
+          填写文件名关键词时，附件须同时匹配材料类别和关键词。</p>
       </div>
       <button class="button neutral" type="button" :disabled="busy" @click="load">重新读取</button>
     </div>
@@ -88,11 +89,21 @@ onMounted(() => { void load() })
         <label class="field"><span>文件名关键词（选填）</span>
           <input v-model="rule.filenameContains" maxlength="120">
         </label>
-        <button class="button neutral" type="button" @click="rules.splice(index, 1)">移除</button>
+        <div class="policy-status">
+          <span class="policy-status-label">规则状态</span>
+          <button class="button neutral policy-switch" type="button" role="switch"
+            :aria-checked="!rule.disabled" :aria-label="'启用规则：' + (rule.label || (index + 1))"
+            @click="rule.disabled = !rule.disabled">
+            <span class="policy-switch-track" aria-hidden="true"></span>
+            {{ rule.disabled ? '已关闭' : '已启用' }}
+          </button>
+        </div>
+        <button v-if="index >= policy.rules.length" class="button neutral" type="button"
+          @click="rules.splice(index, 1)">取消新建</button>
       </fieldset>
       <div class="form-actions">
         <button class="button neutral" type="button" :disabled="busy || rules.length >= 40"
-          @click="rules.push({ stage: 'initial', kind: 'supporting', label: '', filenameContains: '' })">添加规则</button>
+          @click="rules.push({ stage: 'initial', kind: 'supporting', label: '', filenameContains: '' })">新建规则</button>
         <button class="button primary" type="submit" :disabled="busy">保存材料规则</button>
       </div>
     </template>
@@ -105,4 +116,18 @@ onMounted(() => { void load() })
 .policy-heading h2 { margin: 0 0 .4rem; }
 .policy-row { display: flex; flex-wrap: wrap; align-items: end; gap: .7rem; margin: 1rem 0; padding: .75rem; }
 .policy-row .field { flex: 1 1 11rem; }
+.policy-status { display: grid; gap: .45rem; }
+.policy-status-label { color: var(--muted); font-size: .875rem; }
+.policy-switch { display: inline-flex; align-items: center; gap: .55rem; white-space: nowrap; }
+.policy-switch-track { width: 2rem; height: 1.125rem; padding: .1875rem; border-radius: 1rem; background: #62768c; }
+.policy-switch-track::after {
+  content: '';
+  display: block;
+  width: .75rem;
+  height: .75rem;
+  border-radius: 50%;
+  background: white;
+}
+.policy-switch[aria-checked='true'] .policy-switch-track { background: #185c9e; }
+.policy-switch[aria-checked='true'] .policy-switch-track::after { transform: translateX(.875rem); }
 </style>

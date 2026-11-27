@@ -13730,6 +13730,7 @@ components:
         kind: {type: string}
         label: {type: string}
         filenameContains: {type: string}
+        disabled: {type: boolean, default: false, description: 关闭后保留配置并退出材料校验}
     FilingMaterialPolicy:
       type: object
       required: [version, rules]

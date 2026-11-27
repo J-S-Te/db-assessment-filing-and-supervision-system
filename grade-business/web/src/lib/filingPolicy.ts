@@ -12,6 +12,7 @@ export type FilingMaterialRule = {
   kind: string
   label: string
   filenameContains?: string
+  disabled?: boolean
 }
 
 export type FilingMaterialPolicy = { version: number; rules: FilingMaterialRule[] }
