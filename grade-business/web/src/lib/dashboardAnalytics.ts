@@ -5,7 +5,11 @@ export type DashboardIndustry = DistrictCounts & { code: string; label: string }
 export type DashboardIssue = { code: string; label: string; count: number }
 export type DashboardIndustryAnalysis = { items: DashboardIndustry[]; unclassified: DistrictCounts }
 export type DashboardIssueAnalysis = { items: DashboardIssue[]; unclassified: number }
-export type DashboardAnalytics = { industries: DashboardIndustryAnalysis; commonIssues: DashboardIssueAnalysis }
+export type DashboardAnalytics = {
+  industries: DashboardIndustryAnalysis
+  commonIssues: DashboardIssueAnalysis
+  recentCommonIssues?: DashboardIssueAnalysis
+}
 
 export type ClassificationKind = 'industry' | 'issue'
 type ClassificationOption = { code: string; label: string }

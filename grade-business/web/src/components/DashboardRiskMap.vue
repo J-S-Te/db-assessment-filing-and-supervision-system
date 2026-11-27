@@ -8,7 +8,7 @@ import { dashboardNumber, dashboardTime, type DashboardAlert } from '../lib/dash
 import { projectRiskSandbox, type DistrictOutline } from '../lib/dashboardGeo'
 import type { DistrictResponse, ResponseSummary } from '../lib/districtResponse'
 import { hazardPath } from '../lib/hazards'
-import { riskLevels, riskColor, riskParts } from '../lib/dashboardSandboxRisk'
+import { riskLevels, riskColor, riskParts } from '../lib/dashboardRiskAnalysis'
 import type { DashboardArea } from '../lib/session'
 
 const props = defineProps<{
@@ -126,7 +126,7 @@ onScopeDispose(() => document.removeEventListener('keydown', leaveSelection))
 </script>
 
 <template>
-  <section class="map-card glass" :aria-label="overview ? '区县处置态势' : undefined">
+  <section class="map-card glass" :aria-label="overview ? '区县处置态势' : '区县风险热力'">
     <header class="map-head">
       <h3>{{ overview ? '区县处置态势' : '区县风险热力' }}</h3>
       <div class="tabs" role="group" aria-label="区县展示方式">
@@ -136,7 +136,7 @@ onScopeDispose(() => document.removeEventListener('keydown', leaveSelection))
           :aria-pressed="mode === 'heat'" @click="mode = 'heat'">{{ overview ? '地图' : '热力' }}</button>
       </div>
       <span class="cap grow">综合风险指数 · 逾期 40% / 高风险 40% / 待复测 20%</span>
-      <button v-if="overview && !area && (summary?.withoutDistrict.systems ?? 0) > 0"
+      <button v-if="!locked && !area && (summary?.withoutDistrict.systems ?? 0) > 0"
         class="chip mini" type="button" :aria-pressed="selected === ''" @click="choose('')">未归区</button>
       <button v-if="!locked" class="chip mini" type="button" @click="reset">{{ area ? '市域' : '全域' }}</button>
     </header>
@@ -148,6 +148,7 @@ onScopeDispose(() => document.removeEventListener('keydown', leaveSelection))
         @unavailable="mapError = '当前浏览器无法加载三维地图'" />
       <div v-if="mode === 'heat' && mapError" class="map-empty" role="status">
         {{ mapError }}
+        <button class="chip mini" type="button" @click="loadMap">重试地图</button>
         <button class="chip mini" type="button" @click="mode = 'rank'">查看排名</button>
       </div>
       <div v-else-if="mode === 'heat' && !rows.length" class="map-empty" role="status">正在加载区县边界…</div>
@@ -168,9 +169,13 @@ onScopeDispose(() => document.removeEventListener('keydown', leaveSelection))
           <div class="stats-row"><span>未销项隐患</span><b :class="{ red: !overview }">{{ dashboardNumber(openTotal) }}</b></div>
           <div v-if="overview" class="stats-row"><span>已办结</span><b class="red">{{ dashboardNumber(closedTotal) }}</b></div>
           <div v-else-if="selected === null" class="stats-row"><span>其中高风险</span>
-            <b class="red">{{ dashboardNumber(detailCount?.high) }}</b>
+            <b class="red">{{ dashboardNumber(openTotal ? detailCount?.high : undefined) }}</b>
           </div>
           <div class="stats-row"><span>活跃预警</span><b :class="{ red: overview }">{{ dashboardNumber(activeAlerts) }}</b></div>
+          <div v-if="summaryFailed" class="panel-status" role="status">
+            区县热力更新失败
+            <button class="chip mini" type="button" @click="emit('retrySummary')">重试</button>
+          </div>
         </div>
         <div class="map-caption">风险指数 = 逾期 40% / 高风险 40% / 待复测 20%，满分 100。<br>区域隆起高度即该区县的综合风险指数<template v-if="!overview">，点击可下钻</template>。</div>
         <div class="rotate-hint">北向上 · 拖动旋转 · 滚轮缩放<template v-if="!overview"> · 点击区县查看详情</template></div>
@@ -259,4 +264,4 @@ onScopeDispose(() => document.removeEventListener('keydown', leaveSelection))
   </section>
 </template>
 
-<style src="./dashboardOverviewMap.css"></style>
+<style src="./dashboardRiskAnalysis.css"></style>

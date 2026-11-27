@@ -36,6 +36,7 @@ func TestDashboardIndustryAndIssuesFollowBusinessRecords(t *testing.T) {
 		analyticsCall(t, mux, http.MethodPatch, "/classifications/issue/"+id,
 			`{"code":"access_control","expectedVersion":0}`, 200)
 	}
+	dashboardExec(t, db, "UPDATE hazard_items SET created_at=now()-interval '40 days' WHERE id=$1", closed)
 	result := analyticsCall(t, mux, http.MethodGet, "/analytics", "", 200)
 	var got struct {
 		Industries struct {
@@ -45,7 +46,8 @@ func TestDashboardIndustryAndIssuesFollowBusinessRecords(t *testing.T) {
 			}
 			Unclassified districtCounts
 		}
-		CommonIssues struct {
+		RecentCommonIssues commonIssues
+		CommonIssues       struct {
 			Items []struct {
 				Code, Label string
 				Count       int64
@@ -65,6 +67,10 @@ func TestDashboardIndustryAndIssuesFollowBusinessRecords(t *testing.T) {
 	if len(got.CommonIssues.Items) != 1 || got.CommonIssues.Items[0].Code != "access_control" ||
 		got.CommonIssues.Items[0].Count != 2 || got.CommonIssues.Unclassified != 2 {
 		t.Fatalf("常见问题归类 = %+v", got.CommonIssues)
+	}
+	if len(got.RecentCommonIssues.Items) != 1 || got.RecentCommonIssues.Items[0].Count != 1 ||
+		got.RecentCommonIssues.Unclassified != 2 {
+		t.Fatalf("近 30 日共性问题应排除历史记录：%+v", got.RecentCommonIssues)
 	}
 }
 

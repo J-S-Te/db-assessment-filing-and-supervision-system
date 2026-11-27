@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onScopeDispose, ref, watch } from 'vue'
 import {
   Activity, ArrowLeft, ArrowRight, BellRing, Boxes, CalendarClock, ChartNoAxesCombined, CircleCheck,
   ClipboardList, ClipboardPenLine, FileChartColumn, FileSearch, Files, Maximize, Minimize, RefreshCw,
@@ -8,9 +8,9 @@ import {
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
 import DashboardAlerts from '../components/DashboardAlerts.vue'
-import DashboardOverviewTrend from '../components/DashboardOverviewTrend.vue'
+import DashboardDistribution from '../components/DashboardDistribution.vue'
 import DashboardRiskMap from '../components/DashboardRiskMap.vue'
-import DashboardDistrictResponse from '../components/DashboardDistrictResponse.vue'
+import DashboardOverviewTrend from '../components/DashboardOverviewTrend.vue'
 import DashboardScene from '../components/DashboardScene.vue'
 import DashboardTrend from '../components/DashboardTrend.vue'
 import { alertPath, alertStatuses, type AlertStatus } from '../lib/alerts'
@@ -38,6 +38,7 @@ const tabs = {
   alerts: { label: '实时预警', icon: BellRing },
   statistics: { label: '统计分析', icon: ChartNoAxesCombined },
 }
+const DashboardRiskAnalysis = defineAsyncComponent(() => import('../components/DashboardRiskAnalysis.vue'))
 const route = useRoute()
 const router = useRouter()
 const tabSessionKey = 'grade-business.dashboard-standalone'
@@ -54,7 +55,7 @@ const sessionAvailable = ref(true)
 const sessionCheckPending = ref(false)
 const fixedDistrict = area?.districts.length === 1 ? area.name : undefined
 const areaDistrictCount = area?.districts.filter(name => name !== area.name).length
-const { statistics: globalStatistics, overview: globalOverview, alerts,
+const { statistics: globalStatistics, analytics: globalAnalytics, overview: globalOverview, alerts,
   alertCounts: globalAlertCounts, failure, loading, refresh } = useDashboard(!area)
 const selectedDistrict = computed(() => {
   if (fixedDistrict) return fixedDistrict
@@ -62,8 +63,7 @@ const selectedDistrict = computed(() => {
   return typeof district === 'string' && (!area || area.districts.includes(district)) ? district : null
 })
 const overviewVisible = computed(() => tab.value === 'overview')
-const riskByDistrict = computed(() => tab.value === 'risk' && route.query.view === 'district')
-const districtViewVisible = computed(() => overviewVisible.value || riskByDistrict.value)
+const districtViewVisible = computed(() => overviewVisible.value || tab.value === 'risk')
 const districts = useDistrictSummary(districtViewVisible)
 const showScopedDetail = computed(() =>
   Boolean(area) || districtViewVisible.value || selectedDistrict.value !== null)
@@ -79,6 +79,7 @@ const statistics = computed(() => snapshot.value?.statistics ??
   (wholePlatform.value ? globalStatistics.value : undefined))
 const overview = computed(() => snapshot.value?.overview ??
   (wholePlatform.value ? globalOverview.value : undefined))
+const riskAnalytics = computed(() => snapshot.value?.analytics ?? (wholePlatform.value ? globalAnalytics.value : undefined))
 const alertCounts = computed(() => snapshot.value?.overview?.alertCounts ??
   (wholePlatform.value ? globalAlertCounts.value : undefined))
 const metricsLoading = computed(() => wholePlatform.value ? loading.value : districtDetail.loading.value)
@@ -91,9 +92,6 @@ const openRiskTotal = computed(() => {
   return risk && risk.high + risk.medium + risk.low
 })
 const range = ref<DashboardTrendRange>(7)
-const overviewMapLocation = computed(() => ({
-  path: dashboardPath, query: { tab: 'risk', view: 'district', district: selectedDistrict.value ?? undefined },
-}))
 const scopedRankingLocation = computed(() => ({
   path: dashboardPath, query: { tab: 'risk', district: selectedDistrict.value ?? undefined },
 }))
@@ -463,8 +461,8 @@ onScopeDispose(() => {
 
 <template>
   <section v-if="sessionAvailable" ref="screen" class="command-screen"
-    :class="{ 'overview-screen': overviewVisible }" aria-label="指挥驾驶舱">
-    <DashboardScene v-if="!overviewVisible" />
+    :class="{ 'risk-screen': tab === 'risk', 'overview-screen': overviewVisible }" aria-label="指挥驾驶舱">
+    <DashboardScene v-if="tab !== 'risk' && !overviewVisible" />
 
     <div class="command-stage">
       <header class="screen-header">
@@ -702,37 +700,15 @@ onScopeDispose(() => {
         </footer>
       </section>
 
-      <div v-else-if="tab === 'risk'" class="screen-pane detail-grid">
-        <section class="screen-card" :class="{ 'district-risk-card': riskByDistrict }" aria-labelledby="high-risk-systems">
-          <header class="card-heading">
-            <h2 id="high-risk-systems">{{ riskByDistrict ? '区县风险热力' : '高风险隐患系统' }}</h2>
-            <RouterLink class="screen-link district-switch" :to="riskByDistrict ? scopedRankingLocation : overviewMapLocation">
-              {{ riskByDistrict ? '按系统查看' : '按区县查看' }}
-            </RouterLink>
-          </header>
-          <DashboardDistrictResponse v-if="riskByDistrict" :summary="districts.summary.value"
-            :selected="selectedDistrict" :detail="snapshot" :loading-summary="districts.loading.value"
-            :failed-summary="districts.failed.value" :loading-detail="districtDetail.loading.value"
-            :failed-detail="districtDetail.failed.value"
-            :area="area" :locked="Boolean(fixedDistrict)" initial-ranking @select="selectDistrict"
-            @retry-summary="districts.refresh" @retry-detail="districtDetail.refresh" />
-          <ul v-else class="system-list" :aria-label="districtScopeName + '高风险系统前十'">
-            <li v-for="item in (visibleRiskSystems ?? [])" :key="item.filingId" class="system-row">
-              <span class="system-name">{{ item.systemName }}</span>
-              <span class="system-count">{{ dashboardNumber(item.count) }}<small>项隐患</small></span>
-              <span class="system-org">{{ item.organizationName }}</span>
-            </li>
-            <li v-if="!(visibleRiskSystems ?? []).length" class="system-empty">{{ !visibleRiskSystems && scopedLoading ? '正在读取高风险系统…' : !visibleRiskSystems && scopedFailed ? '暂时无法读取高风险系统' : '当前范围暂无高风险系统。' }}</li>
-          </ul>
-        </section>
-        <section v-if="!riskByDistrict" class="screen-card" aria-labelledby="dashboard-alerts">
-          <header class="card-heading"><h2 id="dashboard-alerts">实时预警</h2>
-            <RouterLink class="screen-link" :to="scopedAlertsLocation">查看全部<ArrowRight aria-hidden="true" /></RouterLink>
-          </header>
-          <DashboardAlerts :items="visibleAlerts" :loading="metricsLoading" :failed="metricsFailed" :read-only="Boolean(area)"
-            highlight-new />
-        </section>
-      </div>
+      <DashboardRiskAnalysis v-else-if="tab === 'risk'"
+        :scope="districtScopeName" :selected="selectedDistrict" :area="area" :locked="Boolean(fixedDistrict)"
+        :starting-rank="route.query.view === 'district'" :summary="districts.summary.value" :detail="snapshot"
+        :statistics="statistics" :analytics="riskAnalytics" :systems="visibleRiskSystems" :alerts="visibleAlerts"
+        :alert-counts="alertCounts" :tasks="workItems" :indicators="footerFigures" :loading="metricsLoading"
+        :failed="metricsFailed" :detail-loading="scopedLoading" :detail-failed="scopedFailed"
+        :summary-loading="districts.loading.value" :summary-failed="districts.failed.value"
+        :scoped-alerts-location="scopedAlertsLocation" @select="selectDistrict"
+        @retry-summary="districts.refresh" @retry-detail="districtDetail.refresh" />
 
       <div v-else-if="tab === 'alerts'" class="screen-pane detail-grid">
         <section class="screen-card" aria-labelledby="dashboard-alerts-tab">
