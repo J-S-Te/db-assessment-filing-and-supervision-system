@@ -44,6 +44,12 @@ const directoryOptions = "/api/v1/directory/options"
 // 返回值 当前角色能进入该业务路由时为真。
 func allowed(actor Principal, pattern string) bool {
 	role := actor.Role
+	if pattern == institutionAccountPattern {
+		return role == SystemAdmin
+	}
+	if pattern == registrationListPattern || pattern == registrationReviewPattern {
+		return role == SystemAdmin || role == Regulator
+	}
 	method, path, ok := strings.Cut(pattern, " ")
 	if !ok || !strings.HasPrefix(path, "/api/v1/") {
 		return false
@@ -145,18 +151,18 @@ func view(actor Principal) sessionView {
 		data.Pages = []string{"/", "/flow", "/filings", "/filing-applications", "/filing-material-policy",
 			"/implementations", "/reports", "/remediations", "/hazards", "/archives", "/alerts",
 			"/supervisions", "/material-expiries", "/assessment-dues", "/monitor/publications",
-			"/knowledge", "/dashboard", "/audit", "/workday-calendar", "/tag-catalog"}
+			"/knowledge", "/dashboard", "/audit", "/workday-calendar", "/tag-catalog", "/institution-accounts", "/operator-registrations"}
 		data.Permissions = []string{"admin.agent.kb.edit", "admin.monitor.rule.config",
-			"admin.grade.case.edit", "admin.grade.filing.audit", "admin.grade.report.audit"}
+			"admin.grade.case.edit", "admin.grade.filing.audit", "admin.grade.report.audit", "admin.sys.user.edit", registrationPermission}
 	case Regulator:
 		data.DataScope, data.Home = "AREA", "/filings"
-		data.Menu = []string{"grade", "agent", "ai-review"}
-		data.Pages = []string{"/filings", "/reports", "/knowledge", "/flow"}
+		data.Menu = []string{"grade", "agent", "ai-review", "system"}
+		data.Pages = []string{"/filings", "/reports", "/knowledge", "/flow", "/operator-registrations"}
 		if data.Dashboard = quzhouDashboard(actor.AreaCode); data.Dashboard != nil {
 			data.Menu = append(data.Menu, "screen")
 			data.Pages = append(data.Pages, "/dashboard")
 		}
-		data.Permissions = []string{"admin.grade.filing.audit", "admin.grade.report.audit"}
+		data.Permissions = []string{"admin.grade.filing.audit", "admin.grade.report.audit", registrationPermission}
 	case OrgAdmin:
 		return scopedView(data, "institution", "ORG", []string{"workbench", "filings", "implementations",
 			"reports", "hazards", "directory", "publications", "alerts", "feedback"},

@@ -6,6 +6,164 @@ info:
 servers:
 - url: "/api/v1"
 paths:
+  "/institution-accounts":
+    post:
+      operationId: createInstitutionAccount
+      summary: 系统管理员为有效测评机构开通账号
+      security:
+      - AccessSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [institutionId, username, name]
+              properties:
+                institutionId: {type: string, format: uuid}
+                username: {type: string, minLength: 3, maxLength: 64}
+                name: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '201':
+          description: 已开通机构账号，临时密码仅随本次响应返回
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, username, temporaryPassword]
+                properties:
+                  id: {type: string, format: uuid}
+                  username: {type: string}
+                  temporaryPassword: {type: string, format: password, readOnly: true}
+        default:
+          "$ref": "#/components/responses/Error"
+  "/auth/operator-registrations":
+    post:
+      operationId: submitOperatorRegistration
+      security: []
+      summary: 申请开通运营单位账号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/OperatorRegistrationInput"
+      responses:
+        '201':
+          description: 已受理，查询码仅随本次响应返回
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/OperatorRegistrationResult"
+                - type: object
+                  required: [id, lookupCode]
+                  properties:
+                    id: {type: string, format: uuid}
+                    lookupCode: {type: string, minLength: 43, maxLength: 43}
+        default:
+          "$ref": "#/components/responses/Error"
+  "/auth/operator-registrations/status":
+    post:
+      operationId: lookupOperatorRegistration
+      security: []
+      summary: 凭私密查询码查看状态及驳回原因
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [lookupCode]
+              properties:
+                lookupCode: {type: string, minLength: 43, maxLength: 43}
+      responses:
+        '200':
+          description: 申请状态
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OperatorRegistrationResult"
+        default:
+          "$ref": "#/components/responses/Error"
+  "/operator-registrations":
+    get:
+      operationId: listOperatorRegistrations
+      summary: 按审核账号的权限和辖区查看申请
+      security:
+      - AccessSession: []
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [pending, approved, rejected]
+          default: pending
+      - name: q
+        in: query
+        description: 按单位名称、信用代码或登录账号查询
+        schema: {type: string, maxLength: 120}
+      - name: cursor
+        in: query
+        schema: {type: string}
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+      responses:
+        '200':
+          description: 当前筛选的一页申请
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/OperatorRegistrationItem"
+                  nextCursor: {type: string}
+        default:
+          "$ref": "#/components/responses/Error"
+  "/operator-registrations/{id}/review-actions":
+    post:
+      operationId: reviewOperatorRegistration
+      summary: 通过或驳回本辖区的待审申请
+      security:
+      - AccessSession: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [approve, reject]}
+                verified:
+                  type: boolean
+                  description: 审核通过时必须确认已人工核实单位资料及联系人授权
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: 驳回时必填，将向持有查询码的申请人显示
+      responses:
+        '200':
+          description: 已保存的审核结果
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OperatorRegistrationItem"
+        default:
+          "$ref": "#/components/responses/Error"
   "/archives/suppliers":
     get:
       operationId: listArchiveSuppliers
@@ -11817,6 +11975,11 @@ paths:
           - recommendations
         required: true
 components:
+  securitySchemes:
+    AccessSession:
+      type: apiKey
+      in: cookie
+      name: grade_business_session
   requestBodies:
     MaterialCaseVersion:
       required: true
@@ -11937,6 +12100,48 @@ components:
         type: string
         format: uuid
   schemas:
+    OperatorRegistrationInput:
+      type: object
+      additionalProperties: false
+      required: [unitName, creditCode, contactName, phone, username, password]
+      properties:
+        unitName: {type: string, maxLength: 200}
+        creditCode: {type: string, minLength: 18, maxLength: 18}
+        contactName: {type: string, maxLength: 100}
+        phone: {type: string, pattern: '^1[3-9][0-9]{9}$'}
+        username: {type: string, minLength: 3, maxLength: 64}
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 12
+          maxLength: 256
+          description: UTF-8 编码最多 256 字节
+    OperatorRegistrationResult:
+      type: object
+      required: [status, createdAt]
+      properties:
+        status: {type: string, enum: [pending, approved, rejected]}
+        createdAt: {type: string, format: date-time}
+        reviewedAt: {type: string, format: date-time}
+        reason: {type: string, maxLength: 500}
+    OperatorRegistrationItem:
+      allOf:
+      - "$ref": "#/components/schemas/OperatorRegistrationResult"
+      - type: object
+        required: [id, unitName, creditCode, contactName, phone, username, areaCode, district]
+        properties:
+          id: {type: string, format: uuid}
+          unitName: {type: string}
+          creditCode: {type: string}
+          contactName: {type: string}
+          phone: {type: string}
+          username: {type: string}
+          areaCode: {type: string}
+          district: {type: string}
+          reviewer: {type: string}
+          reviewerRole: {type: string, enum: [ROLE_SYS_ADMIN, ROLE_REGULATOR]}
+          subjectId: {type: string, format: uuid}
     ArchiveSupplier:
       type: object
       additionalProperties: false

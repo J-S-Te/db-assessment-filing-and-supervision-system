@@ -89,7 +89,7 @@ func appRoute(path string) bool {
 	switch path {
 	case "/", "/login", "/account/password", "/alerts", "/monitor/publications", "/dashboard", "/audit", "/flow", "/tag-catalog",
 		"/archives/directory", "/institution/directory", "/operator/assessment-history", "/workday-calendar",
-		"/filing-material-policy":
+		"/filing-material-policy", "/institution-accounts", "/operator-register", "/operator-registrations":
 		return true
 	}
 	module, _, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")

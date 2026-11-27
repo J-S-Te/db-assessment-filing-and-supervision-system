@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,7 @@ var (
 	usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
 	errCredential   = errors.New("账号或密码无效")
 	errProvision    = errors.New("账号已经存在、主体已绑定或名录记录不可用")
+	errAccountInput = errors.New("请核对账号、角色、辖区、主体和临时密码")
 )
 
 type AccountInput struct {
@@ -31,28 +33,28 @@ type AccountInput struct {
 // 参数 ctx、db 为数据库操作环境，input 为新账号、稳定归属与初始口令。
 // 返回值 新账号标识，或账号、主体及数据库错误。
 func Provision(ctx context.Context, db *pgxpool.Pool, input AccountInput) (string, error) {
+	return provisionAccount(ctx, db, input, Principal{})
+}
+
+// provisionAccount 原子开通账号及留痕，网页开户仅允许绑定有效机构。
+// 参数 ctx、db 为数据库操作环境，input 为账号资料，actor 为网页操作人或零值的运维入口。
+// 返回值 新账号标识、业务校验或数据库错误。
+func provisionAccount(ctx context.Context, db *pgxpool.Pool, input AccountInput, actor Principal) (string, error) {
 	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
 	input.Name = strings.TrimSpace(input.Name)
 	input.PersonKey = strings.ToLower(strings.TrimSpace(input.PersonKey))
 	if !validAccount(input) {
-		return "", errors.New("请核对账号、角色、辖区、主体和临时密码")
+		return "", errAccountInput
 	}
 	salt, hash, err := newPassword(input.Password)
 	if err != nil {
 		return "", err
 	}
 	var id string
-	err = db.QueryRow(ctx, `
-		WITH account AS (INSERT INTO access_accounts(username, display_name, role_code, person_key, area_code,
-		                            subject_id, password_salt, password_hash)
-		VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),NULLIF($6,'')::uuid,$7,$8)
-		RETURNING id, role_code)
-		INSERT INTO access_events(operator_id,role_code,event,target)
-		SELECT id, role_code, 'account_provisioned', 'database_operator' FROM account
-		RETURNING operator_id::text`, input.Username, input.Name, input.Role, input.PersonKey,
-		input.AreaCode, input.SubjectID, salt, hash).Scan(&id)
+	err = db.QueryRow(ctx, provisionAccountSQL, input.Username, input.Name, input.Role, input.PersonKey,
+		input.AreaCode, input.SubjectID, salt, hash, actor.ID, actor.Role).Scan(&id)
 	var databaseError *pgconn.PgError
-	if errors.As(err, &databaseError) &&
+	if errors.Is(err, pgx.ErrNoRows) || errors.As(err, &databaseError) &&
 		(databaseError.Code == "23505" || databaseError.Code == "23503" || databaseError.Code == "23514") {
 		return "", errProvision
 	}
@@ -61,6 +63,27 @@ func Provision(ctx context.Context, db *pgxpool.Pool, input AccountInput) (strin
 	}
 	return id, nil
 }
+
+const provisionAccountSQL = `
+	WITH account AS (
+		INSERT INTO access_accounts(username,display_name,role_code,person_key,area_code,
+		                            subject_id,password_salt,password_hash)
+		SELECT $1,$2,$3,NULLIF($4,''),NULLIF($5,''),NULLIF($6,'')::uuid,$7,$8
+		WHERE $9='' OR EXISTS (
+			SELECT 1 FROM directory_parties p
+			WHERE p.id=NULLIF($6,'')::uuid AND p.kind='institution'
+			  AND p.status='active' AND p.merged_into_id IS NULL
+			  AND p.valid_until >= (statement_timestamp() AT TIME ZONE 'Asia/Shanghai')::date
+			FOR SHARE OF p
+		)
+		RETURNING id,role_code
+	), audit AS (
+		INSERT INTO access_events(operator_id,role_code,event,target)
+		SELECT COALESCE(NULLIF($9,'')::uuid,id),COALESCE(NULLIF($10,''),role_code),
+		       'account_provisioned',CASE WHEN $9='' THEN 'database_operator' ELSE id::text END
+		FROM account
+	)
+	SELECT id::text FROM account`
 
 // validAccount 验证角色与账号的唯一主体或人员约束。
 // 参数 input 为待配置账号，辖区和关联标识来自授权的运维操作。

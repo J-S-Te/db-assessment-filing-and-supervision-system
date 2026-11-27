@@ -23,9 +23,10 @@ const (
 )
 
 type Service struct {
-	db    *pgxpool.Pool
-	mu    sync.Mutex
-	rates map[string]loginWindow
+	db                *pgxpool.Pool
+	mu                sync.Mutex
+	rates             map[string]loginWindow
+	registrationRates map[string]loginWindow
 }
 
 type loginWindow struct {
@@ -44,7 +45,7 @@ const loginEligible = `a.enabled AND (a.subject_id IS NULL OR
 // 参数 pool 为包含账号及业务主体名录的连接池。
 // 返回值 可注册登录接口与权限网关的服务。
 func New(pool *pgxpool.Pool) *Service {
-	return &Service{db: pool, rates: make(map[string]loginWindow)}
+	return &Service{db: pool, rates: make(map[string]loginWindow), registrationRates: make(map[string]loginWindow)}
 }
 
 // fields 提供当前会话身份查询的扫描目标。
@@ -136,29 +137,60 @@ func (s *Service) session(r *http.Request) (Principal, error) {
 // 参数 remote 和 username 为连接来源与标准化用户名。
 // 返回值 当前尝试在来源和账户的频率额度内时为真。
 func (s *Service) limitLogin(remote, username string) bool {
+	return s.allowAttempts(s.rates, attemptLimit{"ip:" + peerIP(remote), 60},
+		attemptLimit{"user:" + username, 12})
+}
+
+// limitRegistration 限制匿名入口访问频率，避免影响正常登录的独立额度。
+// 参数 remote 为连接来源，operation 为注册操作，threshold 为短时请求阈值。
+// 返回值 本次匿名请求可继续时为真。
+func (s *Service) limitRegistration(remote, operation string, threshold int) bool {
+	return s.allowAttempts(s.registrationRates, attemptLimit{operation + ":" + peerIP(remote), threshold})
+}
+
+// peerIP 获取 TCP 来源地址，避免以可伪造的请求头作限流依据。
+// 参数 remote 为连接提供的远端地址及可选端口。
+// 返回值 来源主机地址。
+func peerIP(remote string) string {
 	ip, _, err := net.SplitHostPort(remote)
 	if err != nil {
-		ip = remote
+		return remote
 	}
+	return ip
+}
+
+type attemptLimit struct {
+	key       string
+	threshold int
+}
+
+// allowAttempts 在五分钟窗口内原子检查并扣减每个来源的频率额度。
+// 参数 rates 为对应入口的计数表，limits 为本次请求共同适用的限额。
+// 返回值 所有限额可扣减时为真。
+func (s *Service) allowAttempts(rates map[string]loginWindow, limits ...attemptLimit) bool {
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for key, item := range s.rates {
+	for key, item := range rates {
 		if !now.Before(item.until) {
-			delete(s.rates, key)
+			delete(rates, key)
 		}
 	}
-	keys := []string{"ip:" + ip, "user:" + username}
-	if len(s.rates) > 4094 || s.rates[keys[0]].count >= 60 || s.rates[keys[1]].count >= 12 {
+	if len(rates) > 4096-len(limits) {
 		return false
 	}
-	for _, key := range keys {
-		item := s.rates[key]
+	for _, limit := range limits {
+		if rates[limit.key].count >= limit.threshold {
+			return false
+		}
+	}
+	for _, limit := range limits {
+		item := rates[limit.key]
 		if item.count == 0 {
 			item.until = now.Add(5 * time.Minute)
 		}
 		item.count++
-		s.rates[key] = item
+		rates[limit.key] = item
 	}
 	return true
 }
