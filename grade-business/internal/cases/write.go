@@ -23,6 +23,7 @@ type saveFields struct {
 }
 
 type stateRow struct {
+	number             string
 	status             string
 	version            int64
 	filingID           string
@@ -36,12 +37,20 @@ type stateRow struct {
 // 参数 input 为备案录入或编辑表单。
 // 返回值 待持久化字段或表单错误。
 func filingFields(input filingInput) (saveFields, error) {
+	return parseFilingFields(input, true)
+}
+
+// parseFilingFields 校验备案字段，允许待分配的首报暂时没有编号。
+// 参数 input 为备案表单，requireNumber 表示是否必须已有备案编号。
+// 返回值 待保存字段或输入校验错误。
+func parseFilingFields(input filingInput, requireNumber bool) (saveFields, error) {
 	fields := saveFields{
 		number: strings.TrimSpace(input.Number), systemName: strings.TrimSpace(input.SystemName),
 		organizationName: strings.TrimSpace(input.OrganizationName),
 		assessmentOrg:    strings.TrimSpace(input.AssessmentOrg), level: input.Level,
 	}
-	if !validText(fields.number, 80) || !validText(fields.systemName, 200) ||
+	numberRequired := requireNumber || fields.number != ""
+	if (numberRequired && !validText(fields.number, 80)) || !validText(fields.systemName, 200) ||
 		!validText(fields.organizationName, 200) || !validText(fields.assessmentOrg, 200) ||
 		len(fields.level) != 1 || !strings.Contains("12345", fields.level) {
 		return saveFields{}, ErrInvalid
@@ -163,6 +172,13 @@ func (s *Service) update(ctx context.Context, kind, id string, expected int64,
 	if current.version != expected || !editable(current.status) {
 		return mutation{}, ErrConflict
 	}
+	if kind == filing {
+		if operatorFilingScope(ctx) != "" || (current.operatorOrigin && current.number == "") {
+			fields.number = current.number
+		} else if fields.number == "" {
+			return mutation{}, ErrInvalid
+		}
+	}
 	snapshot, err := prepareCaseUpdate(ctx, tx, kind, institution, current, &fields)
 	if err != nil {
 		return mutation{}, err
@@ -238,14 +254,14 @@ func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution
 		return stateRow{}, ErrNotFound
 	}
 	var row stateRow
-	err := tx.QueryRow(ctx, `SELECT c.status,c.version,COALESCE(c.filing_id::text,''),
+	err := tx.QueryRow(ctx, `SELECT c.number,c.status,c.version,COALESCE(c.filing_id::text,''),
 		    c.assessment_org,c.submission_profile,c.operator_origin,c.directory_person_id::text`+
 		recordJoin+`
 		WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
 		  AND ($3='' OR (c.kind='filing' AND c.organization_name=$3))
 		  AND ($4='' OR c.assessment_org=$4)`+caseDistrictScope("$5")+
 		` FOR UPDATE OF c`, kind, id, operatorFilingScope(ctx), institution, access.Districts(ctx)).
-		Scan(&row.status, &row.version, &row.filingID, &row.assessmentOrg, &row.submissionProfile,
+		Scan(&row.number, &row.status, &row.version, &row.filingID, &row.assessmentOrg, &row.submissionProfile,
 			&row.operatorOrigin, &row.assessmentPersonID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -314,8 +330,33 @@ func (s *Service) changeStatusInTx(ctx context.Context, tx pgx.Tx, kind, id stri
 			return mutation{}, err
 		}
 	}
+	current.number, err = filingNumberAfterReview(kind, current, next, input.FilingNumber)
+	if err != nil {
+		return mutation{}, err
+	}
 	operator := input.reviewActor(ctx, s.operator, operatorFilingScope(ctx))
 	return s.persistDecision(ctx, tx, kind, id, current, next, input.Decision, comment, operator)
+}
+
+// filingNumberAfterReview 只在无编号首报终审通过时接收管理端分配的编号。
+// 参数 kind、current、next 为记录类型、已有状态和目标状态，assigned 为管理端给出的正式编号。
+// 返回值 应保存的编号或输入错误。
+func filingNumberAfterReview(kind string, current stateRow, next, assigned string) (string, error) {
+	if kind != filing || !current.operatorOrigin || current.number != "" || next != approved {
+		if assigned != "" {
+			return "", ErrInvalid
+		}
+		return current.number, nil
+	}
+
+	number := strings.TrimSpace(assigned)
+	if number == "" {
+		return "", errFilingNumberRequired
+	}
+	if !validText(number, 80) {
+		return "", ErrInvalid
+	}
+	return number, nil
 }
 
 // submissionReady 按锁定记录的提交配置核对资格与材料，并在自主备案通过前复查必传材料。
@@ -369,9 +410,9 @@ func (s *Service) persistDecision(ctx context.Context, tx pgx.Tx,
 	kind, id string, current stateRow, next, action, comment, operator string,
 ) (mutation, error) {
 	result, err := scanMutation(tx.QueryRow(ctx, `
-		UPDATE business_cases SET status=$2,version=version+1,
+		UPDATE business_cases SET status=$2,version=version+1,number=$4,
 		    submitted_at=CASE WHEN $3='submit' THEN clock_timestamp() ELSE submitted_at END
-		WHERE id=$1 RETURNING id::text,status,version`, id, next, action))
+		WHERE id=$1 RETURNING id::text,status,version`, id, next, action, current.number))
 	if err != nil {
 		return mutation{}, err
 	}

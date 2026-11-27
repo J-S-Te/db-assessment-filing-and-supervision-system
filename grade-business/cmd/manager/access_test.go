@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"grade-business/internal/access"
+	"grade-business/internal/app"
 	"grade-business/internal/cases"
 	"grade-business/internal/precheck"
 	"grade-business/migrations"
@@ -42,7 +45,8 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := routes(settings{address: "127.0.0.1:18549"}, db, records,
+	cfg := settings{address: "127.0.0.1:18549", reviewWindows: app.ReviewWindows{FilingDays: 3, FilingFinalDays: 5}}
+	handler := routes(cfg, db, records,
 		precheck.New(db, materialSource(records)), http.NotFoundHandler())
 
 	credential := func(username, name string, role access.Role) access.AccountInput {
@@ -130,6 +134,9 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	if err != nil || distinctActors != 2 {
 		t.Fatalf("审核事件未保留两个独立账号: %d %v", distinctActors, err)
 	}
+	t.Run("运营者首报由管理端终审编号", func(t *testing.T) {
+		assertOperatorFilingWorkflow(t, handler, sys, area, org, unit)
+	})
 
 	if _, err := db.Exec(t.Context(), "UPDATE directory_parties SET valid_until=current_date-2 WHERE id=$1", orgID); err != nil {
 		t.Fatal(err)
@@ -144,6 +151,103 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	var denied int
 	if err := db.QueryRow(t.Context(), "SELECT count(*) FROM access_events WHERE event='denied' AND operator_id IS NOT NULL").Scan(&denied); err != nil || denied < 10 {
 		t.Fatalf("未逐笔登记拒绝事件: count=%d error=%v", denied, err)
+	}
+}
+
+// assertOperatorFilingWorkflow 通过已登录的三端角色执行从首报到正式回执的完整流程。
+// 参数 t、handler 为隔离测试会话和真实路由，admin、regulator、institution、operator 为四种角色会话。
+// 返回值 无。
+func assertOperatorFilingWorkflow(t *testing.T, handler http.Handler,
+	admin, regulator, institution, operator *http.Cookie,
+) {
+	t.Helper()
+	hit := accessRequest(t, handler)
+	const collection = "/api/v1/operator/filings"
+	form := map[string]string{"systemName": "权限流程首报", "assessmentOrg": "权限机构甲", "level": "2"}
+	var draft struct {
+		ID      string
+		Version int64
+	}
+	body := hit(operator, "POST", collection, form, 201).Body.Bytes()
+	if err := json.Unmarshal(body, &draft); err != nil || draft.ID == "" {
+		t.Fatalf("未保存首报草稿: %s", body)
+	}
+	local := collection + "/" + draft.ID
+	review := "/api/v1/filings/" + draft.ID + "/review-actions"
+	uploadWorkflowMaterial(t, handler, operator, local+"/attachments", "filing_form")
+	uploadWorkflowMaterial(t, handler, operator, local+"/attachments", "classification_report")
+	hit(operator, "POST", local+"/submit", map[string]int64{"expectedVersion": draft.Version + 2}, 200)
+	deadline := hit(operator, "GET", "/api/v1/operator/workbench/deadlines/filings/"+draft.ID, nil, 200).Body.String()
+	if !strings.Contains(deadline, `"waitingFor":"regulator"`) {
+		t.Fatalf("提交后办理时限没有指向监管初审: %s", deadline)
+	}
+	receipt := hit(operator, "GET", local+"/receipt", nil, 200).Body.String()
+	if !strings.Contains(receipt, "当前备案编号：待分配") {
+		t.Fatalf("送审回执未显示待分配: %s", receipt)
+	}
+	checkFilingNumberReview(t, hit, review, draft.ID, draft.Version+3, admin, regulator, institution, operator)
+	receipt = hit(operator, "GET", local+"/receipt", nil, 200).Body.String()
+	if !strings.Contains(receipt, "审核通过回执") || !strings.Contains(receipt, "当前备案编号：BA-ACCESS-001") {
+		t.Fatalf("最终回执未显示已分配编号: %s", receipt)
+	}
+}
+
+// checkFilingNumberReview 核对管理端分配时点、角色权限以及审批后的用户可见状态。
+// 参数 t、hit 为测试与请求入口，path、id、version 为送审记录，各 Cookie 代表已登录角色。
+// 返回值 无。
+func checkFilingNumberReview(t *testing.T, hit requestAccess, path, id string, version int64,
+	admin, regulator, institution, operator *http.Cookie,
+) {
+	t.Helper()
+	decision := map[string]any{"decision": "approve", "expectedVersion": version, "filingNumber": "BA-ACCESS-001"}
+	hit(operator, "POST", path, decision, 403)
+	hit(institution, "POST", "/api/v1/institution/filings/"+id+"/review-actions", decision, 403)
+	hit(regulator, "POST", path, decision, 400)
+	delete(decision, "filingNumber")
+	hit(regulator, "POST", path, decision, 200)
+	decision["expectedVersion"] = version + 1
+	missing := hit(admin, "POST", path, decision, 400).Body.String()
+	if !strings.Contains(missing, "filing_number_required") {
+		t.Fatalf("终审缺少编号的错误不符: %s", missing)
+	}
+	decision["filingNumber"] = "BA-ACCESS-001"
+	hit(regulator, "POST", path, decision, 409)
+	hit(admin, "POST", path, decision, 200)
+	var detail struct{ Number, Status string }
+	body := hit(operator, "GET", "/api/v1/operator/filings/"+id, nil, 200).Body.Bytes()
+	if err := json.Unmarshal(body, &detail); err != nil || detail.Number != "BA-ACCESS-001" ||
+		detail.Status != "approved" {
+		t.Fatalf("运营者详情未同步最终编号和审批状态: %s", body)
+	}
+}
+
+// uploadWorkflowMaterial 通过运营者会话上传首报所需的合成 PDF。
+// 参数 t、handler 为测试与路由，operator 为已登录运营者，path、kind 为材料地址与类别。
+// 返回值 无。
+func uploadWorkflowMaterial(t *testing.T, handler http.Handler, operator *http.Cookie, path, kind string) {
+	t.Helper()
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	if err := form.WriteField("kind", kind); err != nil {
+		t.Fatal(err)
+	}
+	file, err := form.CreateFormFile("file", "测试材料.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(file, "%PDF-1.7\n% isolated role fixture\n%%EOF"); err != nil {
+		t.Fatal(err)
+	}
+	if err := form.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("POST", "http://127.0.0.1:18549"+path, &body)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	req.AddCookie(operator)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("上传 %s 返回 %d: %s", kind, res.Code, res.Body.String())
 	}
 }
 

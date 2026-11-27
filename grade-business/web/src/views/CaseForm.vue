@@ -29,6 +29,9 @@ const blank = {
   assessmentPersonId: '',
 }
 const fields = reactive({ ...blank })
+const awaitingNumber = ref(false)
+const requireNumber = computed(() => props.kind !== 'filings'
+  || (!props.operator && !awaitingNumber.value))
 const version = ref<number>()
 const classificationInitial = ref<ClassificationAssessment>()
 const classificationInput = ref<ClassificationInput>()
@@ -68,6 +71,7 @@ async function load() {
   classificationInitial.value = undefined
   classificationInput.value = undefined
   Object.assign(fields, blank)
+  awaitingNumber.value = false
   institutionPicker.value = false
   unitPicker.value = false
   savedPersonName.value = ''
@@ -114,6 +118,7 @@ function populate(result: CaseDetail) {
     filingAuthority: result.classificationAssessment.filingAuthority,
   }
   fields.number = result.number
+  awaitingNumber.value = !result.number
   fields.systemName = result.systemName
   fields.organizationName = result.organizationName
   fields.assessmentOrg = result.assessmentOrg
@@ -172,7 +177,8 @@ async function save() {
   const currentId = id.value
   const kind = props.kind
   const url = resourceURL.value
-  if (!fields.number.trim() || !(props.institutional ? institution.value : fields.assessmentOrg.trim())
+  if ((requireNumber.value && !fields.number.trim())
+    || !(props.institutional ? institution.value : fields.assessmentOrg.trim())
     || (kind === 'filings' ? (!fields.systemName.trim() || (!props.operator && !fields.organizationName.trim()) || !fields.level)
       : (!fields.filingId || !fields.risk))) {
     formError.value = '请填写完整的业务信息。'
@@ -183,7 +189,7 @@ async function save() {
     return
   }
   const body = {
-    number: fields.number.trim(),
+    ...(requireNumber.value ? { number: fields.number.trim() } : {}),
     ...(!props.institutional ? { assessmentOrg: fields.assessmentOrg.trim() } : {}),
     ...(kind === 'filings'
       ? { systemName: fields.systemName.trim(), level: fields.level,
@@ -235,7 +241,7 @@ onBeforeUnmount(() => {
         <form @submit.prevent="save">
           <h2>基本信息</h2>
           <fieldset class="form-grid" :disabled="saving">
-            <label class="field">
+            <label v-if="requireNumber" class="field">
               <span>{{ label.number }}</span>
               <input v-model="fields.number" required maxlength="80" :placeholder="'请输入' + label.number">
             </label>

@@ -6,17 +6,19 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/directoryref"
 )
 
-// prepareCaseCreation 为新测评建立名录引用，沿用备案的现有录入和审核流程。
+// prepareCaseCreation 为测评和已登录运营者的首报保存所需的名录引用。
 // 参数 ctx、tx 为创建事务，kind、institution 和 fields 描述业务类型、机构范围、拟保存字段。
 // 返回值 材料配置、可空的名录快照或业务校验错误。
 func prepareCaseCreation(ctx context.Context, tx pgx.Tx, kind, institution string,
 	fields *saveFields,
 ) (string, *directoryref.Snapshot, error) {
 	if kind != report {
-		return legacySubmissionProfile, nil, nil
+		snapshot, err := resolveOperatorFilingDirectory(ctx, tx, fields, operatorFilingScope(ctx) != "")
+		return legacySubmissionProfile, snapshot, err
 	}
 	if err := lockReportFiling(ctx, tx, *fields.filingID, institution); err != nil {
 		return "", nil, err
@@ -30,14 +32,14 @@ func prepareCaseCreation(ctx context.Context, tx pgx.Tx, kind, institution strin
 	return profile, snapshot, err
 }
 
-// prepareCaseUpdate 在现有业务编辑约束下解析有效的测评单位、机构和人员。
+// prepareCaseUpdate 为编辑后的自主备案和测评报告更新单位、机构等名录引用。
 // 参数 ctx、tx 为更新事务，kind、institution、current、fields 为范围、现状和新输入。
 // 返回值 本次确认的名录快照或归属、版本化关联校验错误。
 func prepareCaseUpdate(ctx context.Context, tx pgx.Tx, kind, institution string,
 	current stateRow, fields *saveFields,
 ) (*directoryref.Snapshot, error) {
 	if kind != report {
-		return nil, nil
+		return resolveOperatorFilingDirectory(ctx, tx, fields, current.operatorOrigin)
 	}
 	if err := validateReportAssociation(ctx, tx, current, *fields, institution); err != nil {
 		return nil, err
@@ -48,6 +50,28 @@ func prepareCaseUpdate(ctx context.Context, tx pgx.Tx, kind, institution string,
 	snapshot, err := resolveReportDirectory(ctx, tx, *fields.filingID, fields.assessmentOrg, fields.assessmentPersonID)
 	applyAssessmentScope(fields, institution, snapshot)
 	return snapshot, err
+}
+
+// resolveOperatorFilingDirectory 绑定单位名录，使已登录运营者的首报进入对应辖区审核范围。
+// 参数 ctx、tx 包含会话和写入事务，fields 为已校验表单，operatorOrigin 表示运营者来源。
+// 返回值 本轮名录快照、身份归属错误或名录校验错误。
+func resolveOperatorFilingDirectory(ctx context.Context, tx pgx.Tx, fields *saveFields,
+	operatorOrigin bool,
+) (*directoryref.Snapshot, error) {
+	actor, authenticated := access.Current(ctx)
+	if !operatorOrigin || !authenticated {
+		return nil, nil
+	}
+	snapshot, err := directoryref.Resolve(ctx, tx, fields.organizationName, fields.assessmentOrg, "", false)
+	if err != nil {
+		return nil, err
+	}
+	if actor.Role == access.Operator && (snapshot == nil || snapshot.Unit == nil ||
+		snapshot.Unit.ID != actor.SubjectID) {
+		return nil, ErrNotFound
+	}
+	applyAssessmentScope(fields, "", snapshot)
+	return snapshot, nil
 }
 
 // resolveReportDirectory 从报告关联备案取得被测单位并验证共享名录的选择。

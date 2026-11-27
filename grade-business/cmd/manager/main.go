@@ -256,7 +256,6 @@ func routes(cfg settings, pool *pgxpool.Pool, records *cases.Service,
 	records.RegisterOperatorApplicationRoutes(mux)
 	implementation := implementations.New(pool, cfg.operator)
 	implementation.Register(mux)
-	implementation.RegisterOperatorRoutes(mux)
 	knowledge.New(pool).Register(mux)
 	checks.Register(mux)
 	plans := remediations.New(pool, records, cfg.operator)

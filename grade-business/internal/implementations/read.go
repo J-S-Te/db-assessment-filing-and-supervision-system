@@ -90,14 +90,25 @@ func (s *Service) readPage(ctx context.Context, institution string, options list
 	return result, rows.Err()
 }
 
-// filingChoices 按归属、关键词和可选精确标识读取有效备案选项。
+// retestHandoffSQL 确认可由目标机构接手的运营者换机构草稿。
+// 参数 institution 为当前机构对应的内部 SQL 参数位置，外层必须以 f 表示有效备案。
+// 返回值 只认可当前备案版本、所属单位和明确选中本机构的条件。
+func retestHandoffSQL(institution string) string {
+	return `EXISTS (SELECT 1 FROM filing_applications a
+	 WHERE a.filing_id=f.id AND a.filing_version=f.version AND a.operator_origin
+	 AND a.application_type='change' AND a.status IN ('draft','returned')
+	 AND a.before_values->>'organizationName'=f.organization_name
+	 AND (a.after_values->>'assessmentOrg') COLLATE "C" = ` + institution + `)`
+}
+
+// filingChoices 按现有归属或换机构草稿授权读取可关联的有效备案。
 // 参数 ctx 控制查询并携带运营者范围，institution 为可选机构归属，q、filingID 为已校验筛选。
 // 返回值 可关联备案的必要字段或数据库错误。
 func (s *Service) filingChoices(ctx context.Context, institution, q, filingID string) ([]choice, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text, number, system_name, organization_name, assessment_org FROM business_cases
-	 WHERE kind='filing' AND status='approved' AND cancelled_at IS NULL
+	rows, err := s.pool.Query(ctx, `SELECT id::text, number, system_name, organization_name, assessment_org FROM business_cases f
+	 WHERE kind='filing' AND status='approved' AND cancelled_at IS NULL AND discarded_at IS NULL
 	 AND ($1::text='' OR strpos(lower(concat_ws(' ',number,system_name,organization_name)),lower($1))>0)
-	 AND ($2::text='' OR assessment_org COLLATE "C" = $2)
+	 AND ($2::text='' OR assessment_org COLLATE "C" = $2 OR `+retestHandoffSQL("$2")+`)
 	 AND ($3::text='' OR organization_name COLLATE "C" = $3)
 	 AND ($4::text='' OR id=NULLIF($4,'')::uuid)
 	 ORDER BY created_at DESC,id DESC LIMIT 20`, q, institution, operatorOrganization(ctx), filingID)
@@ -144,7 +155,7 @@ func resubmitAvailableAt(withdrawnAt *time.Time, now time.Time) *time.Time {
 	return nil
 }
 
-// readQuota 获取有效备案在本年度的变更额度及当前冷却截止时刻。
+// readQuota 为已有归属或目标机构获取有效备案的年度额度和冷却截止时间。
 // 参数 ctx 控制查询，filingID 为备案标识，institution 为可选机构归属。
 // 返回值 年度额度或不可关联错误。
 func (s *Service) readQuota(ctx context.Context, filingID, institution string) (quota, error) {
@@ -153,8 +164,9 @@ func (s *Service) readQuota(ctx context.Context, filingID, institution string) (
 	var withdrawnAt *time.Time
 	err := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM implementation_reports
 	 WHERE filing_id=$1 AND quota_year=$2 AND status<>'withdrawn'), (`+latestWithdrawalSQL+`)
-	 FROM business_cases WHERE id=$1 AND kind='filing' AND status='approved' AND cancelled_at IS NULL
-	 AND ($3::text='' OR assessment_org COLLATE "C" = $3)
+	 FROM business_cases f
+	 WHERE id=$1 AND kind='filing' AND status='approved' AND cancelled_at IS NULL AND discarded_at IS NULL
+	 AND ($3::text='' OR assessment_org COLLATE "C" = $3 OR `+retestHandoffSQL("$3")+`)
 	 AND ($4::text='' OR organization_name COLLATE "C" = $4)`,
 		filingID, result.Year, institution, operatorOrganization(ctx)).Scan(&result.Used, &withdrawnAt)
 	if errors.Is(err, pgx.ErrNoRows) {

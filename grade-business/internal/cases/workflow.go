@@ -26,12 +26,13 @@ const (
 )
 
 var (
-	ErrNotFound           = errors.New("case or attachment not found")
-	ErrInvalid            = errors.New("invalid case input")
-	ErrConflict           = errors.New("record state changed")
-	ErrDuplicate          = errors.New("number already exists")
-	ErrMaterials          = errors.New("required attachments missing")
-	ErrOpenMaterialIssues = errors.New("material issue not corrected")
+	ErrNotFound             = errors.New("case or attachment not found")
+	ErrInvalid              = errors.New("invalid case input")
+	ErrConflict             = errors.New("record state changed")
+	ErrDuplicate            = errors.New("number already exists")
+	errFilingNumberRequired = errors.New("filing number must be assigned at final approval")
+	ErrMaterials            = errors.New("required attachments missing")
+	ErrOpenMaterialIssues   = errors.New("material issue not corrected")
 )
 
 // transition 计算备案或测评审核动作对应的下一状态。

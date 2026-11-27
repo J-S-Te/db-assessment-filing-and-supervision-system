@@ -171,7 +171,7 @@ func (h endpoint) decodeUpdate(w http.ResponseWriter, r *http.Request) (saveFiel
 		if httpx.Decode(w, r, &input) != nil || input.ExpectedVersion < 1 {
 			return saveFields{}, 0, ErrInvalid
 		}
-		result, err := filingFields(input.filingInput)
+		result, err := parseFilingFields(input.filingInput, false)
 		return result, input.ExpectedVersion, err
 	}
 	var input struct {
@@ -243,6 +243,8 @@ func respondError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpx.Error(w, http.StatusNotFound, "not_found", "未找到对应的业务记录或材料。")
+	case errors.Is(err, errFilingNumberRequired):
+		httpx.Error(w, http.StatusBadRequest, "filing_number_required", "请填写正式备案编号后确认终审通过。")
 	case errors.Is(err, ErrDuplicate):
 		httpx.Error(w, http.StatusConflict, "duplicate_number", "该编号已存在，可核对并修改。")
 	case errors.Is(err, errWithdrawalPending):

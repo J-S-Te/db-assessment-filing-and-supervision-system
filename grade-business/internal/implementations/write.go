@@ -26,7 +26,7 @@ func (s *Service) createReport(ctx context.Context, institution string, item inp
 		return mutation{}, err
 	}
 	defer tx.Rollback(ctx)
-	filing, err := lockActiveFiling(ctx, tx, item.FilingID, institution)
+	filing, err := lockScopedFiling(ctx, tx, item.FilingID, institution, true, item.Type == change)
 	if err != nil {
 		return mutation{}, err
 	}
@@ -121,7 +121,7 @@ func editSubmittedPlan(ctx context.Context, tx pgx.Tx, record storedRecord,
 	if !matchesSubmittedIdentity(record, item) {
 		return mutation{}, errConflict
 	}
-	if _, err := lockActiveFiling(ctx, tx, record.FilingID, institution); err != nil {
+	if _, err := lockScopedFiling(ctx, tx, record.FilingID, institution, true, record.Type == change); err != nil {
 		return mutation{}, err
 	}
 	var result mutation
@@ -154,7 +154,7 @@ func editableFiling(ctx context.Context, tx pgx.Tx, record storedRecord, institu
 		return operatorEditableFiling(ctx, tx, record, operator, item)
 	}
 	if record.Status == draft {
-		return lockActiveFiling(ctx, tx, item.FilingID, institution)
+		return lockScopedFiling(ctx, tx, item.FilingID, institution, true, item.Type == change)
 	}
 	if record.Status != returned || record.FilingID != item.FilingID || record.Type != item.Type {
 		return choice{}, errConflict
@@ -250,7 +250,7 @@ func prepareAction(ctx context.Context, tx pgx.Tx, record *storedRecord, institu
 	case "submit":
 		return prepareSubmission(ctx, tx, record, institution, now)
 	case "withdraw":
-		_, err := lockScopedFiling(ctx, tx, record.FilingID, "", false)
+		_, err := lockScopedFiling(ctx, tx, record.FilingID, "", false, false)
 		return err
 	}
 	return nil
@@ -282,7 +282,7 @@ func prepareSubmission(ctx context.Context, tx pgx.Tx, record *storedRecord, ins
 	if !first {
 		institution = ""
 	}
-	filing, err := lockScopedFiling(ctx, tx, record.FilingID, institution, first || operator)
+	filing, err := lockScopedFiling(ctx, tx, record.FilingID, institution, first || operator, record.Type == change)
 	if err != nil {
 		return err
 	}
@@ -390,19 +390,20 @@ func republishImplementationNotice(ctx context.Context, tx pgx.Tx, record stored
 // 参数 ctx 控制查询，tx 为当前事务，id 为备案标识，institution 为可选机构归属。
 // 返回值 备案的只读字段或不可关联错误。
 func lockActiveFiling(ctx context.Context, tx pgx.Tx, id, institution string) (choice, error) {
-	return lockScopedFiling(ctx, tx, id, institution, true)
+	return lockScopedFiling(ctx, tx, id, institution, true, false)
 }
 
-// lockScopedFiling 按经办范围锁住当前备案，供报备事务检查其归属及有效性。
-// 参数 ctx 控制查询并携带运营者，tx 为事务，id、institution 为备案及机构，active 为是否要求备案仍有效。
+// lockScopedFiling 锁住备案并按归属或已指定的目标机构校验可办理范围。
+// 参数 ctx 与 tx 控制查询，id、institution 为备案及机构，active、handoff 控制有效性与换机构授权。
 // 返回值 备案的当前可用字段或不可关联错误。
-func lockScopedFiling(ctx context.Context, tx pgx.Tx, id, institution string, active bool) (choice, error) {
+func lockScopedFiling(ctx context.Context, tx pgx.Tx, id, institution string, active, handoff bool) (choice, error) {
 	var result choice
-	err := tx.QueryRow(ctx, `SELECT id::text, number, system_name, organization_name, assessment_org FROM business_cases
-	 WHERE id=$1 AND kind='filing' AND ($2::text='' OR assessment_org COLLATE "C" = $2)
+	err := tx.QueryRow(ctx, `SELECT id::text, number, system_name, organization_name, assessment_org FROM business_cases f
+	 WHERE id=$1 AND kind='filing' AND ($2::text='' OR assessment_org COLLATE "C" = $2
+	   OR ($5::bool AND `+retestHandoffSQL("$2")+`))
 	 AND ($3::text='' OR organization_name COLLATE "C" = $3)
-	 AND (NOT $4::bool OR (status='approved' AND cancelled_at IS NULL)) FOR UPDATE`,
-		id, institution, operatorOrganization(ctx), active).
+	 AND (NOT $4::bool OR (status='approved' AND cancelled_at IS NULL AND discarded_at IS NULL)) FOR UPDATE`,
+		id, institution, operatorOrganization(ctx), active, handoff).
 		Scan(&result.ID, &result.Number, &result.SystemName, &result.OrganizationName, &result.AssessmentOrg)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return choice{}, errFiling

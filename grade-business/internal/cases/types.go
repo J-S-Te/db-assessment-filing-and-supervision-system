@@ -84,6 +84,7 @@ type reviewInput struct {
 	versionInput
 	Decision            string `json:"decision"`
 	Comment             string `json:"comment"`
+	FilingNumber        string `json:"filingNumber,omitempty"`
 	institution         string
 	institutionReviewer string
 }

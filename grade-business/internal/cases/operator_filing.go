@@ -18,7 +18,7 @@ import (
 type operatorFilingScopeKey struct{}
 
 type operatorFilingInput struct {
-	Number         string                `json:"number"`
+	Number         string                `json:"number"` // 兼容旧客户端，运营者提交的编号不入库。
 	SystemName     string                `json:"systemName"`
 	AssessmentOrg  string                `json:"assessmentOrg"`
 	Level          string                `json:"level"`
@@ -148,10 +148,10 @@ func (h endpoint) updateOperatorFiling(w http.ResponseWriter, r *http.Request) {
 // 参数 organization 为服务端已校验的运营单位名称。
 // 返回值 可存储的备案字段或表单错误。
 func (input operatorFilingInput) asFields(organization string) (saveFields, error) {
-	return filingFields(filingInput{
-		Number: input.Number, SystemName: input.SystemName, OrganizationName: organization,
+	return parseFilingFields(filingInput{
+		SystemName: input.SystemName, OrganizationName: organization,
 		AssessmentOrg: input.AssessmentOrg, Level: input.Level, Classification: input.Classification,
-	})
+	}, false)
 }
 
 // downloadOperatorFilingReceipt 根据最新提交或审核通过记录返回 UTF-8 业务回执。
@@ -208,6 +208,9 @@ func (s *Service) operatorFilingReceipt(ctx context.Context, id string) (string,
 	title := "备案提交回执"
 	if state == approved {
 		title = "备案审核通过回执"
+	}
+	if number == "" {
+		number = "待分配"
 	}
 	return fmt.Sprintf("%s\n当前备案编号：%s\n当前系统名称：%s\n记录时间：%s\n",
 		title, strings.Join(strings.Fields(number), " "), strings.Join(strings.Fields(systemName), " "),

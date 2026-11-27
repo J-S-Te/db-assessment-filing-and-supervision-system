@@ -125,7 +125,7 @@ func (s *Service) institutionApplicationSubmit(w http.ResponseWriter, r *http.Re
 	s.submitApplicationInScope(w, r, institution)
 }
 
-// publishFilingReview 按审核阶段向登记机构和运营单位送达备案通知及意见。
+// publishFilingReview 按实际办理阶段向登记机构和运营单位送达备案通知及意见。
 // 参数 ctx、tx、id 指定业务事务和备案，version 为审核版本，零值仅向机构重发最新意见。
 // 返回值 同事务写入失败时的数据库错误。
 func publishFilingReview(ctx context.Context, tx pgx.Tx, id string, version int64) error {
@@ -135,7 +135,7 @@ func publishFilingReview(ctx context.Context, tx pgx.Tx, id string, version int6
 		    c.number,c.system_name,e.comment
 		FROM business_cases c
 		CROSS JOIN LATERAL (
-		    SELECT version,to_status,comment FROM case_review_events
+		    SELECT version,to_status,comment,operator_role FROM case_review_events
 		    WHERE case_id=c.id AND ($2<>0 OR to_status IN ('returned','approved'))
 		      AND ($2::bigint=0 OR version=$2)
 		    ORDER BY version DESC LIMIT 1
@@ -146,7 +146,8 @@ func publishFilingReview(ctx context.Context, tx pgx.Tx, id string, version int6
 		WHERE c.kind='filing' AND c.id=$1
 		  AND ((e.to_status IN ('returned','approved') AND (target.audience='institution'
 		            OR ($2<>0 AND length(target.recipient) BETWEEN 1 AND 200)))
-		    OR (c.operator_origin AND target.audience='institution' AND e.to_status='pending_initial')
+		    OR (c.operator_origin AND target.audience='institution' AND e.to_status='pending_initial'
+		            AND e.operator_role IS NULL)
 		    OR (c.operator_origin AND target.audience='operator' AND e.to_status='pending_final'
 		            AND length(target.recipient) BETWEEN 1 AND 200))
 		ON CONFLICT DO NOTHING`, id, version)

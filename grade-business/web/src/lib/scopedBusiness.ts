@@ -126,7 +126,7 @@ export function acceptsResource(raw: unknown, audience: BusinessAudience): raw i
   if (typeof raw !== 'string' || !Object.hasOwn(businessResources, raw)) return false
   return businessResources[raw as BusinessResource].audience === audience
     || (audience === 'institution' && raw === 'hazards')
-    || (audience === 'operator' && ['filings', 'filing-applications', 'implementations'].includes(raw))
+    || (audience === 'operator' && ['filings', 'filing-applications'].includes(raw))
 }
 
 /**

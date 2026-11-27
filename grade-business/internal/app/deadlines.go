@@ -47,7 +47,8 @@ const visibleDeadlineSQL = taskClockSQL + `
  SELECT w.*, ` + retestObserverSQL + ` AS monitor,
         CASE WHEN w.audience<>$1 THEN w.audience ELSE '' END AS waiting_for
  FROM workflow_tasks w
- WHERE ` + currentAssigneeSQL + ` OR ` + retestObserverSQL + ` OR ` + applicantObserverSQL + taskDatesSQL
+ WHERE ($1 <> 'operator' OR w.resource <> 'implementations')
+ AND (` + currentAssigneeSQL + ` OR ` + retestObserverSQL + ` OR ` + applicantObserverSQL + `)` + taskDatesSQL
 
 const deadlineLabelSQL = `CASE WHEN monitor THEN '待机构复测' ELSE label END`
 

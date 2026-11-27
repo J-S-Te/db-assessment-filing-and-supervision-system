@@ -55,7 +55,9 @@ func TestInstitutionInitialReviewOfOperatorFiling(t *testing.T) {
 	}
 	assertError(t, scopedReview(handler, institution, scope, approve, sent.Version+1), 409, "conflict")
 	assertAssignedNotice(t, service, "filings", created.ID, sent.Version+1, pendingFinal, "operator", "本地备案单位")
-	readResponse[mutation](t, reviewRequest(handler, admin, approve, "", sent.Version+1), 200)
+	readResponse[mutation](t, requestJSON(handler, "POST", admin+"/review-actions", reviewInput{
+		versionInput: versionInput{sent.Version + 1}, Decision: approve, FilingNumber: "BA-INSTITUTION-01",
+	}), 200)
 	assertInstitutionApprovalAudit(t, handler, institution+"/review-history"+scope, "隔离测评机构")
 	page = readResponse[listResponse](t, requestJSON(handler, "GET", collection+scope+"&review=assigned", nil), 200)
 	if len(page.Items) != 0 {
@@ -124,7 +126,7 @@ func TestExistingOperatorFilingPendingFinalCanFinish(t *testing.T) {
 	local := operatorFilingsURL + "/" + created.ID
 	sent := submitOperatorFiling(t, handler, local, owner, created.Version)
 	_, err := service.db.Exec(t.Context(), `WITH reviewed AS (
-		UPDATE business_cases SET status='pending_final',version=version+1 WHERE id=$1
+		UPDATE business_cases SET number='BA-LEGACY',status='pending_final',version=version+1 WHERE id=$1
 		RETURNING id,version
 	)
 	INSERT INTO case_review_events(case_id,action,from_status,to_status,operator,comment,version)
@@ -136,6 +138,10 @@ func TestExistingOperatorFilingPendingFinalCanFinish(t *testing.T) {
 	result := readResponse[mutation](t, reviewRequest(handler, admin, approve, "", sent.Version+1), 200)
 	if result.Status != approved {
 		t.Fatalf("存量终审没有继续完成: %+v", result)
+	}
+	detail := readResponse[recordDetail](t, requestJSON(handler, "GET", local+owner, nil), 200)
+	if detail.Number != "BA-LEGACY" {
+		t.Fatalf("终审改变了存量编号: %q", detail.Number)
 	}
 	events := readResponse[itemResponse[reviewEvent]](t, requestJSON(handler, "GET", admin+"/review-history", nil), 200).Items
 	if len(events) != 3 || events[1].Operator != "旧监管席位" || events[1].Comment != "原初审留痕" {

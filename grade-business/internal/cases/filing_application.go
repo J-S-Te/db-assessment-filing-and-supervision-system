@@ -326,6 +326,9 @@ func applicationTransition(status, action, comment string) (string, error) {
 // 参数 ctx 含可选运营单位，id 为申请标识，input 为审核动作、意见及客户端版本。
 // 返回值 申请变更结果，或业务状态和写入错误。
 func (s *Service) changeApplicationStatus(ctx context.Context, id string, input reviewInput) (mutation, error) {
+	if input.FilingNumber != "" {
+		return mutation{}, ErrInvalid
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return mutation{}, err
