@@ -133,6 +133,11 @@ func (s *Service) list(ctx context.Context, kind string, input listQuery) (listR
 		created, id = &input.cursor.CreatedAt, &input.cursor.ID
 	}
 	query := "SELECT " + recordColumns + `,c.created_at,
+	    CASE WHEN $13::bool THEN COALESCE((
+	        SELECT p.status FROM filing_prechecks p
+	        WHERE p.filing_id=c.id AND p.revision=c.material_revision
+	          AND p.policy_version=(SELECT version FROM filing_material_policy WHERE singleton)
+	    ),'') ELSE '' END,
 	    CASE WHEN $9<>'' AND c.kind='filing' AND NOT c.operator_origin
 	         AND c.cancelled_at IS NULL AND c.status<>'withdrawn' THEN c.version END` + recordJoin + recordFilters + `
 	   AND ($6::timestamptz IS NULL OR (c.created_at,c.id)<($6,$7::uuid))
@@ -145,7 +150,8 @@ func (s *Service) list(ctx context.Context, kind string, input listQuery) (listR
 	 ORDER BY c.created_at DESC,c.id DESC
 	 LIMIT $8`
 	rows, err := s.db.Query(ctx, query, kind, input.status, input.keyword, input.lifecycle, input.risk,
-		created, id, input.limit+1, input.institution, operatorFilingScope(ctx), input.assignedReview, access.Districts(ctx))
+		created, id, input.limit+1, input.institution, operatorFilingScope(ctx), input.assignedReview,
+		access.Districts(ctx), input.includePrecheckStatus)
 	if err != nil {
 		return listResponse{}, err
 	}
@@ -165,7 +171,8 @@ func collectList(rows pgx.Rows, limit int) (listResponse, error) {
 			break
 		}
 		var item recordRow
-		if err := rows.Scan(append(scanFields(&item), &last.CreatedAt, &item.BatchVersion)...); err != nil {
+		fields := append(scanFields(&item), &last.CreatedAt, &item.PrecheckStatus, &item.BatchVersion)
+		if err := rows.Scan(fields...); err != nil {
 			return listResponse{}, err
 		}
 		last.ID = item.ID

@@ -22,6 +22,7 @@ export interface CaseSummary {
   submittedAt?: string
   cancelledAt?: string
   initialReviewAudience?: 'institution'
+  precheckStatus?: Precheck['status']
 }
 
 export interface CaseDetail extends CaseSummary {

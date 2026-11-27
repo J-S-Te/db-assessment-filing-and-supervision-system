@@ -19,6 +19,11 @@ interface ArchiveCounters {
 export interface ArchiveUnit extends ArchiveCounters {
   key: string
   organizationName: string
+  directoryName?: string
+  creditCode?: string
+  classification?: string
+  district?: string
+  directoryStatus?: 'active' | 'inactive'
   systemCount: number
   activeSystemCount: number
 }

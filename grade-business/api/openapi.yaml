@@ -5044,6 +5044,7 @@ paths:
   "/archives/units":
     get:
       operationId: listArchiveUnits
+      summary: 查询在册单位及有已通过备案的历史单位档案
       responses:
         '200':
           description: 业务操作结果
@@ -5197,6 +5198,7 @@ paths:
   "/archives/systems":
     get:
       operationId: listArchiveSystems
+      summary: 查询终审通过后归档的系统
       responses:
         '200':
           description: 业务操作结果
@@ -15250,6 +15252,19 @@ components:
           type: string
         organizationName:
           type: string
+        directoryName:
+          type: string
+          description: 单位名录中的当前名称
+        creditCode:
+          type: string
+          description: 单位名录中的统一社会信用代码
+        classification:
+          type: string
+        district:
+          type: string
+        directoryStatus:
+          type: string
+          enum: [active, inactive]
         systemCount:
           type: integer
           format: int64
@@ -17453,6 +17468,10 @@ components:
       - level
       - status
       properties:
+        precheckStatus:
+          type: string
+          enum: [queued, running, succeeded, failed]
+          description: 监管端备案列表中当前材料和规则版本的预审任务状态，未发起时省略
         version:
           type: integer
           minimum: 1

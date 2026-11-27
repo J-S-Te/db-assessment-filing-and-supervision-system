@@ -184,10 +184,15 @@ func (s *Service) update(ctx context.Context, kind, id string, expected int64,
 		return mutation{}, err
 	}
 	unitID, institutionID, personID := snapshot.References()
+	// 机构只修改系统信息时保留此前核验的单位归属与快照。
+	const keepDirectory = `kind='filing' AND organization_name COLLATE "C"=$4 AND $12::jsonb IS NULL`
 	row := tx.QueryRow(ctx, `
 		UPDATE business_cases SET number=$2,system_name=$3,organization_name=$4,assessment_org=$5,
-		    level=$6,filing_id=$7,risk=$8,version=version+1,directory_unit_id=$9,
-		    directory_institution_id=$10,directory_person_id=$11,directory_snapshot=$12,
+		    level=$6,filing_id=$7,risk=$8,version=version+1,
+		    directory_unit_id=CASE WHEN `+keepDirectory+` THEN directory_unit_id ELSE $9 END,
+		    directory_institution_id=CASE WHEN `+keepDirectory+` THEN directory_institution_id ELSE $10 END,
+		    directory_person_id=CASE WHEN `+keepDirectory+` THEN directory_person_id ELSE $11 END,
+		    directory_snapshot=CASE WHEN `+keepDirectory+` THEN directory_snapshot ELSE $12 END,
 		    classification_assessment=COALESCE($13,classification_assessment)
 		WHERE id=$1
 		RETURNING id::text,status,version`, id, fields.number, fields.systemName, fields.organizationName,

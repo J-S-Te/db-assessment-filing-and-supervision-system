@@ -10,6 +10,11 @@ type page[T any] struct {
 type unitRow struct {
 	Key               string     `json:"key"`
 	OrganizationName  string     `json:"organizationName"`
+	DirectoryName     string     `json:"directoryName,omitempty"`
+	CreditCode        string     `json:"creditCode,omitempty"`
+	Classification    string     `json:"classification,omitempty"`
+	District          string     `json:"district,omitempty"`
+	DirectoryStatus   string     `json:"directoryStatus,omitempty"`
 	SystemCount       int64      `json:"systemCount"`
 	ActiveSystemCount int64      `json:"activeSystemCount"`
 	LatestReportAt    *time.Time `json:"latestReportAt,omitempty"`

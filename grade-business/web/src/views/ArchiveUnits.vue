@@ -40,14 +40,16 @@ const { profile, failure, loading, load } = useArchiveProfile<ArchiveUnitProfile
     <AsyncState :loading="loading" :error="failure" @retry="load">
       <template v-if="profile">
         <header class="page-header detail-header">
-          <div><div class="detail-title"><h1>{{ profile.unit.organizationName }}</h1></div>
-            <p>按备案登记的单位名称汇总</p></div>
+          <div><div class="detail-title"><h1>{{ profile.unit.directoryName || profile.unit.organizationName }}</h1></div></div>
           <button class="button neutral small" type="button" @click="load">⟳ 刷新</button>
         </header>
         <div class="detail-main">
           <section class="panel detail-panel" aria-labelledby="unit-archive-summary">
             <header class="panel-heading"><h2 id="unit-archive-summary">单位概况</h2></header>
             <dl class="facts">
+              <div v-if="profile.unit.creditCode"><dt>统一社会信用代码</dt><dd>{{ profile.unit.creditCode }}</dd></div>
+              <div v-if="profile.unit.classification"><dt>单位类型</dt><dd>{{ profile.unit.classification }}</dd></div>
+              <div v-if="profile.unit.district"><dt>所属区县</dt><dd>{{ profile.unit.district }}</dd></div>
               <div><dt>备案系统</dt><dd>{{ profile.unit.systemCount }}</dd></div>
               <div><dt>有效系统</dt><dd>{{ profile.unit.activeSystemCount }}</dd></div>
               <div><dt>已注销系统</dt><dd>{{ profile.unit.systemCount - profile.unit.activeSystemCount }}</dd></div>

@@ -161,7 +161,7 @@ input[type=range]{width:118px;accent-color:#5fd8ff;height:4px}
           <option value="high">高风险隐患</option>
           <option value="pending">待监管复核</option>
         </select></div>
-      <div class="row"><label for="scale">高度倍率</label><input type="range" id="scale" min="0" max="80" value="30"></div>
+      <div class="row"><label for="scale">高度倍率</label><input type="range" id="scale" min="0" max="80" value="34"></div>
       <div class="row"><label for="mode">配色</label>
         <select id="mode">
           <option value="risk">风险色（红/琥珀/蓝）</option>
@@ -227,7 +227,7 @@ input[type=range]{width:118px;accent-color:#5fd8ff;height:4px}
         <div class="lg-hd" id="legendTitle">风险指数</div>
         <div class="lg" id="legendBox"></div>
       </div>
-      <div class="note">底图 CTAmap v2.0 · 离线投影<br>高度 = 指标值 × 倍率（SVG 单位）<br>点击区县可高亮，悬停查看读数</div>
+      <div class="note">底图 CTAmap v2.0 · 离线投影<br>高度 = 指标值 × 倍率（0–100 口径）<br>点击区县可高亮，悬停查看读数</div>
     </div>
 
     <div class="readout" id="readout"></div>
@@ -16299,12 +16299,12 @@ const BOUNDARIES = {
 
 /* 真实业务数据（示意） */
 const REAL = {
-  '柯城区': { index: 9, hazards: 5, overdue: 2, high: 3, pending: 2 },
-  '江山市': { index: 6, hazards: 3, overdue: 1, high: 1, pending: 1 },
-  '龙游县': { index: 5, hazards: 2, overdue: 0, high: 1, pending: 0 },
-  '开化县': { index: 3, hazards: 1, overdue: 0, high: 0, pending: 1 },
-  '常山县': { index: 2, hazards: 1, overdue: 0, high: 0, pending: 0 },
-  '衢江区': { index: 1, hazards: 0, overdue: 0, high: 0, pending: 0 },
+  '柯城区': { index: 100, hazards: 5, overdue: 2, high: 3, pending: 2 },
+  '江山市': { index: 60, hazards: 3, overdue: 1, high: 1, pending: 1 },
+  '龙游县': { index: 50, hazards: 2, overdue: 0, high: 1, pending: 0 },
+  '开化县': { index: 33, hazards: 1, overdue: 0, high: 0, pending: 1 },
+  '常山县': { index: 20, hazards: 1, overdue: 0, high: 0, pending: 0 },
+  '衢江区': { index: 10, hazards: 0, overdue: 0, high: 0, pending: 0 },
 };
 let DATA = JSON.parse(JSON.stringify(REAL));
 
@@ -16331,7 +16331,7 @@ function svg(tag, attrs){ const el = document.createElementNS(NS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]); return el; }
 
 const state = {
-  metric: 'index', scale: 30, mode: 'risk', tilt: 54, yaw: -18, focal: 1600, dir: 'up',
+  metric: 'index', scale: 34, mode: 'risk', tilt: 54, yaw: -18, focal: 1600, dir: 'up',
   base: true, badge: true, name: true, beam: true, radar: true, floor: true, grid: true,
 };
 
@@ -16542,10 +16542,9 @@ function ensurePalette(mode){
   });
 }
 
-function levelOf(v, max){
-  if (!v || max <= 0) return 'zero';
-  const r = v / max;
-  return r >= 0.66 ? 'high' : r >= 0.33 ? 'mid' : 'low';
+function levelOf(v){
+  if (!v) return 'zero';
+  return v >= 66 ? 'high' : v >= 34 ? 'mid' : 'low';
 }
 function valueOf(name){ return DATA[name]?.[state.metric] ?? 0; }
 
@@ -16560,8 +16559,8 @@ function currentItems(){
     const off = LABEL_OFFSET[d.name];
     return {
       name: d.name, rings: d.rings, value: v,
-      h: Math.round(v * state.scale / 10),
-      lv: levelOf(v, max),
+      h: Math.round(v * state.scale / 100),
+      lv: levelOf(v),
       lx: off ? d.lx + off[0] : d.lx,
       ly: off ? d.ly + off[1] : d.ly,
       beam: state.beam && state.metric === 'index' && v >= 7,
@@ -16678,14 +16677,14 @@ function syncUI(){
 
   const maxVal = max;
   document.getElementById('legendBox').innerHTML = `
-    <div><i style="background:${TOP_GRAD.high[1]}"></i>最高<b>${maxVal}</b></div>
-    <div><i style="background:${TOP_GRAD.mid[1]}"></i>中<b>${Math.round(maxVal * 0.33)}–${Math.round(maxVal * 0.66)}</b></div>
-    <div><i style="background:${TOP_GRAD.low[1]}"></i>低<b>1–${Math.round(maxVal * 0.33)}</b></div>
+    <div><i style="background:${TOP_GRAD.high[1]}"></i>最高<b>66–100</b></div>
+    <div><i style="background:${TOP_GRAD.mid[1]}"></i>中<b>34–65</b></div>
+    <div><i style="background:${TOP_GRAD.low[1]}"></i>低<b>1–33</b></div>
     <div><i style="background:${TOP_GRAD.zero[1]}"></i>无<b>0</b></div>`;
 
   document.getElementById('readout').innerHTML = Object.keys(DATA).map(name => {
     const v = valueOf(name);
-    const h = Math.round(v * state.scale / 10);
+    const h = Math.round(v * state.scale / 100);
     return `<div><span class="k">${name}</span><span class="v ${v >= maxVal * 0.66 ? 'hot' : ''}">${v}</span>
       <span class="u">浮起 ${h} 单位${v >= maxVal * 0.66 ? ' · 最重' : ''}</span></div>`;
   }).join('');

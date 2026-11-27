@@ -11,8 +11,18 @@ type archiveReader interface {
 }
 
 const archiveFilings = `f.kind='filing' AND f.status='approved'`
+
+// 档案按已绑定单位归组。历史自由名称可按稳定名称或当前名称查询，监管授权仍使用单位外键。
+const archiveUnitJoin = `LEFT JOIN LATERAL (
+ SELECT u.scope_name,u.name,u.code FROM directory_parties u
+ WHERE u.kind='unit' AND (u.id=f.directory_unit_id OR (f.directory_unit_id IS NULL AND (
+   lower(u.scope_name)=lower(f.organization_name) OR
+   (u.merged_into_id IS NULL AND lower(u.name)=lower(f.organization_name)))))
+ ORDER BY (lower(u.scope_name)=lower(f.organization_name)) DESC,u.id LIMIT 1
+) directory_unit ON TRUE`
+const archiveOrganization = `COALESCE(directory_unit.scope_name,f.organization_name) COLLATE "C"`
 const filingScope = archiveFilings + `
- AND ($1::text='' OR f.organization_name COLLATE "C"=$1)
+ AND ($1::text='' OR ` + archiveOrganization + `=$1)
  AND ($2::uuid IS NULL OR f.id=$2)`
 
 const relatedReportJoin = `JOIN business_cases r ON r.filing_id=f.id AND r.kind='report' AND r.status<>'draft'`
@@ -30,27 +40,45 @@ const filingStatistics = `CROSS JOIN LATERAL (
 ) t`
 
 const unitsSQL = `
-WITH selected AS (
- SELECT f.organization_name COLLATE "C" AS organization, count(*) AS systems,
-        count(*) FILTER (WHERE f.cancelled_at IS NULL) AS active
- FROM business_cases f
+WITH filings AS (
+ SELECT f.id,f.cancelled_at,f.organization_name COLLATE "C" AS recorded_name,
+        ` + archiveOrganization + ` AS organization
+ FROM business_cases f ` + archiveUnitJoin + `
  WHERE ` + archiveFilings + ` AND f.organization_name<>''
-   AND ($1::text='' OR f.organization_name COLLATE "C"=$1)
-   AND ($2::text='' OR strpos(lower(f.organization_name),lower($2))>0)
-   AND ($3::text='' OR f.organization_name COLLATE "C">$3)
- GROUP BY f.organization_name COLLATE "C" ORDER BY organization LIMIT $4
+), organizations AS (
+ SELECT scope_name COLLATE "C" AS organization FROM directory_parties
+ WHERE kind='unit' AND merged_into_id IS NULL
+ UNION
+ SELECT organization FROM filings
+), requested_unit AS (
+ SELECT CASE WHEN EXISTS (SELECT 1 FROM organizations WHERE organization=$1) THEN $1
+   ELSE (SELECT min(organization) FROM filings WHERE recorded_name=$1
+         HAVING count(DISTINCT organization)=1)
+ END AS organization
+), selected AS (
+ SELECT o.organization,u.name,u.code,u.classification,u.district,u.status
+ FROM organizations o LEFT JOIN directory_parties u
+   ON u.kind='unit' AND u.scope_name COLLATE "C"=o.organization
+ WHERE ($1::text='' OR o.organization=(SELECT organization FROM requested_unit))
+   AND ($2::text='' OR strpos(lower(concat_ws(' ',o.organization,u.name,u.code)),lower($2))>0)
+   AND ($3::text='' OR o.organization>$3)
+ ORDER BY o.organization LIMIT $4
 )
-SELECT o.organization,o.systems,o.active,max(t.latest_report_at),sum(t.open_count)::bigint,sum(t.closed_count)::bigint
+SELECT o.organization,count(f.id),count(f.id) FILTER (WHERE f.cancelled_at IS NULL),
+       max(t.latest_report_at),sum(t.open_count)::bigint,sum(t.closed_count)::bigint,
+       coalesce(o.name,''),coalesce(o.code,''),coalesce(o.classification,''),coalesce(o.district,''),coalesce(o.status,'')
 FROM selected o
-JOIN business_cases f ON f.organization_name COLLATE "C"=o.organization AND ` + archiveFilings + `
+LEFT JOIN filings f ON f.organization=o.organization
 ` + filingStatistics + `
-GROUP BY o.organization,o.systems,o.active ORDER BY o.organization`
+GROUP BY o.organization,o.name,o.code,o.classification,o.district,o.status ORDER BY o.organization`
 
 const systemsSQL = `
 WITH selected AS (
  SELECT f.id,f.created_at,f.number,f.system_name,f.organization_name,f.assessment_org,f.level,f.cancelled_at
- FROM business_cases f WHERE ` + filingScope + `
-   AND ($3::text='' OR strpos(lower(concat_ws(' ',f.system_name,f.organization_name,f.number)),lower($3))>0)
+ FROM business_cases f ` + archiveUnitJoin + `
+ WHERE ` + filingScope + `
+   AND ($3::text='' OR strpos(lower(concat_ws(' ',f.system_name,f.organization_name,f.number,
+       directory_unit.scope_name,directory_unit.name,directory_unit.code)),lower($3))>0)
    AND ($4::text='' OR ($4='active' AND f.cancelled_at IS NULL)
         OR ($4='cancelled' AND f.cancelled_at IS NOT NULL))
    AND ($5::text='' OR f.level=$5)
@@ -85,13 +113,14 @@ func readUnits(ctx context.Context, reader archiveReader, organization string, i
 	return result, nil
 }
 
-// scanUnit 将真实备案单位分组的列转换为公开档案摘要。
-// 参数 row 为已选单位分组及其统计的数据库行。
+// scanUnit 将名录单位和备案统计转换为档案摘要。
+// 参数 row 为已选单位及其统计的数据库行。
 // 返回值 单位摘要或数据库扫描错误。
 func scanUnit(row pgx.CollectableRow) (unitRow, error) {
 	var result unitRow
 	err := row.Scan(&result.OrganizationName, &result.SystemCount, &result.ActiveSystemCount,
-		&result.LatestReportAt, &result.OpenHazardCount, &result.ClosedHazardCount)
+		&result.LatestReportAt, &result.OpenHazardCount, &result.ClosedHazardCount,
+		&result.DirectoryName, &result.CreditCode, &result.Classification, &result.District, &result.DirectoryStatus)
 	result.Key = groupKey(result.OrganizationName)
 	return result, err
 }

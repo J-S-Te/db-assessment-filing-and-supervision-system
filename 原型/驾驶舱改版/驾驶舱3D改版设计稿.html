@@ -229,6 +229,70 @@ document.querySelectorAll('.card').forEach(card => {
 .delta.down{color:var(--good)}
 .delta.flat{color:var(--muted);font-family:var(--font-cn)}
 .delta svg{width:10px;height:10px}
+.metric-head{display:flex;align-items:center;justify-content:space-between;gap:5px;flex-wrap:wrap}
+.metric-head .lb{white-space:nowrap;font-size:11px}
+.delta-chip{display:inline-flex;align-items:center;flex:none;padding:1px 4px;border-radius:4px;
+  font-family:var(--mono);font-size:9px;line-height:1.6;white-space:nowrap;border:1px solid transparent}
+.delta-chip.flat{background:rgba(28,60,86,.6);color:var(--muted);border-color:rgba(111,198,255,.24)}
+.delta-chip.neutral{background:rgba(59,143,192,.16);color:#8fc4ea;border-color:rgba(59,143,192,.42)}
+.delta-chip.good{background:rgba(69,219,131,.14);color:#7fe8ae;border-color:rgba(69,219,131,.4)}
+.delta-chip.bad{background:rgba(255,95,112,.14);color:#ff9aa5;border-color:rgba(255,95,112,.45)}
+.trend-compare{display:flex;flex-wrap:wrap;gap:5px 14px}
+.trend-compare-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+
+/* ---------- 同比环比（与实现同口径，由真实窗口计算） ---------- */
+const COMPARISON = {
+  windowDays: 30, hasYearAgo: true,
+  filingsCreated: { current: 142, previous: 128, yearAgo: 96, change: 14, rate: 11, worse: false },
+  reportsCreated: { current: 86, previous: 74, yearAgo: 52, change: 12, rate: 16, worse: false },
+  alertsTriggered: { current: 35, previous: 41, yearAgo: 58, change: -6, rate: -15, worse: true },
+  hazardsClosed: { current: 41, previous: 33, yearAgo: 27, change: 8, rate: 24, worse: false },
+  openHazards: { current: 12, previous: 10, yearAgo: 15, change: 2, rate: 20, worse: true },
+  activeAlerts: { current: 5, previous: 6, yearAgo: 11, change: -1, rate: -17, worse: false },
+  riskIndex: { current: 100, previous: 80, yearAgo: 120, change: 20, rate: 25, worse: true },
+  completionRate: { current: 77, previous: 72, yearAgo: 64, change: 5, hasCurrent: true },
+  scopeNote: '按当前有效备案范围统计；上期为紧邻的等长窗口，去年同期为同一区间的去年同期。',
+};
+function periodChip(delta, neutral) {
+  if (!delta) return { text: '较上期 —', tone: 'flat', title: '对比数据尚未就绪' };
+  if (delta.change === 0) return { text: '较上期持平', tone: 'flat', title: '与上期窗口持平' };
+  const arrow = delta.change > 0 ? '↑' : '↓';
+  const magnitude = delta.rate === null ? String(Math.abs(delta.change)) : `${Math.abs(delta.rate)}%`;
+  return { text: `较上期 ${arrow}${magnitude}`, tone: neutral ? 'neutral' : delta.worse ? 'bad' : 'good',
+    title: `当前 ${delta.current}，上期 ${delta.previous}` };
+}
+function yearChip(delta, available) {
+  if (!delta || !available) return { text: '同比 —', tone: 'flat', title: '去年同期窗口没有可用数据' };
+  if (delta.current === delta.yearAgo) return { text: '同比持平', tone: 'flat', title: '与去年同期持平' };
+  const change = delta.current - delta.yearAgo;
+  const arrow = change > 0 ? '↑' : '↓';
+  const rate = delta.yearAgo > 0 ? `${Math.abs(Math.round(change * 100 / delta.yearAgo))}%` : String(Math.abs(change));
+  return { text: `同比 ${arrow}${rate}`, tone: 'neutral', title: `当前 ${delta.current}，去年同期 ${delta.yearAgo}` };
+}
+function completionChip(delta) {
+  if (!delta || !delta.hasCurrent) return { text: '较上期 —', tone: 'flat', title: '完成率对比数据尚未就绪' };
+  if (delta.change === 0) return { text: '较上期持平', tone: 'flat', title: '与上期窗口持平' };
+  const arrow = delta.change > 0 ? '↑' : '↓';
+  return { text: `较上期 ${arrow}${Math.abs(delta.change)}pp`, tone: delta.change > 0 ? 'good' : 'bad',
+    title: `当前 ${delta.current}%，上期 ${delta.previous}%` };
+}
+const METRIC_CARDS = [
+  { label: '综合风险指数', value: '100', note: '逾期 40% / 高风险 40% / 待复测 20%',
+    period: periodChip(COMPARISON.riskIndex), year: yearChip(COMPARISON.riskIndex, COMPARISON.hasYearAgo) },
+  { label: '未销项隐患', value: '12', note: '高 5 · 中 4 · 低 3',
+    period: periodChip(COMPARISON.openHazards), year: yearChip(COMPARISON.openHazards, COMPARISON.hasYearAgo) },
+  { label: '整改完成率', value: '77%', note: '已销项 41 / 53',
+    period: completionChip(COMPARISON.completionRate),
+    year: { text: `同比 ${COMPARISON.completionRate.current > COMPARISON.completionRate.yearAgo ? '↑' : '↓'}${Math.abs(COMPARISON.completionRate.current - COMPARISON.completionRate.yearAgo)}pp`,
+      tone: 'neutral', title: `当前 ${COMPARISON.completionRate.current}%，去年同期 ${COMPARISON.completionRate.yearAgo}%` } },
+  { label: '活跃预警', value: '5', note: '待处理 3 · 处理中 2',
+    period: periodChip(COMPARISON.activeAlerts), year: yearChip(COMPARISON.activeAlerts, COMPARISON.hasYearAgo) },
+];
+const TREND_COMPARE = [
+  { label: '新增备案', delta: COMPARISON.filingsCreated },
+  { label: '触发预警', delta: COMPARISON.alertsTriggered },
+  { label: '隐患销项', delta: COMPARISON.hazardsClosed },
+];
 
 /* ---------- 业务分类统计 ---------- */
 .cat-list{display:grid;gap:7px}
@@ -522,8 +586,8 @@ body.static .radar .beam,body.static .pillar i{animation:none!important}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       全域待办 14 项
     </span>
-    <p>其中 <em>3 项已逾期</em>、<em>5 项活跃预警</em>待处置；<b>柯城区</b>风险指数最高（9），建议优先督办其 <b>2 项逾期隐患</b>。</p>
-    <div class="worst"><span>最重区域</span><b>柯城区</b><span class="idx">指数 9</span></div>
+    <p>其中 <em>3 项已逾期</em>、<em>5 项活跃预警</em>待处置；<b>柯城区</b>风险指数最高（100），建议优先督办其 <b>2 项逾期隐患</b>。</p>
+    <div class="worst"><span>最重区域</span><b>柯城区</b><span class="idx">指数 100</span></div>
   </section>
 
   <div class="main">
@@ -531,29 +595,8 @@ body.static .radar .beam,body.static .pillar i{animation:none!important}
     <!-- ===== 左栏 ===== -->
     <div class="col col-l">
       <section class="card">
-        <header class="card-hd"><h2>核心指标</h2><span class="more">较上期 30 日口径</span></header>
-        <div class="metrics">
-          <div class="metric">
-            <span class="lb">未销项隐患</span>
-            <span class="row"><b class="num">12</b><span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>2</span></span>
-            <span class="sub">高 5 · 中 4 · 低 3</span>
-          </div>
-          <div class="metric">
-            <span class="lb">整改完成率</span>
-            <span class="row"><b class="num">68%</b><span class="delta down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>5pp</span></span>
-            <span class="sub">已销项 41 / 60</span>
-          </div>
-          <div class="metric">
-            <span class="lb">活跃预警</span>
-            <span class="row"><b class="num">5</b><span class="delta down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>1</span></span>
-            <span class="sub">待处理 3 · 处理中 2</span>
-          </div>
-          <div class="metric">
-            <span class="lb">备案总数</span>
-            <span class="row"><b class="num">1,286</b><span class="delta flat">本年 +142</span></span>
-            <span class="sub">涉及 214 家备案单位</span>
-          </div>
-        </div>
+        <header class="card-hd"><h2>核心指标</h2><span class="more">对比窗口 30 日 · 真实窗口计算</span></header>
+        <div class="metrics" id="metricList"></div>
       </section>
 
       <section class="card">
@@ -566,6 +609,7 @@ body.static .radar .beam,body.static .pillar i{animation:none!important}
           <h2>业务趋势</h2>
           <div class="right"><span class="more">11-21 至 11-27</span></div>
         </header>
+        <div class="trend-compare" id="trendCompare"></div>
         <div class="trend-plot" id="trend"></div>
         <div class="legend" id="trendLegend"></div>
       </section>
@@ -607,9 +651,9 @@ body.static .radar .beam,body.static .pillar i{animation:none!important}
             <div class="ov ov-legend">
               <div class="ov-hd">风险指数</div>
               <div class="lg">
-                <div><i style="background:#e0685a"></i>高<b>7+</b></div>
-                <div><i style="background:#e0a340"></i>中<b>4-6</b></div>
-                <div><i style="background:#3b8fc0"></i>低<b>1-3</b></div>
+                <div><i style="background:#e0685a"></i>高<b>66-100</b></div>
+                <div><i style="background:#e0a340"></i>中<b>34-65</b></div>
+                <div><i style="background:#3b8fc0"></i>低<b>1-33</b></div>
                 <div><i style="background:#22455f"></i>无<b>0</b></div>
               </div>
             </div>
@@ -628,7 +672,7 @@ body.static .radar .beam,body.static .pillar i{animation:none!important}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
               点击区县下钻 · 点击空白恢复全域
             </div>
-            <div class="ov ov-note">浙江省衢州市 · 底图 CTAmap v2.0<br>风险着色：未销项隐患 + 逾期 + 待复测</div>
+            <div class="ov ov-note">浙江省衢州市 · 底图 CTAmap v2.0<br>风险指数 = 逾期 40% / 高风险 40% / 待复测 20%，满分 100</div>
           </div>
 
           <aside class="hazard-panel">
@@ -752,7 +796,7 @@ body.static .radar .beam,body.static .pillar i{animation:none!important}
     <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 2h6v4H9z"/><path d="m9 14 2 2 4-4"/></svg><span>在办实施报备</span><b>8</b></span>
     <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-6"/></svg><span>测评首轮通过率</span><b>92%</b></span>
     <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/></svg><span>预警关闭率</span><b>64%</b></span>
-    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>审核已逾期</span><b>3</b></span>
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>审核已逾期</span><b>33</b></span>
     <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg><span>已销项隐患</span><b>41</b></span>
     <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg><span>资产登记总量</span><b>1,204</b></span>
   </div>
@@ -16827,16 +16871,16 @@ const BOUNDARIES = {
 };
 
 const DISTRICT_DATA = {
-  '柯城区': { idx: 9, sys: 62, haz: 5, ovd: 2, high: 3, rev: 2 },
-  '江山市': { idx: 6, sys: 41, haz: 3, ovd: 1, high: 1, rev: 1 },
-  '龙游县': { idx: 5, sys: 38, haz: 2, ovd: 0, high: 1, rev: 0 },
-  '开化县': { idx: 3, sys: 29, haz: 1, ovd: 0, high: 0, rev: 1 },
-  '常山县': { idx: 2, sys: 24, haz: 1, ovd: 0, high: 0, rev: 0 },
-  '衢江区': { idx: 1, sys: 20, haz: 0, ovd: 0, high: 0, rev: 0 },
+  '柯城区': { idx: 100, sys: 62, haz: 5, ovd: 2, high: 3, rev: 2 },
+  '江山市': { idx: 60, sys: 41, haz: 3, ovd: 1, high: 1, rev: 1 },
+  '龙游县': { idx: 50, sys: 38, haz: 2, ovd: 0, high: 1, rev: 0 },
+  '开化县': { idx: 33, sys: 29, haz: 1, ovd: 0, high: 0, rev: 1 },
+  '常山县': { idx: 20, sys: 24, haz: 1, ovd: 0, high: 0, rev: 0 },
+  '衢江区': { idx: 10, sys: 20, haz: 0, ovd: 0, high: 0, rev: 0 },
 };
-const ALL = { idx: 9, sys: 214, haz: 12, ovd: 3, rev: 4 };
+const ALL = { idx: 100, sys: 214, haz: 12, ovd: 3, rev: 4 };
 const COLOR = { high: '#e0685a', mid: '#e0a340', low: '#3b8fc0', zero: '#22455f' };
-const tone = i => i >= 7 ? COLOR.high : i >= 4 ? COLOR.mid : i >= 1 ? COLOR.low : COLOR.zero;
+const tone = i => i >= 66 ? COLOR.high : i >= 34 ? COLOR.mid : i >= 1 ? COLOR.low : COLOR.zero;
 let current = null;
 
 const QUERY = new URLSearchParams(location.search);
@@ -17028,14 +17072,13 @@ const WALL_GRAD = {
   <linearGradient id="wall-${k}" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="${WALL_GRAD[k][0]}"/><stop offset="1" stop-color="${WALL_GRAD[k][1]}"/></linearGradient>`));
 
-const HEIGHT = { '柯城区': 22, '江山市': 15, '龙游县': 12, '开化县': 8, '常山县': 5, '衢江区': 3 };
+const HEIGHT = { '柯城区': 34, '江山市': 20, '龙游县': 17, '开化县': 11, '常山县': 7, '衢江区': 3 };
 const CAM = { tilt: 54, yaw: -18, focal: 1600 };
 const LABEL_OFFSET = { '衢江区': [10, 6] };
 
-function levelOf(v, max){
-  if (!v || max <= 0) return 'zero';
-  const r = v / max;
-  return r >= 0.66 ? 'high' : r >= 0.33 ? 'mid' : 'low';
+function levelOf(v){
+  if (!v) return 'zero';
+  return v >= 66 ? 'high' : v >= 34 ? 'mid' : 'low';
 }
 
 function mapItems(){
@@ -17045,7 +17088,7 @@ function mapItems(){
     const off = LABEL_OFFSET[d.name];
     return {
       name: d.name, rings: d.rings, value: m.idx,
-      h: HEIGHT[d.name] ?? 0, lv: levelOf(m.idx, maxIdx),
+      h: HEIGHT[d.name] ?? 0, lv: levelOf(m.idx),
       lx: off ? d.lx + off[0] : d.lx, ly: off ? d.ly + off[1] : d.ly,
       beam: m.idx >= 7,
     };
@@ -17242,6 +17285,77 @@ document.getElementById('hazardList').innerHTML = HAZARDS.map(h => `
       <span class="src">${h.s} · ${h.d}</span>
     </span>
   </div></li>`).join('');
+
+/* ---------- 同比环比（与实现同口径，由真实窗口计算） ---------- */
+const COMPARISON = {
+  windowDays: 30, hasYearAgo: true,
+  filingsCreated: { current: 142, previous: 128, yearAgo: 96, change: 14, rate: 11, worse: false },
+  reportsCreated: { current: 86, previous: 74, yearAgo: 52, change: 12, rate: 16, worse: false },
+  alertsTriggered: { current: 35, previous: 41, yearAgo: 58, change: -6, rate: -15, worse: true },
+  hazardsClosed: { current: 41, previous: 33, yearAgo: 27, change: 8, rate: 24, worse: false },
+  openHazards: { current: 12, previous: 10, yearAgo: 15, change: 2, rate: 20, worse: true },
+  activeAlerts: { current: 5, previous: 6, yearAgo: 11, change: -1, rate: -17, worse: false },
+  riskIndex: { current: 100, previous: 80, yearAgo: 120, change: 20, rate: 25, worse: true },
+  completionRate: { current: 77, previous: 72, yearAgo: 64, change: 5, hasCurrent: true },
+  scopeNote: '按当前有效备案范围统计；上期为紧邻的等长窗口，去年同期为同一区间的去年同期。',
+};
+function periodChip(delta, neutral) {
+  if (!delta) return { text: '较上期 —', tone: 'flat', title: '对比数据尚未就绪' };
+  if (delta.change === 0) return { text: '较上期持平', tone: 'flat', title: '与上期窗口持平' };
+  const arrow = delta.change > 0 ? '↑' : '↓';
+  const magnitude = delta.rate === null ? String(Math.abs(delta.change)) : `${Math.abs(delta.rate)}%`;
+  return { text: `较上期 ${arrow}${magnitude}`, tone: neutral ? 'neutral' : delta.worse ? 'bad' : 'good',
+    title: `当前 ${delta.current}，上期 ${delta.previous}` };
+}
+function yearChip(delta, available) {
+  if (!delta || !available) return { text: '同比 —', tone: 'flat', title: '去年同期窗口没有可用数据' };
+  if (delta.current === delta.yearAgo) return { text: '同比持平', tone: 'flat', title: '与去年同期持平' };
+  const change = delta.current - delta.yearAgo;
+  const arrow = change > 0 ? '↑' : '↓';
+  const rate = delta.yearAgo > 0 ? `${Math.abs(Math.round(change * 100 / delta.yearAgo))}%` : String(Math.abs(change));
+  return { text: `同比 ${arrow}${rate}`, tone: 'neutral', title: `当前 ${delta.current}，去年同期 ${delta.yearAgo}` };
+}
+function completionChip(delta) {
+  if (!delta || !delta.hasCurrent) return { text: '较上期 —', tone: 'flat', title: '完成率对比数据尚未就绪' };
+  if (delta.change === 0) return { text: '较上期持平', tone: 'flat', title: '与上期窗口持平' };
+  const arrow = delta.change > 0 ? '↑' : '↓';
+  return { text: `较上期 ${arrow}${Math.abs(delta.change)}pp`, tone: delta.change > 0 ? 'good' : 'bad',
+    title: `当前 ${delta.current}%，上期 ${delta.previous}%` };
+}
+const METRIC_CARDS = [
+  { label: '综合风险指数', value: '100', note: '逾期 40% / 高风险 40% / 待复测 20%',
+    period: periodChip(COMPARISON.riskIndex), year: yearChip(COMPARISON.riskIndex, COMPARISON.hasYearAgo) },
+  { label: '未销项隐患', value: '12', note: '高 5 · 中 4 · 低 3',
+    period: periodChip(COMPARISON.openHazards), year: yearChip(COMPARISON.openHazards, COMPARISON.hasYearAgo) },
+  { label: '整改完成率', value: '77%', note: '已销项 41 / 53',
+    period: completionChip(COMPARISON.completionRate),
+    year: { text: `同比 ${COMPARISON.completionRate.current > COMPARISON.completionRate.yearAgo ? '↑' : '↓'}${Math.abs(COMPARISON.completionRate.current - COMPARISON.completionRate.yearAgo)}pp`,
+      tone: 'neutral', title: `当前 ${COMPARISON.completionRate.current}%，去年同期 ${COMPARISON.completionRate.yearAgo}%` } },
+  { label: '活跃预警', value: '5', note: '待处理 3 · 处理中 2',
+    period: periodChip(COMPARISON.activeAlerts), year: yearChip(COMPARISON.activeAlerts, COMPARISON.hasYearAgo) },
+];
+const TREND_COMPARE = [
+  { label: '新增备案', delta: COMPARISON.filingsCreated },
+  { label: '触发预警', delta: COMPARISON.alertsTriggered },
+  { label: '隐患销项', delta: COMPARISON.hazardsClosed },
+];
+
+/* ---------- 核心指标渲染 ---------- */
+document.getElementById('metricList').innerHTML = METRIC_CARDS.map(item => `
+  <div class="metric">
+    <span class="metric-head">
+      <span class="lb">${item.label}</span>
+      <span class="delta-chip ${item.year.tone}" title="${item.year.title}">${item.year.text}</span>
+    </span>
+    <span class="row"><b class="num">${item.value}</b>
+      <span class="delta-chip ${item.period.tone}" title="${item.period.title}">${item.period.text}</span></span>
+    <span class="sub">${item.note}</span>
+  </div>`).join('');
+document.getElementById('trendCompare').innerHTML = TREND_COMPARE.map(item => `
+  <span class="trend-compare-item">${item.label}
+    <span class="delta-chip ${periodChip(item.delta, true).tone}" title="${periodChip(item.delta, true).title}">${periodChip(item.delta, true).text}</span>
+    <span class="delta-chip ${yearChip(item.delta, COMPARISON.hasYearAgo).tone}" title="${yearChip(item.delta, COMPARISON.hasYearAgo).title}">${yearChip(item.delta, COMPARISON.hasYearAgo).text}</span>
+  </span>`).join('');
 
 /* ---------- 业务分类统计 ---------- */
 const CATS = [

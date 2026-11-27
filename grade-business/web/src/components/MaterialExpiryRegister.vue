@@ -2,6 +2,7 @@
 import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { api, attachmentURL, errorText, isAbort, params } from '../lib/api'
 import { materials, reportSubmissionMaterials } from '../lib/domain'
+import { createRequestId } from '../lib/requestId'
 
 interface Source {
   attachmentId: string
@@ -100,15 +101,15 @@ async function save() {
   const input = { sourceAttachmentId: selected.value, validUntil: validUntil.value,
     warningDays: warningDays.value, evidence: evidence.value.trim() }
   const fingerprint = JSON.stringify(input)
-  if (lastInput !== fingerprint) {
-    requestId = crypto.randomUUID()
-    lastInput = fingerprint
-  }
   const active = new AbortController()
   request = active
   busy.value = true
   failure.value = ''
   try {
+    if (lastInput !== fingerprint) {
+      requestId = createRequestId()
+      lastInput = fingerprint
+    }
     const response = await api<{ id: string }>('/material-expiries',
       { method: 'POST', body: { ...input, requestId }, signal: active.signal })
     if (!active.signal.aborted) emit('saved', response.id)

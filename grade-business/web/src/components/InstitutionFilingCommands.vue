@@ -3,6 +3,7 @@ import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, errorText, isAbort, params } from '../lib/api'
 import { type CaseMutation, type CaseSummary } from '../lib/domain'
+import { createRequestId } from '../lib/requestId'
 
 type FilingRow = CaseSummary & { version: number }
 type Action = 'submit' | 'discard'
@@ -71,7 +72,7 @@ function open(next: Operation) {
  */
 function requestID(payload: object) {
   const fingerprint = JSON.stringify(payload)
-  if (identity?.fingerprint !== fingerprint) identity = { key: crypto.randomUUID(), fingerprint }
+  if (identity?.fingerprint !== fingerprint) identity = { key: createRequestId(), fingerprint }
   return identity.key
 }
 

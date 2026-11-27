@@ -36,6 +36,7 @@ type recordRow struct {
 	SubmittedAt           *time.Time `json:"submittedAt,omitempty"`
 	CancelledAt           *time.Time `json:"cancelledAt,omitempty"`
 	InitialReviewAudience string     `json:"initialReviewAudience,omitempty"`
+	PrecheckStatus        string     `json:"precheckStatus,omitempty"`
 	BatchVersion          *int64     `json:"version,omitempty"`
 }
 
@@ -108,6 +109,7 @@ type reviewEvent struct {
 type listQuery struct {
 	keyword, status, lifecycle, risk, institution string
 	assignedReview                                bool
+	includePrecheckStatus                         bool
 	cursor                                        listCursor
 	limit                                         int
 }

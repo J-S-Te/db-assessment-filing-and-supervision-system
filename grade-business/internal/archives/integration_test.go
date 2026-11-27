@@ -19,6 +19,55 @@ import (
 
 const unitName = "江州医疗/中心"
 
+// TestArchiveFindsRegisteredUnitBeforeFilingApproval 验证在册单位可建档并按信用代码查询。
+// 参数 t 为真实隔离数据库和档案路由的测试上下文。
+// 返回值 无。
+func TestArchiveFindsRegisteredUnitBeforeFilingApproval(t *testing.T) {
+	pool := archiveTestPool(t)
+	const scope, currentName, code = "测试单位原名", "测试单位现名", "913310000000000018"
+	archiveFixtureID(t, pool, `INSERT INTO directory_parties(kind,scope_name,name,code,district,classification)
+	 VALUES ('unit',$1,'测试单位现名',$2,'椒江区','事业单位') RETURNING id::text`, scope, code)
+	pending := insertArchiveFiling(t, pool, "F-ARCHIVE-PENDING", currentName, "2", "pending_initial", false)
+	mux := http.NewServeMux()
+	Register(mux, pool)
+	path := "/api/v1/archives/units"
+	for _, keyword := range []string{currentName, scope, code} {
+		units := archiveGET[page[unitRow]](t, mux, path+"?q="+url.QueryEscape(keyword), 200)
+		if len(units.Items) != 1 || units.Items[0].OrganizationName != scope || units.Items[0].SystemCount != 0 {
+			t.Fatalf("搜索 %q 未返回唯一在册单位及零个已通过系统：%+v", keyword, units)
+		}
+	}
+	key := base64.RawURLEncoding.EncodeToString([]byte(scope))
+	detail := archiveGET[unitProfile](t, mux, path+"/"+key, 200)
+	if len(detail.Systems.Items) != 0 || len(detail.Reports.Items) != 0 {
+		t.Fatalf("待审备案提前进入关联档案：%+v", detail)
+	}
+	archiveGET[map[string]string](t, mux, "/api/v1/archives/systems/"+pending, 404)
+	if _, err := pool.Exec(t.Context(), `UPDATE business_cases SET status='approved' WHERE id=$1`, pending); err != nil {
+		t.Fatal(err)
+	}
+	report := insertArchiveReport(t, pool, pending, "R-ARCHIVE-ALIAS", "approved", "2026-04-01")
+	units := archiveGET[page[unitRow]](t, mux, path+"?q="+url.QueryEscape("测试单位"), 200)
+	if len(units.Items) != 1 || units.Items[0].SystemCount != 1 || units.Items[0].DirectoryName != currentName ||
+		units.Items[0].CreditCode != code || units.Items[0].District != "椒江区" {
+		t.Fatalf("历史备案使用当前名称时应合入唯一在册单位：%+v", units)
+	}
+	systems := archiveGET[page[systemRow]](t, mux, "/api/v1/archives/systems?q="+code, 200)
+	if len(systems.Items) != 1 || systems.Items[0].ID != pending {
+		t.Fatalf("按信用代码查询未找到终审通过的系统档案：%+v", systems)
+	}
+	detail = archiveGET[unitProfile](t, mux, path+"/"+key, 200)
+	if detail.Unit.SystemCount != 1 || detail.Unit.ActiveSystemCount != 1 || len(detail.Systems.Items) != 1 ||
+		len(detail.Reports.Items) != 1 || detail.Reports.Items[0].ID != report {
+		t.Fatalf("终审通过后单位档案未同步系统及测评：%+v", detail)
+	}
+	oldKey := base64.RawURLEncoding.EncodeToString([]byte(currentName))
+	legacy := archiveGET[unitProfile](t, mux, path+"/"+oldKey, 200)
+	if legacy.Unit.Key != key || len(legacy.Systems.Items) != 1 {
+		t.Fatalf("已使用历史名称形成的档案链接未解析到同一单位：%+v", legacy)
+	}
+}
+
 type archiveFixtures struct {
 	active, cancelled, other, pending string
 	report, cancelledReport, plan     string

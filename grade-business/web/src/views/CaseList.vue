@@ -6,7 +6,7 @@ import { useRoute } from 'vue-router'
 import AsyncState from '../components/AsyncState.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { filingReviewLabel } from '../lib/domain'
-import { caseLabels, formatTime, levels, risks, statuses, type CaseKind, type CaseSummary } from '../lib/domain'
+import { caseLabels, formatTime, levels, risks, statuses, type CaseKind, type CaseSummary, type Precheck } from '../lib/domain'
 import { params } from '../lib/api'
 import { queryValue, usePagedList } from '../lib/paging'
 import { refreshBusinessOnFocus } from '../lib/scopedBusiness'
@@ -22,7 +22,14 @@ const columns = {
   number: '备案编号',
   level: '定级',
   status: '审核流转',
+  precheckStatus: 'AI 预审',
 }
+const precheckBadges = {
+  queued: { label: '进行中', detail: '进行中，等待预审' },
+  running: { label: '进行中', detail: '进行中，正在预审' },
+  succeeded: { label: '已结束', detail: '最近一次预审已结束，结果以详情页为准' },
+  failed: { label: '已结束', detail: '已结束，预审失败' },
+} satisfies Record<Precheck['status'], { label: string; detail: string }>
 const visibleColumns = ref(Object.keys(columns))
 const reportExportURL = computed(() => '/api/v1/reports/export' + params({
   q: queryValue(route.query.q), status: queryValue(route.query.status), risk: queryValue(route.query.risk),
@@ -128,6 +135,14 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
                   <span v-if="item.cancelledAt" class="level-tag">已注销</span>
                   <StatusBadge v-else :status="item.status" :label="filingReviewLabel(item.status, item.initialReviewAudience)" />
                 </td>
+                <td v-if="kind === 'filings'" v-show="visibleColumns.includes('precheckStatus')">
+                  <span v-if="item.precheckStatus" class="status-badge precheck-badge"
+                    :data-state="item.precheckStatus" :title="precheckBadges[item.precheckStatus].detail"
+                    :aria-label="precheckBadges[item.precheckStatus].detail">
+                    <span aria-hidden="true"></span>{{ precheckBadges[item.precheckStatus].label }}
+                  </span>
+                  <span v-else class="muted" title="当前版本未发起预审" aria-label="当前版本未发起预审">—</span>
+                </td>
                 <td><RouterLink class="text-action"
                   :to="{ path: '/' + kind + '/' + encodeURIComponent(item.id), query: route.query }"
                   :aria-label="'查看 ' + (item.number || item.systemName)">详情</RouterLink></td>
@@ -152,6 +167,11 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
 
 <style scoped>
 .filing-lifecycle select { min-height: 28px; font-size: 12px; padding-block: 2px; }
+.precheck-badge:is([data-state='queued'], [data-state='running']) {
+  background: var(--c-info-bg); color: var(--c-info);
+}
+.precheck-badge[data-state='succeeded'] { background: var(--c-success-bg); color: var(--c-success); }
+.precheck-badge[data-state='failed'] { background: var(--c-warn-bg); color: var(--c-warn); }
 .column-settings { position: relative; }
 .column-settings summary { cursor: pointer; list-style: none; }
 .column-settings summary::-webkit-details-marker { display: none; }

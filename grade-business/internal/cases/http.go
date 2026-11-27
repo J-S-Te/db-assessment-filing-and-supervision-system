@@ -99,6 +99,7 @@ func (h endpoint) listRecords(w http.ResponseWriter, r *http.Request, scoped boo
 	}
 	input.institution = institution
 	input.assignedReview = assigned
+	input.includePrecheckStatus = !scoped && h.kind == filing
 	result, err := h.service.list(r.Context(), h.kind, input)
 	respond(w, http.StatusOK, result, err)
 }
