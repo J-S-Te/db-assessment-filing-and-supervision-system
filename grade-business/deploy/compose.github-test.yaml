@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grade_business
+      POSTGRES_USER: grade_business
+      POSTGRES_PASSWORD: ${GRADE_TEST_DB_PASSWORD:?missing test database password}
+    ports:
+      - "127.0.0.1:15446:5432"
+    volumes:
+      - database-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, grade_business, -d, grade_business]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  app:
+    image: ${GRADE_TEST_APP_IMAGE:?missing immutable ACR image reference}
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      GRADE_BUSINESS_ADDR: 127.0.0.1:18444
+      GRADE_BUSINESS_DSN: postgres://grade_business:${GRADE_TEST_DB_PASSWORD}@127.0.0.1:15446/grade_business?sslmode=disable
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - attachments:/var/lib/grade-business/attachments
+
+volumes:
+  attachments:
+  database-data:

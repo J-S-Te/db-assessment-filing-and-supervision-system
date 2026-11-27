@@ -122,3 +122,47 @@ jobs:
           echo "image_ref=$PULL_IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
           printf '### ACR 镜像\n\n- 标签：`%s`\n- 拉取地址：`%s@%s`\n' \
             "$PUSH_TAG" "$PULL_IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Deploy ACR image to test
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          IMAGE_REF: ${{ needs.image.outputs.image_ref }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?missing DEPLOY_HOST}"
+          : "${DEPLOY_USER:?missing DEPLOY_USER}"
+          : "${DEPLOY_PORT:?missing DEPLOY_PORT}"
+          : "${DEPLOY_SSH_KEY:?missing DEPLOY_SSH_KEY}"
+          : "${DEPLOY_KNOWN_HOSTS:?missing DEPLOY_KNOWN_HOSTS}"
+          : "${DEPLOY_PATH:?missing DEPLOY_PATH}"
+          : "${IMAGE_REF:?missing image digest reference}"
+          umask 077
+          ssh_dir=$(mktemp -d)
+          trap 'rm -f -- "$ssh_dir/key" "$ssh_dir/known_hosts"; rmdir -- "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          unset DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS
+          compose_payload=$(base64 < grade-business/deploy/compose.github-test.yaml | tr -d '\n')
+          printf -v remote_command 'bash -s -- %q %q %q' "$DEPLOY_PATH" "$IMAGE_REF" "$compose_payload"
+          ssh -F /dev/null -T -i "$ssh_dir/key" -p "$DEPLOY_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none \
+            -o StrictHostKeyChecking=yes -o UpdateHostKeys=no \
+            -o UserKnownHostsFile="$ssh_dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o ConnectTimeout=10 -- "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command" \
+            < grade-business/deploy/github-test.sh
