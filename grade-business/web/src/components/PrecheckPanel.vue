@@ -12,19 +12,22 @@ const starting = ref(false)
 const failure = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
 let request: AbortController | undefined
-const steps = ['排队', '读取材料', '检查', '完成']
+const steps = ['排队', '读取材料', '逐份审核', '汇总终审', '完成']
 const checkingMessages = {
   materials: '正在读取材料',
-  deepseek: '正在等待 DeepSeek 返回检查结果',
+  deepseek: 'DeepSeek 正在逐份审核材料',
+  deepseek_summary: 'DeepSeek 正在汇总本次审核并给出终审结论',
   local_rules: '正在执行本地规则检查',
   fallback: 'DeepSeek 未完成，正在执行本地规则检查',
 }
+const reviewStates = { reviewed: '已审核', unreadable: '未读取到可审核内容', failed: 'AI 审核失败' }
 const progress = computed(() => {
   const job = latest.value
   if (job?.status === 'queued') return { step: 0, message: '已提交，等待后台检查' }
   if (job?.status !== 'running') return undefined
   if (!job.progressStage) return { step: -1, message: '正在检查' }
-  return { step: job.progressStage === 'materials' ? 1 : 2, message: checkingMessages[job.progressStage] }
+  const step = job.progressStage === 'materials' ? 1 : job.progressStage === 'deepseek_summary' ? 3 : 2
+  return { step, message: checkingMessages[job.progressStage] }
 })
 const adviceTitles = { correct: '建议补正', manual_review: '建议人工复核', pass: '建议通过材料审核' }
 
@@ -122,7 +125,7 @@ onBeforeUnmount(() => {
       </p>
       <p v-else-if="loading" class="hint-row" role="status">正在读取预审状态…</p>
       <p v-else-if="starting" class="hint-row" role="status">正在提交预审…</p>
-      <p v-else-if="!latest" class="hint-row">发起预审后可查看 11 项检查的结论和原件依据。</p>
+      <p v-else-if="!latest" class="hint-row">发起预审后可查看逐份审核和 11 项汇总结论。</p>
       <template v-else>
         <p v-if="latest.stale" class="form-message warning-message" role="status">材料或规则已更新，请重新预审。</p>
         <p v-if="!latest.stale && latest.fallbackReason" class="form-message warning-message" role="status">
@@ -143,11 +146,22 @@ onBeforeUnmount(() => {
         <p v-if="latest.status === 'failed'" class="form-message error-message" role="alert">
           {{ latest.failure || '本次预审失败，请重新发起。' }}
         </p>
+        <details v-if="!latest.stale && latest.materialReviewTotal" class="material-checklist">
+          <summary>逐份审核 · 已处理 {{ latest.materialReviews?.length ?? 0 }} / {{ latest.materialReviewTotal }} 份</summary>
+          <ul v-if="latest.materialReviews?.length" class="finding-list">
+            <li v-for="review in latest.materialReviews" :key="review.attachmentId + ':' + review.fileName">
+              <span>{{ review.fileName }} · {{ reviewStates[review.status] }}</span>
+              <span v-if="review.failedChecks"> · {{ review.failedChecks }} 项异常</span>
+              <span v-if="review.manualChecks"> · {{ review.manualChecks }} 项待核实</span>
+            </li>
+          </ul>
+        </details>
         <template v-if="!latest.stale &&
           (latest.status === 'succeeded' || latest.status === 'failed' && latest.checkSource === 'local_rules')">
           <p v-if="latest.status === 'succeeded'" class="hint-row" role="status">
             <CheckCircle2 :size="17" aria-hidden="true" />
-            {{ latest.checkSource === 'deepseek' ? 'DeepSeek 预审已完成' : '规则检查已完成' }}
+            {{ latest.checkSource === 'deepseek'
+              ? (latest.materialReviewTotal ? 'DeepSeek 汇总终审已完成' : 'DeepSeek 预审已完成') : '规则检查已完成' }}
             <span v-if="latest.checks?.length">· 已检查 {{ latest.checks.length }} / 11 项</span>
           </p>
           <details v-if="latest.findings?.length" class="material-checklist">

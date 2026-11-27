@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,22 +36,29 @@ type Assessor interface {
 	Timeout() time.Duration
 }
 
+// batchAssessor 支持逐件结果和终审阶段的持久化回调。
+type batchAssessor interface {
+	AssessBatch(context.Context, []filingaudit.Document, filingaudit.Unit, filingaudit.BatchProgress) (filingaudit.BatchResult, error)
+}
+
 type Finding struct {
 	RuleID       string `json:"ruleId"`
 	Message      string `json:"message"`
 	AttachmentID string `json:"attachmentId,omitempty"`
 }
 type Job struct {
-	ID       string               `json:"id"`
-	Status   string               `json:"status"`
-	Stale    bool                 `json:"stale"`
-	Findings []Finding            `json:"findings,omitempty"`
-	Checks   []filingaudit.Result `json:"checks,omitempty"`
-	Source   string               `json:"checkSource,omitempty"`
-	Fallback string               `json:"fallbackReason,omitempty"`
-	Failure  string               `json:"failure,omitempty"`
-	Stage    string               `json:"progressStage,omitempty"`
-	Advice   *Recommendation      `json:"recommendation,omitempty"`
+	ID                  string                       `json:"id"`
+	Status              string                       `json:"status"`
+	Stale               bool                         `json:"stale"`
+	Findings            []Finding                    `json:"findings,omitempty"`
+	Checks              []filingaudit.Result         `json:"checks,omitempty"`
+	Source              string                       `json:"checkSource,omitempty"`
+	Fallback            string                       `json:"fallbackReason,omitempty"`
+	Failure             string                       `json:"failure,omitempty"`
+	Stage               string                       `json:"progressStage,omitempty"`
+	Advice              *Recommendation              `json:"recommendation,omitempty"`
+	MaterialReviews     []filingaudit.MaterialReview `json:"materialReviews,omitempty"`
+	MaterialReviewTotal int                          `json:"materialReviewTotal,omitempty"`
 }
 type Service struct {
 	pool     *pgxpool.Pool
@@ -111,25 +119,7 @@ func (s *Service) Start(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	var job Job
-	const restart = `current.status='failed' OR (current.status='succeeded' AND
-		(current.check_profile<>EXCLUDED.check_profile OR
-		  ($6 AND current.check_results='[]'::jsonb) OR
-		  ($8 AND current.fallback_reason<>'')))`
-	err = s.pool.QueryRow(ctx, `INSERT INTO filing_prechecks AS current
-		(filing_id,revision,materials,policy_version,policy_rules,check_profile) VALUES($1,$2,$3,$4,$5,$7)
-		ON CONFLICT (filing_id,revision,policy_version) DO UPDATE SET
-		status=CASE WHEN `+restart+` THEN 'queued' ELSE current.status END,
-		attempt=CASE WHEN `+restart+` THEN 0 ELSE current.attempt END,
-		failure=CASE WHEN `+restart+` THEN '' ELSE current.failure END,
-		fallback_reason=CASE WHEN `+restart+` THEN '' ELSE current.fallback_reason END,
-		progress_stage=CASE WHEN `+restart+` THEN '' ELSE current.progress_stage END,
-		check_profile=CASE WHEN `+restart+` THEN EXCLUDED.check_profile ELSE current.check_profile END
-		RETURNING id::text,status,findings,check_results,check_source,fallback_reason,failure,progress_stage`,
-		id, snapshot.Revision, snapshot.Materials, policy.Version, policy.For(filingpolicy.Initial),
-		s.content != nil, s.profile(), s.assessor != nil).
-		Scan(&job.ID, &job.Status, &job.Findings, &job.Checks, &job.Source, &job.Fallback, &job.Failure, &job.Stage)
-	return job, err
+	return s.startBatch(ctx, id, snapshot, policy)
 }
 
 // Get 读取指定备案中的一条预审任务并比较当前材料版本。
@@ -151,12 +141,16 @@ func (s *Service) Get(ctx context.Context, id, jobID string) (Job, error) {
 	var job Job
 	err = s.pool.QueryRow(ctx, `SELECT id::text,status,
  revision<>$2 OR policy_version<>(SELECT version FROM filing_material_policy WHERE singleton) OR check_profile<>$4,
- findings,check_results,check_source,fallback_reason,failure,progress_stage
- FROM filing_prechecks
+ findings,check_results,check_source,fallback_reason,failure,progress_stage,material_reviews,material_review_total
+ FROM (
+   SELECT `+readBatchFields+` FROM filing_prechecks WHERE filing_id=$1
+   UNION ALL
+   SELECT `+readBatchFields+` FROM filing_precheck_history WHERE filing_id=$1
+ ) AS batches
  WHERE filing_id=$1 AND ($3::uuid IS NULL OR id=$3::uuid) ORDER BY created_at DESC,id DESC LIMIT 1`,
 		id, snapshot.Revision, wanted, s.profile()).
 		Scan(&job.ID, &job.Status, &job.Stale, &job.Findings, &job.Checks,
-			&job.Source, &job.Fallback, &job.Failure, &job.Stage)
+			&job.Source, &job.Fallback, &job.Failure, &job.Stage, &job.MaterialReviews, &job.MaterialReviewTotal)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -207,6 +201,16 @@ func reply(w http.ResponseWriter, status int, job Job, err error) {
 // 参数 ctx 用于停止任务循环或取消当前数据库操作。
 // 返回值 无。
 func (s *Service) Run(ctx context.Context) {
+	var workers sync.WaitGroup
+	workers.Go(func() { s.runWorker(ctx) })
+	s.runWorker(ctx)
+	workers.Wait()
+}
+
+// runWorker 循环领取独立批次，其他工作循环可以同时处理不同备案。
+// 参数 ctx 为应用工作循环的生命周期。
+// 返回值 无。
+func (s *Service) runWorker(ctx context.Context) {
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -226,13 +230,12 @@ func (s *Service) Run(ctx context.Context) {
 // 返回值 数据库错误，成功或无待办任务返回空值。
 func (s *Service) runOne(ctx context.Context) error {
 	if _, err := s.pool.Exec(ctx, `UPDATE filing_prechecks SET status='failed',failure='处理超时，可以重新发起预审',
- lease_until=NULL,progress_stage=''
+ lease_until=NULL,claim_token=NULL,progress_stage=''
  WHERE status='running' AND attempt>=3 AND lease_until<now()`); err != nil {
 		return err
 	}
-	var id, filingID string
+	var id, filingID, claim string
 	var revision int64
-	var attempt int
 	var materials []Material
 	var rules []filingpolicy.Rule
 	lease := 60 * time.Second
@@ -242,18 +245,19 @@ func (s *Service) runOne(ctx context.Context) error {
 	err := s.pool.QueryRow(ctx, `WITH target AS (SELECT id FROM filing_prechecks WHERE status='queued' OR
  (status='running' AND attempt<3 AND lease_until<now()) ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
  UPDATE filing_prechecks p SET status='running',attempt=p.attempt+1,progress_stage='materials',
+ claim_token=gen_random_uuid(),material_reviews='[]'::jsonb,material_review_total=0,
  lease_until=now()+$1::integer*interval '1 second'
  FROM target WHERE p.id=target.id
- RETURNING p.id::text,p.filing_id::text,p.revision,p.attempt,p.materials,p.policy_rules`, int(lease.Seconds())).
-		Scan(&id, &filingID, &revision, &attempt, &materials, &rules)
+ RETURNING p.id::text,p.filing_id::text,p.revision,p.claim_token::text,p.materials,p.policy_rules`, int(lease.Seconds())).
+		Scan(&id, &filingID, &revision, &claim, &materials, &rules)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	result, err := s.checkContents(ctx, filingID, revision, materials, func(stage string) error {
-		return s.advanceProgress(ctx, id, attempt, stage)
+	result, err := s.checkContents(ctx, filingID, revision, materials, func(stage string, reviews []filingaudit.MaterialReview, total int) error {
+		return s.advanceProgress(ctx, id, claim, stage, reviews, total, lease)
 	})
 	if err != nil {
 		return err
@@ -267,19 +271,28 @@ func (s *Service) runOne(ctx context.Context) error {
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE filing_prechecks SET status=$3,findings=$4,
 		check_results=$5,check_source=$6,check_profile=$7,failure=$8,fallback_reason=$9,
-		lease_until=NULL,progress_stage=''
-		WHERE id=$1 AND attempt=$2 AND status='running'`,
-		id, attempt, status, evaluateWithPolicy(materials, rules), result.checks, result.source,
+		lease_until=NULL,claim_token=NULL,progress_stage=''
+		WHERE id=$1 AND claim_token=$2 AND status='running' AND lease_until>now()`,
+		id, claim, status, evaluateWithPolicy(materials, rules), result.checks, result.source,
 		s.profile(), result.failure, result.fallback)
 	return err
 }
 
-// advanceProgress 写入当前执行轮次的实际进度。
-// 参数 ctx、id、attempt、stage 分别为执行上下文、任务、租约轮次和即将开始的阶段。
+// advanceProgress 写入当前领取者的阶段和逐件结果并续租。
+// 参数 ctx、id、claim、stage、reviews、total、lease 为执行上下文、批次、领取凭据、阶段、逐件记录、总数和租期。
 // 返回值 阶段写入错误，或租约失效错误。
-func (s *Service) advanceProgress(ctx context.Context, id string, attempt int, stage string) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE filing_prechecks SET progress_stage=$3
-		WHERE id=$1 AND attempt=$2 AND status='running' AND lease_until>now()`, id, attempt, stage)
+func (s *Service) advanceProgress(ctx context.Context, id, claim, stage string,
+	reviews []filingaudit.MaterialReview, total int, lease time.Duration,
+) error {
+	if reviews == nil {
+		reviews = []filingaudit.MaterialReview{}
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE filing_prechecks SET progress_stage=$3,
+		material_reviews=CASE WHEN $5>0 THEN $4::jsonb ELSE material_reviews END,
+		material_review_total=CASE WHEN $5>0 THEN $5 ELSE material_review_total END,
+		lease_until=now()+$6::integer*interval '1 second'
+		WHERE id=$1 AND claim_token=$2 AND status='running' AND lease_until>now()`,
+		id, claim, stage, reviews, total, int(lease.Seconds()))
 	if err == nil && tag.RowsAffected() == 0 {
 		return errors.New("备案预审任务租约已失效")
 	}
@@ -295,7 +308,7 @@ type contentResult struct {
 // 参数 ctx、id、revision、materials 为执行上下文、备案、版本和快照，progress 记录当前阶段。
 // 返回值 内容结论、回退或失败原因，以及无法更新任务状态时的错误。
 func (s *Service) checkContents(ctx context.Context, id string, revision int64,
-	materials []Material, progress func(string) error,
+	materials []Material, progress filingaudit.BatchProgress,
 ) (contentResult, error) {
 	result := contentResult{checks: []filingaudit.Result{}}
 	if s.content == nil {
@@ -318,24 +331,25 @@ func (s *Service) checkContents(ctx context.Context, id string, revision int64,
 	}
 	stage := "local_rules"
 	if s.assessor != nil {
-		if err := progress("deepseek"); err != nil {
-			return result, err
+		checks, modelErr, progressErr := s.assessContents(ctx, docs, materials, unit, progress)
+		if progressErr != nil {
+			return result, progressErr
 		}
-		modelContext, cancelModel := context.WithTimeout(ctx, s.assessor.Timeout())
-		defer cancelModel()
-		checks, err := s.assessor.Assess(modelContext, docs, unit)
-		if err == nil {
+		if ctx.Err() != nil {
+			return result, ctx.Err()
+		}
+		if modelErr == nil {
 			return contentResult{checks: checks, source: "deepseek"}, nil
 		}
 		stage = "fallback"
-		if errors.Is(err, filingaudit.ErrNoEvidence) {
-			result.fallback = "未提取到可送检的材料，已执行本地规则。"
+		if errors.Is(modelErr, filingaudit.ErrNoEvidence) {
+			result.fallback = "有材料缺少可核对的原件依据，已执行本地规则。"
 		} else {
-			slog.Warn("DeepSeek 备案预审调用失败", "cause", err)
-			result.fallback = "DeepSeek 暂不可用，已自动完成本地规则审核。"
+			slog.Warn("DeepSeek 备案预审调用未完成")
+			result.fallback = "DeepSeek 未完成逐件审核或终审，已执行本地规则。"
 		}
 	}
-	if err := progress(stage); err != nil {
+	if err := progress(stage, nil, 0); err != nil {
 		return result, err
 	}
 	result.checks, result.source = localChecks(docs, unit), "local_rules"

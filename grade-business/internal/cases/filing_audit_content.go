@@ -125,45 +125,50 @@ func auditPackageContent(ctx context.Context, file *os.File, item Attachment,
 	var result []filingaudit.Document
 	seen := make(map[string]bool)
 	for _, member := range candidates {
-		if len(result) >= remaining || ctx.Err() != nil {
+		if ctx.Err() != nil {
 			break
 		}
 		if seen[member.Name] || filingPackageMetadata(member.Name) {
 			continue
 		}
-		seen[member.Name] = true
-		if doc, ok := readAuditMember(ctx, member, item, budget, read); ok {
-			result = append(result, doc)
+		if len(result) >= remaining {
+			result = append(result, filingaudit.Document{AttachmentID: item.ID,
+				FileName: item.FileName + " / 超出逐件读取数量限制的材料", Kind: item.Kind})
+			break
 		}
+		seen[member.Name] = true
+		result = append(result, readAuditMember(ctx, member, item, budget, read))
 	}
 	return result
 }
 
 // readAuditMember 限量读取可解析的单个归档成员。
 // 参数 ctx、member、item、budget、read 为任务、成员、外层附件、余量与正文读法。
-// 返回值 材料及是否可读取。
+// 返回值 保留材料标识和可读取内容的文档，无法解析时仅返回标识。
 func readAuditMember(ctx context.Context, member *zip.File, item Attachment, budget *int64,
 	read AuditText,
-) (filingaudit.Document, bool) {
+) filingaudit.Document {
+	doc := filingaudit.Document{AttachmentID: item.ID, FileName: item.FileName + " / " + member.Name,
+		Kind: auditMaterialKind("", member.Name)}
 	switch strings.ToLower(path.Ext(member.Name)) {
 	case ".doc", ".docx", ".pdf", ".xlsx":
 	default:
-		return filingaudit.Document{}, false
+		return doc
 	}
 	size := member.UncompressedSize64
 	if size == 0 || size > maxDocumentSize || size > uint64(*budget) {
-		return filingaudit.Document{}, false
+		return doc
 	}
 	*budget -= int64(size)
 	var content bytes.Buffer
 	if err := readFilingPackageMember(member, &content); err != nil {
-		return filingaudit.Document{}, false
+		return doc
 	}
 	lines, images, err := read(ctx, member.Name, bytes.NewReader(content.Bytes()), int64(content.Len()))
-	return filingaudit.Document{
-		AttachmentID: item.ID, FileName: item.FileName + " / " + member.Name,
-		Kind: auditMaterialKind("", member.Name), Lines: lines, Images: images,
-	}, err == nil
+	if err == nil {
+		doc.Lines, doc.Images = lines, images
+	}
+	return doc
 }
 
 // auditMaterialKind 依据已登记类别和常见正式材料名称组织同类证据。
