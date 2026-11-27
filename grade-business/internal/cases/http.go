@@ -49,6 +49,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	s.registerFilingHistoryImport(mux)
 	s.registerWithdrawals(mux)
 	s.registerFilingMaterialPolicy(mux)
+	s.registerMaterialReviews(mux)
 	mux.HandleFunc("GET /api/v1/reports/export", s.downloadReports)
 	mux.HandleFunc("POST /api/v1/filings/classification-preview", previewClassification)
 }

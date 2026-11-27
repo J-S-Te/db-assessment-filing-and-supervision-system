@@ -159,6 +159,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           IMAGE_REF: ${{ needs.image.outputs.image_ref }}
@@ -168,6 +169,8 @@ jobs:
           : "${DEPLOY_USER:?missing DEPLOY_USER}"
           : "${DEPLOY_PORT:?missing DEPLOY_PORT}"
           : "${DEPLOY_SSH_KEY:?missing DEPLOY_SSH_KEY}"
+          : "${DEEPSEEK_API_KEY:?missing DEEPSEEK_API_KEY repository secret}"
+          [[ "$DEEPSEEK_API_KEY" != *$'\r'* && "$DEEPSEEK_API_KEY" != *$'\n'* ]]
           : "${DEPLOY_KNOWN_HOSTS:?missing DEPLOY_KNOWN_HOSTS}"
           : "${DEPLOY_PATH:?missing DEPLOY_PATH}"
           : "${IMAGE_REF:?missing image digest reference}"
@@ -179,9 +182,12 @@ jobs:
           unset DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS
           compose_payload=$(base64 < grade-business/deploy/compose.github-test.yaml | tr -d '\n')
           printf -v remote_command 'bash -s -- %q %q %q' "$DEPLOY_PATH" "$IMAGE_REF" "$compose_payload"
-          ssh -F /dev/null -T -i "$ssh_dir/key" -p "$DEPLOY_PORT" \
+          # 密钥只经受信 SSH 标准输入进入部署进程，避免进入命令参数或配置文件。
+          {
+            printf 'export DEEPSEEK_API_KEY=%q\n' "$DEEPSEEK_API_KEY"
+            cat grade-business/deploy/github-test.sh
+          } | ssh -F /dev/null -T -i "$ssh_dir/key" -p "$DEPLOY_PORT" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none \
             -o StrictHostKeyChecking=yes -o UpdateHostKeys=no \
             -o UserKnownHostsFile="$ssh_dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
-            -o ConnectTimeout=10 -- "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command" \
-            < grade-business/deploy/github-test.sh
+            -o ConnectTimeout=10 -- "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command"

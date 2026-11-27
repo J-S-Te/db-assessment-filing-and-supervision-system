@@ -89,14 +89,19 @@ func allowed(actor Principal, pattern string) bool {
 // 参数 method、path 为实际匹配的接口方法和路径。
 // 返回值 确认具备辖区校验或属于共享知识数据时为真。
 func regulatorAllowed(method, path string) bool {
+	if method == "PUT" {
+		return path == "/api/v1/filings/{id}/prechecks/review/{ruleId}"
+	}
 	if method == "POST" {
-		return path == "/api/v1/filings/{id}/review-actions" || path == "/api/v1/reports/{id}/review-actions"
+		return path == "/api/v1/filings/{id}/review-actions" ||
+			path == "/api/v1/reports/{id}/review-actions" || path == "/api/v1/filings/{id}/prechecks"
 	}
 	if method != "GET" {
 		return false
 	}
 	switch path {
 	case "/api/v1/filings", "/api/v1/filings/{id}", "/api/v1/filings/{id}/review-history",
+		"/api/v1/filings/{id}/prechecks/{jobId}", "/api/v1/filings/{id}/prechecks/review",
 		"/api/v1/reports", "/api/v1/reports/{id}", "/api/v1/reports/{id}/review-history",
 		"/api/v1/filings/{id}/attachments", "/api/v1/filings/{id}/attachments/{attachmentId}",
 		"/api/v1/filings/{id}/attachments/{attachmentId}/text",

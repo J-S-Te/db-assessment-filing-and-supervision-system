@@ -1,0 +1,7 @@
+{
+  "model": "deepseek-flash",
+  "reasoning_effort": "high",
+  "include_images": false,
+  "timeout_seconds": 180,
+  "max_tokens": 16384
+}

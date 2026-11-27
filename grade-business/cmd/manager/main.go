@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -27,6 +28,7 @@ import (
 	"grade-business/internal/compliance"
 	"grade-business/internal/dashboard"
 	"grade-business/internal/directory"
+	"grade-business/internal/filingaudit"
 	"grade-business/internal/hazards"
 	"grade-business/internal/httpx"
 	"grade-business/internal/implementations"
@@ -48,6 +50,7 @@ type settings struct {
 	address, dsn, assets, attachments, operator string
 	reviewWindows                               app.ReviewWindows
 	lan                                         netip.Prefix
+	filingAI                                    *filingaudit.DeepSeek
 }
 
 // main 启动管理端业务服务，可使用本机回环或经配置的服务器内网地址。
@@ -91,6 +94,11 @@ func loadSettings() (settings, error) {
 		return settings{}, errors.New("请配置 GRADE_BUSINESS_DSN")
 	}
 	cfg.reviewWindows, err = loadReviewWindows()
+	if err != nil {
+		return settings{}, err
+	}
+	cfg.filingAI, err = filingaudit.LoadDeepSeek(os.Getenv("GRADE_BUSINESS_FILING_AI_CONFIG"),
+		os.Getenv("DEEPSEEK_API_KEY"))
 	return cfg, err
 }
 
@@ -165,7 +173,10 @@ func serve(ctx context.Context, cfg settings) error {
 	if err != nil {
 		return errors.New("请先构建前端产物，确认 GRADE_BUSINESS_WEB_DIR")
 	}
-	checks := precheck.New(pool, materialSource(records))
+	checks := precheck.New(pool, materialSource(records), materialContent(records, cfg.filingAI.UsesImages()))
+	if cfg.filingAI != nil {
+		checks.WithAssessor(cfg.filingAI)
+	}
 	handler := routes(cfg, pool, records, checks, pages)
 	worker, cancelWorker := context.WithCancel(ctx)
 	stopped := make(chan struct{})
@@ -242,6 +253,46 @@ func materialSource(records *cases.Service) precheck.Source {
 			materials = append(materials, precheck.Material{ID: file.ID, Kind: file.Kind, FileName: file.FileName})
 		}
 		return precheck.Snapshot{Revision: snapshot.Revision, Materials: materials}, nil
+	}
+}
+
+// materialContent 组装备案例后台预审使用的文字及可选原件图像提取。
+// 参数 records、includeImages 为材料服务及是否提供图像。
+// 返回值 只读取预审快照原件的内容来源。
+func materialContent(records *cases.Service, includeImages bool) precheck.ContentSource {
+	return func(ctx context.Context, id string, materials []precheck.Material) ([]filingaudit.Document, filingaudit.Unit, error) {
+		imageCount, imageBytes := 0, 0
+		return records.FilingAuditContent(ctx, id, materials, func(ctx context.Context,
+			name string, source io.ReaderAt, size int64,
+		) ([]filingaudit.Line, []filingaudit.Image, error) {
+			lines, err := filingaudit.Parse(ctx, name, source, size, reportextract.FilingPDFText)
+			if err != nil || !includeImages || imageCount >= 10 || imageBytes >= 8<<20 {
+				return lines, nil, err
+			}
+			var selected []filingaudit.Image
+			for _, image := range filingVisuals(ctx, name, source, size) {
+				if imageCount < 10 && imageBytes+len(image.Data) <= 8<<20 {
+					selected = append(selected, image)
+					imageCount++
+					imageBytes += len(image.Data)
+				}
+			}
+			return lines, selected, err
+		})
+	}
+}
+
+// filingVisuals 从支持的原件提取可定位的预审图像。
+// 参数 ctx、name、source、size 为期限、文件名、实际附件和已知大小。
+// 返回值 Word 内嵌图像或 PDF 页面。
+func filingVisuals(ctx context.Context, name string, source io.ReaderAt, size int64) []filingaudit.Image {
+	switch {
+	case strings.HasSuffix(strings.ToLower(name), ".docx"):
+		return filingaudit.WordImages(source, size)
+	case strings.HasSuffix(strings.ToLower(name), ".pdf"):
+		return reportextract.FilingPDFImages(ctx, io.NewSectionReader(source, 0, size))
+	default:
+		return nil
 	}
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ArrowRight, Fingerprint, LockKeyhole, ShieldCheck, UserRound } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
@@ -18,10 +18,50 @@ const pending = ref(false)
 const failure = ref('')
 const loginAccepted = ref(false)
 const biometricHelp = ref(false)
+const passwordHelp = ref(false)
+const now = ref(new Date())
+let clockTimer = 0
 const loginState = computed(() => {
   if (loginAccepted.value) return 'success'
   if (failure.value) return 'error'
   return pending.value ? 'checking' : 'idle'
+})
+
+/**
+ * 用途 把当前时间格式化为指挥条上使用的秒级时钟文本。
+ * 参数 date 为需要展示的时刻。
+ * 返回值 年月日与时分秒组成的文本。
+ */
+function formatClock(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+const clockText = computed(() => formatClock(now.value))
+
+/**
+ * 用途 汇总当前登录状态对应的顶部提示语。
+ * 参数 无。
+ * 返回值 顶部状态条展示的文案。
+ */
+const statusText = computed(() => {
+  if (loginAccepted.value) return '认证通过'
+  if (failure.value) return '认证失败'
+  if (pending.value) return '身份校验中'
+  return '系统在线'
+})
+
+/**
+ * 用途 依据登录状态挑选顶部状态点的颜色。
+ * 参数 无。
+ * 返回值 状态点的配色类名。
+ */
+const statusTone = computed(() => {
+  if (loginAccepted.value) return 'is-ok'
+  if (failure.value) return 'is-error'
+  if (pending.value) return 'is-busy'
+  return 'is-ok'
 })
 
 /**
@@ -96,13 +136,42 @@ async function logout() {
     failure.value = errorText(error)
   }
 }
+
+onMounted(() => {
+  clockTimer = window.setInterval(() => { now.value = new Date() }, 1000)
+})
+
+onUnmounted(() => window.clearInterval(clockTimer))
 </script>
 
 <template>
   <main class="signin">
+    <header class="signin-topbar">
+      <div class="signin-brand">
+        <span class="signin-brand-logo">
+          <ShieldCheck :size="22" aria-hidden="true" />
+        </span>
+        <span class="signin-brand-text">
+          <strong>网络安全等级保护平台</strong>
+          <span>CYBERSECURITY LEVEL PROTECTION PLATFORM</span>
+        </span>
+      </div>
+      <div class="signin-status">
+        <span class="signin-status-live">
+          <i class="signin-status-dot" :class="statusTone"></i>{{ statusText }}
+        </span>
+        <span class="signin-status-sep" aria-hidden="true"></span>
+        <span class="signin-status-clock">{{ clockText }}</span>
+      </div>
+    </header>
+
     <div class="signin-layout" :class="{ 'signin-layout-single': changing }">
       <SignInSecurityCore v-if="!changing" :login-state="loginState" />
       <section class="signin-card" aria-labelledby="signin-title">
+        <i class="signin-corner is-tl" aria-hidden="true"></i>
+        <i class="signin-corner is-tr" aria-hidden="true"></i>
+        <i class="signin-corner is-bl" aria-hidden="true"></i>
+        <i class="signin-corner is-br" aria-hidden="true"></i>
         <header class="signin-heading">
           <span class="signin-mark"><ShieldCheck :size="26" aria-hidden="true" /></span>
           <h1 id="signin-title">{{ changing ? '修改账号密码' : '网络安全等级保护平台' }}</h1>
@@ -145,16 +214,21 @@ async function logout() {
             </label>
           </template>
           <p v-if="failure" role="alert" class="signin-error">{{ failure }}</p>
+          <div v-if="!changing" class="signin-rowline">
+            <span>同一账号 5 分钟内最多校验 12 次</span>
+            <button type="button" class="signin-link" @click="passwordHelp = !passwordHelp">忘记密码？</button>
+          </div>
+          <p v-if="passwordHelp" class="signin-hint" role="status">
+            平台不提供自助找回，请联系本单位等保管理员重置密码。
+          </p>
           <button class="signin-button signin-primary" :disabled="pending" type="submit">
-            {{ loginAccepted ? '正在进入' : pending ? '处理中' : changing ? '保存密码' : '登录' }}
+            <span v-if="pending" class="signin-spinner" aria-hidden="true"></span>
+            {{ loginAccepted ? '正在进入' : pending ? '认证中…' : changing ? '保存密码' : '登录' }}
             <ArrowRight v-if="!changing && !pending" :size="18" aria-hidden="true" />
-          </button>
-          <button v-if="changing" class="signin-button signin-secondary" type="button"
-            :disabled="pending" @click="logout">
-            退出登录
           </button>
         </form>
         <div v-if="!changing" class="signin-biometric">
+          <p class="signin-divider">或使用其他方式登录</p>
           <button class="signin-button signin-secondary" type="button" aria-controls="biometric-help"
             :aria-expanded="biometricHelp" @click="biometricHelp = !biometricHelp">
             <Fingerprint :size="19" aria-hidden="true" /> 生物识别登录
@@ -164,11 +238,21 @@ async function logout() {
           </p>
         </div>
         <RouterLink v-if="!changing" class="signin-registration" to="/operator-register">
-          运营单位注册与进度查询
+          运营单位注册与进度查询 →
         </RouterLink>
+        <p v-if="!changing" class="signin-note">
+          登录凭据仅用于身份校验，通过后签发会话令牌；登录与越权访问均记入等保审计日志。
+        </p>
       </section>
     </div>
-    <CopyrightFooter />
+
+    <footer class="signin-footer">
+      <div class="signin-slogan">
+        安全 · 合规 · 共治 · 守护数字未来
+        <small>SECURITY · COMPLIANCE · CO-GOVERNANCE · SAFEGUARDING THE DIGITAL FUTURE</small>
+      </div>
+      <CopyrightFooter />
+    </footer>
   </main>
 </template>
 
@@ -176,11 +260,12 @@ async function logout() {
 .signin {
   --muted: #98acc5;
   --focus: #8edcff;
+  position: relative;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr auto;
   min-height: 100dvh;
-  padding: clamp(22px, 4vw, 68px) clamp(20px, 5vw, 84px) 10px;
-  overflow-x: clip;
+  padding: 0 clamp(20px, 2.4vw, 46px) 10px;
+  overflow: clip;
   color: #e9f4ff;
   color-scheme: dark;
   background-color: #070e1b;
@@ -191,13 +276,107 @@ async function logout() {
   background-size: cover;
 }
 
-.signin-layout {
-  width: min(100%, 1280px);
-  margin: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+/* ---------- 顶部指挥条 ---------- */
+.signin-topbar {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: clamp(22px, 5vw, 82px);
+  justify-content: space-between;
+  height: 82px;
+}
+
+.signin-topbar::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(111, 198, 255, .45) 22%, rgba(111, 198, 255, .45) 78%, transparent);
+  content: "";
+}
+
+.signin-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.signin-brand-logo {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #67c7fa70;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #22588b79, #172a4673);
+  color: #bfeaff;
+  box-shadow: inset 0 0 15px #4ea9e326, 0 0 26px #217de71c;
+}
+
+.signin-brand-text strong {
+  display: block;
+  color: #f2f8ff;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+.signin-brand-text span {
+  display: block;
+  margin-top: 2px;
+  color: #7ea3c6;
+  font-size: 10px;
+  letter-spacing: .24em;
+}
+
+.signin-status {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  color: #a9c4dd;
+  font-size: 13px;
+}
+
+.signin-status-live {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.signin-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3ce08a;
+  box-shadow: 0 0 10px #3ce08a;
+}
+
+.signin-status-dot.is-busy { background: #5fd8ff; box-shadow: 0 0 10px #5fd8ff; }
+.signin-status-dot.is-error { background: #ff6b7f; box-shadow: 0 0 10px #ff6b7f; }
+
+.signin-status-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(120, 190, 240, .18);
+}
+
+.signin-status-clock {
+  color: #8fb0cc;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  letter-spacing: .06em;
+}
+
+/* ---------- 主体布局 ---------- */
+.signin-layout {
+  width: min(100%, 1828px);
+  min-height: 0;
+  /* 只做水平居中，垂直方向保持拉伸，场景才能占满可用高度。 */
+  margin-inline: auto;
+  padding-block: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 424px;
+  grid-template-rows: auto;
+  align-items: stretch;
+  gap: 40px;
 }
 
 .signin-layout-single {
@@ -207,12 +386,14 @@ async function logout() {
 
 .signin-card {
   position: relative;
-  z-index: 0;
+  z-index: 10;
+  align-self: center;
   min-width: 0;
-  padding: clamp(24px, 3.3vw, 43px);
+  padding: clamp(24px, 3.3vw, 40px) clamp(24px, 3vw, 34px) clamp(20px, 2.6vw, 32px);
   border: 1px solid #9fcfff60;
   border-radius: 20px;
   box-shadow: inset 0 1px 0 #c2e7ff1a, 0 28px 76px #0008, 0 0 30px #268be21a;
+  transform: perspective(1300px) rotateY(-5deg);
 }
 
 /* 分开卡片与输入框的模糊层，让玻璃表面保留不同深浅的光线。 */
@@ -238,6 +419,20 @@ async function logout() {
   pointer-events: none;
   content: "";
 }
+
+/* 四角切角，呼应安防舱的定位框。 */
+.signin-corner {
+  position: absolute;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid rgba(126, 214, 255, .9);
+}
+
+.signin-corner.is-tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+.signin-corner.is-tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; }
+.signin-corner.is-bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; }
+.signin-corner.is-br { right: -2px; bottom: -2px; border-left: 0; border-top: 0; }
 
 .signin-mark {
   display: grid;
@@ -296,6 +491,32 @@ async function logout() {
   box-shadow: inset 0 1px 0 #eff9ff4d, 0 0 0 3px #45b9fa29, 0 6px 20px #04162660;
 }
 
+.signin-rowline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: -4px;
+  color: #7f9cba;
+  font-size: 12px;
+}
+
+.signin-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #9de2ff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.signin-link:hover { text-decoration: underline; }
+
+.signin-hint {
+  margin-top: -6px;
+  color: #aec4de;
+  font-size: .88rem;
+}
+
 .signin-button {
   display: flex;
   align-items: center;
@@ -321,6 +542,15 @@ async function logout() {
 
 .signin-primary:hover:not(:disabled) { background: linear-gradient(107deg, #1e64db, #1771cc); }
 
+.signin-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, .32);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: signin-spin .8s linear infinite;
+}
+
 .signin-secondary {
   border-color: #577aa374;
   background: #18305069;
@@ -332,6 +562,32 @@ async function logout() {
 .signin-biometric { margin-top: 19px; padding-top: 17px; border-top: 1px solid #7aa7d12b; }
 .signin-biometric p { margin-top: 8px; color: #aec4de; font-size: .88rem; }
 
+.signin-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px !important;
+  color: #6f89a6;
+  font-size: 12px;
+}
+
+.signin-divider::before,
+.signin-divider::after {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #8fc0e640, transparent);
+  content: "";
+}
+
+.signin-note {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #7aa7d12b;
+  color: #8fa9c4;
+  font-size: 11.6px;
+  line-height: 1.6;
+}
+
 .signin-error {
   padding: 8px 11px;
   border: 1px solid #ff708650;
@@ -340,23 +596,69 @@ async function logout() {
   color: #ffc0ca;
 }
 
-@media (max-width: 760px) {
-  .signin {
-    padding-top: 14px;
-    background-position: center, 59% center;
-  }
+/* ---------- 底部 ---------- */
+.signin-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 16px 0 6px;
+}
+
+.signin-slogan {
+  color: #cfe3f7;
+  font-size: 15px;
+  letter-spacing: .14em;
+}
+
+.signin-slogan small {
+  display: block;
+  margin-top: 5px;
+  color: #63809e;
+  font-size: 10px;
+  letter-spacing: .22em;
+}
+
+.signin-footer :deep(.system-copyright) {
+  padding: 0;
+  text-align: right;
+}
+
+@keyframes signin-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1180px) {
+  .signin-layout { grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; }
+}
+
+@media (max-width: 980px) {
   .signin-layout {
     grid-template-columns: minmax(0, 430px);
+    grid-template-rows: auto auto;
     justify-content: center;
     justify-items: center;
-    gap: 14px;
-    margin-block: auto 17px;
   }
-  .signin-layout-single { margin-block: auto; }
-  .signin-card { width: 100%; padding: 22px; }
+  .signin-layout-single { grid-template-columns: minmax(0, 430px); }
+  .signin-card { width: 100%; }
+}
+
+@media (max-width: 760px) {
+  .signin {
+    padding-top: 0;
+    background-position: center, 59% center;
+  }
+  .signin-topbar { height: 66px; }
+  .signin-brand-text strong { font-size: 16px; }
+  .signin-brand-text span { display: none; }
+  .signin-status { gap: 14px; font-size: 12px; }
+  .signin-status-clock { display: none; }
+  .signin-card { padding: 22px; }
   .signin-mark { width: 44px; height: 44px; margin-bottom: 14px; }
   .signin-form { gap: 13px; margin-top: 22px; }
   .signin-field input, .signin-button { min-height: 44px; }
+  .signin-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .signin-slogan { font-size: 13px; }
+  .signin-footer :deep(.system-copyright) { text-align: left; }
 }
 
 @media (max-width: 360px) {

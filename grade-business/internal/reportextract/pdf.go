@@ -72,7 +72,7 @@ func extractPDF(ctx context.Context, file *os.File, size int64) ([]field, error)
 // readPDFText 检查页数与加密状态并按页读取 PDF 的文字层。
 // 参数 ctx 限制提取时间，file 为受控 PDF 正文。
 // 返回值 按物理页排序的文字层，或工具、格式及边界错误。
-func readPDFText(ctx context.Context, file *os.File) ([]pdfPage, error) {
+func readPDFText(ctx context.Context, file io.ReadSeeker) ([]pdfPage, error) {
 	info, err := runPDFTool(ctx, "pdfinfo", file, 64<<10, errPDFUnavailable, "-")
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func runPDFTool(ctx context.Context, name string, input io.Reader, limit int,
 	if err != nil {
 		return nil, unavailable
 	}
-	if file, ok := input.(*os.File); ok {
+	if file, ok := input.(io.ReadSeeker); ok {
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return nil, err
 		}

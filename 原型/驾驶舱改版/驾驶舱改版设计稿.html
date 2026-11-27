@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网络安全等级保护指挥驾驶舱 · 改版设计稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050c16;--panel:#0b1e31;--line:#1d3c56;--line-2:#2a5273;
+  --ink:#e6f0fa;--ink-2:#b9cfe2;--muted:#8aa6bf;
+  --accent:#5ab0f0;--good:#3fc79a;--warn:#e0a340;--bad:#e0685a;
+  --radius:10px;--gap:12px;
+  --font-cn:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --font-en:"Outfit","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"JetBrains Mono","SFMono-Regular",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:var(--font-cn);font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;padding:18px;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(1100px 520px at 50% -8%, #12304d 0%, transparent 62%),
+    radial-gradient(900px 460px at 50% 108%, #0f2a44 0%, transparent 60%),
+    linear-gradient(90deg,#4d83a910 0 1px,transparent 1px 64px),
+    linear-gradient(0deg,#4d83a910 0 1px,transparent 1px 64px);
+}
+.screen{
+  position:relative;z-index:1;max-width:1920px;margin:0 auto;
+  height:calc(100dvh - 36px);
+  display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto;gap:var(--gap);
+}
+
+/* ---------- 顶栏 ---------- */
+.head{
+  display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;gap:6px 14px;padding:0 4px 10px;border-bottom:1px solid var(--line);
+}
+.title{grid-column:2;justify-items:center;gap:3px;text-align:center}
+.title-main{display:flex;align-items:center;gap:10px}
+.title-mark{width:32px;height:32px;flex:none;display:grid;place-items:center;
+  border:1px solid var(--line-2);border-radius:9px;background:#0e2a43;color:var(--accent)}
+.title-mark svg{width:18px;height:18px}
+h1{font-size:24px;font-weight:700;letter-spacing:.06em;line-height:1.15}
+h1 span{color:var(--accent)}
+.title-sub{font-size:11px;letter-spacing:.2em;color:var(--muted)}
+.tabs{grid-row:2;grid-column:2;display:flex;gap:6px}
+.tabs a{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;
+  border:1px solid var(--line-2);border-radius:7px;color:var(--ink-2);font-size:12.5px;
+  text-decoration:none;transition:.18s}
+.tabs a svg{width:14px;height:14px}
+.tabs a:hover{background:#12293f;color:var(--ink)}
+.tabs a.on{background:#14395a;border-color:var(--accent);color:#f2f9ff}
+.head-right{grid-area:1/3/3/4;justify-self:end;display:flex;align-items:center;gap:12px}
+.scope{text-align:right;font-size:11px;color:var(--muted);line-height:1.6}
+.scope b{display:block;color:var(--ink-2);font-weight:500;font-size:12px}
+.scope .live{display:inline-flex;align-items:center;gap:5px}
+.scope .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--good)}
+.tools{display:flex;gap:6px}
+.btn{display:inline-flex;align-items:center;gap:5px;height:29px;padding:0 11px;
+  border:1px solid var(--line-2);border-radius:7px;background:#0f2438;color:var(--ink-2);
+  font-size:12px;cursor:pointer;transition:.18s;font-family:inherit}
+.btn svg{width:13px;height:13px}
+.btn:hover{background:#16344e;color:#fff;border-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:7px;overflow:hidden}
+.seg button{border:0;background:#0f2438;color:var(--muted);font-size:11.5px;
+  padding:5px 11px;cursor:pointer;font-family:inherit;transition:.16s}
+.seg button+button{border-left:1px solid var(--line-2)}
+.seg button[aria-pressed="true"]{background:#1a4a73;color:#dff1ff}
+
+/* ---------- 结论条 ---------- */
+.conclusion{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:18px;
+  padding:10px 16px;border:1px solid #2a4f6d;border-radius:var(--radius);
+  background:linear-gradient(96deg,#11283f,#0d2033 55%,#12293f);
+  position:relative;overflow:hidden;
+}
+.conclusion::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--warn)}
+.conclusion .flag{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:6px;
+  background:#e0a3401f;color:#f4c67c;font-size:13px;font-weight:600;white-space:nowrap}
+.conclusion .flag svg{width:15px;height:15px}
+.conclusion p{font-size:14px;color:var(--ink)}
+.conclusion p em{font-style:normal;color:#f4c67c;font-weight:600}
+.conclusion p b{font-weight:600;color:#fff}
+.conclusion .worst{display:flex;align-items:center;gap:10px;padding:5px 13px;border-radius:7px;
+  border:1px solid #3c5f7d;background:#122a40;font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+.conclusion .worst b{color:#fff}
+.conclusion .worst .idx{font-family:var(--mono);color:var(--bad);font-weight:600}
+
+/* ---------- 主体三栏 ---------- */
+.main{display:grid;grid-template-columns:286px minmax(0,1fr) 318px;gap:var(--gap);min-height:0}
+.col{display:grid;gap:var(--gap);min-width:0;min-height:0}
+.col-l{grid-template-rows:auto auto minmax(0,1fr)}
+.col-l,.col-r{overflow:auto}
+.col-c{grid-template-rows:minmax(0,1fr) 252px}
+.col-r{grid-template-rows:auto auto auto minmax(0,1fr);align-content:start}
+
+.card{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  padding:11px 13px;display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0;
+  background-image:linear-gradient(180deg,#102a44 0%,var(--panel) 46%)}
+.card-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-bottom:7px;border-bottom:1px solid var(--line);flex:none}
+.card-hd h2{font-size:13.5px;font-weight:600;letter-spacing:.03em;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.card-hd h2::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--accent)}
+.card-hd .right{display:flex;align-items:center;gap:10px}
+.card-hd .more{font-size:11.5px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.card-hd .more:hover{color:var(--accent)}
+.card-hd .more svg{width:12px;height:12px}
+
+/* ---------- 核心指标 ---------- */
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.metric{border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+  background:linear-gradient(160deg,#102a43,#0c1e30);display:grid;gap:2px}
+.metric .lb{font-size:11.5px;color:var(--ink-2)}
+.metric .num{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.metric .sub{font-size:10.5px;color:var(--muted);line-height:1.4}
+.metric .row{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.delta{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);font-size:11px;font-weight:600}
+.delta.up{color:var(--bad)}
+.delta.down{color:var(--good)}
+.delta.flat{color:var(--muted);font-family:var(--font-cn)}
+.delta svg{width:10px;height:10px}
+
+/* ---------- 业务分类统计 ---------- */
+.cat-list{display:grid;gap:7px}
+.cat-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;font-size:11.5px}
+.cat-row .lb{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-row .n{font-family:var(--mono);font-weight:600;font-size:12.5px;text-align:right}
+.cat-row .track{grid-column:1/-1;height:6px;border-radius:4px;background:#17324c;overflow:hidden}
+.cat-row .track i{display:block;height:100%;border-radius:4px}
+
+/* ---------- 趋势 ---------- */
+.trend-plot{flex:1;min-height:0;position:relative}
+.trend-plot svg{width:100%;height:100%;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:3px 12px;font-size:11px;color:var(--ink-2);flex:none}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.legend b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+
+/* ---------- 地图 ---------- */
+.map-card{border-color:#2c5c82;background:radial-gradient(120% 120% at 50% 0%,#10304e,#0a1c2e 70%)}
+.map-body{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px;flex:1;min-height:0}
+.map-stage{position:relative;min-height:0;border-radius:8px;overflow:hidden;
+  border:1px solid #1e3f5c;background:#071522}
+.map-stage > svg.map{position:absolute;inset:0;width:100%;height:100%;display:block}
+.district{cursor:pointer;transition:fill-opacity .2s,stroke .2s}
+.district:hover{stroke:#9fd8ff;stroke-width:1.7}
+.district.on{stroke:#e8f5ff;stroke-width:2.2}
+.dlabel{font-family:var(--font-cn);font-size:11.5px;fill:#dceaf7;pointer-events:none;text-anchor:middle}
+.dlabel .dnum{font-family:var(--mono);font-size:13px;font-weight:600}
+.leader{stroke:#7fb4d8;stroke-width:.9;stroke-dasharray:2 2}
+.ov{position:absolute;background:#0a1b2ccc;border:1px solid #23455f;border-radius:8px;
+  padding:9px 11px;backdrop-filter:blur(3px)}
+.ov-legend{top:10px;left:10px;min-width:124px}
+.ov-scope{top:10px;right:10px;min-width:146px}
+.ov-note{bottom:10px;right:10px;font-size:10.5px;color:var(--muted);text-align:right;line-height:1.7}
+.ov-hint{bottom:10px;left:10px;font-size:10.5px;color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+.ov-hint svg{width:12px;height:12px}
+.ov .ov-hd{font-size:10.5px;color:var(--muted);letter-spacing:.08em;margin-bottom:6px}
+.ov .lg{display:grid;gap:5px;font-size:11px;color:var(--ink-2)}
+.ov .lg div{display:flex;align-items:center;gap:7px}
+.ov .lg i{width:12px;height:9px;border-radius:2px;flex:none}
+.ov .lg b{margin-left:auto;font-family:var(--mono);font-weight:500;color:var(--ink)}
+.ov .kv{display:grid;gap:4px;font-size:11px;color:var(--muted)}
+.ov .kv div{display:flex;align-items:center;gap:8px}
+.ov .kv b{margin-left:auto;font-family:var(--mono);font-weight:600;font-size:12.5px;color:var(--ink)}
+.ov .kv b.bad{color:var(--bad)}
+.ov .scope-name{font-size:13px;color:var(--ink);font-weight:600;margin-bottom:6px}
+.map-inline{display:none;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.map-inline .lgi{display:inline-flex;align-items:center;gap:5px}
+.map-inline .lgi i{width:11px;height:8px;border-radius:2px}
+.map-inline .sep{width:1px;height:11px;background:var(--line-2)}
+.map-inline .mi b{font-family:var(--mono);color:var(--ink);font-weight:600}
+.map-inline .mi b.bad{color:var(--bad)}
+.map-inline .mi b.nm{font-family:var(--font-cn)}
+.rank-table{position:absolute;inset:0;display:none;padding:6px 14px;overflow:auto}
+.rank-table.on{display:block}
+.rank-table table{width:100%;border-collapse:collapse}
+.rank-table th,.rank-table td{padding:7px 10px;font-size:12px;border-bottom:1px solid #173147;text-align:right}
+.rank-table thead th{color:var(--muted);font-weight:400;font-size:11px;position:sticky;top:0;background:#0a1c2e}
+.rank-table tbody th{text-align:left;font-weight:500}
+.rank-table tbody tr{cursor:pointer}
+.rank-table tbody tr:hover{background:#14324b}
+.rank-table tbody tr.on{background:#183a58}
+.rank-table .n{font-family:var(--mono);font-weight:600}
+.rank-table .hot{color:var(--bad)}
+.rank-table .warm{color:var(--warn)}
+
+/* 重点隐患面板（地图右侧） */
+.hazard-panel{display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);
+  border-radius:8px;background:#0b1e31;overflow:hidden}
+.hazard-panel > header{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 11px;border-bottom:1px solid var(--line);background:#10263c;flex:none}
+.hazard-panel > header h3{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+.hazard-panel > header h3::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--bad)}
+.hazard-panel > header span{font-size:10.5px;color:var(--muted)}
+.hazard-list{flex:1;min-height:0;overflow:auto}
+.hazard-list li{list-style:none}
+.hazard-item{display:grid;gap:4px;padding:8px 11px;border-bottom:1px solid #16304a;cursor:pointer;transition:.16s}
+.hazard-item:hover{background:#14324b}
+.hazard-item .ht{display:flex;align-items:baseline;gap:8px;font-size:12px;color:var(--ink);line-height:1.35}
+.hazard-item .ht b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hazard-item .ht .dl{margin-left:auto;flex:none;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.hazard-item .ht .dl.od{color:#f0bd7c}
+.hazard-item .hs{font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px;min-width:0}
+.hazard-item .hs .src{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{flex:none;white-space:nowrap}
+.hazard-foot{flex:none;padding:7px 11px;border-top:1px solid var(--line);font-size:11px;
+  color:var(--muted);display:flex;align-items:center;justify-content:space-between;background:#0d2134}
+.hazard-foot a{color:var(--accent);text-decoration:none;display:inline-flex;align-items:center;gap:3px}
+.hazard-foot a svg{width:11px;height:11px}
+
+/* ---------- 右侧 ---------- */
+.duty{display:grid;gap:7px}
+.duty-grp{font-size:10.5px;color:var(--muted);letter-spacing:.1em}
+.duty-grp:not(:first-child){margin-top:3px;padding-top:7px;border-top:1px dashed #1d3c56}
+.duty-row{display:grid;grid-template-columns:15px minmax(0,1fr) auto 13px;align-items:center;gap:9px;
+  padding:7px 9px;border:1px solid #21415c;border-radius:7px;background:#10283e;cursor:pointer;transition:.16s}
+.duty-row:hover{background:#16344f;border-color:var(--line-2)}
+.duty-row svg{width:14px;height:14px;color:#6ba3cc}
+.duty-row .n{font-family:var(--mono);font-size:15px;font-weight:600}
+.duty-row .ar{width:12px;height:12px;color:var(--muted);transition:.16s}
+.duty-row:hover .ar{color:var(--accent);transform:translateX(2px)}
+.duty-row.urgent{border-color:#6a4130;background:#25191b}
+.duty-row.urgent svg{color:var(--warn)}
+.duty-row.urgent .n{color:#f0bd7c}
+
+.ring-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;align-items:center}
+.ring{position:relative;width:112px;height:112px}
+.ring svg{transform:rotate(-90deg);transform-origin:56px 56px}
+.ring-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.ring-c b{font-family:var(--mono);font-size:19px;font-weight:600;display:block;line-height:1.2}
+.ring-c span{font-size:10px;color:var(--muted)}
+.ring-legend{display:grid;gap:4px;font-size:11.5px}
+.ring-legend li{display:flex;align-items:center;gap:8px;list-style:none}
+.ring-legend i{width:9px;height:9px;border-radius:2px;flex:none}
+.ring-legend b{margin-left:auto;font-family:var(--mono);font-weight:500}
+
+.bench{display:grid;gap:8px}
+.bench-row{display:grid;grid-template-columns:58px minmax(0,1fr) 58px;align-items:center;gap:9px;font-size:11.5px}
+.bench-row .lb{color:var(--ink-2)}
+.bench-track{height:9px;border-radius:5px;background:#17324c;overflow:hidden}
+.bench-fill{height:100%;border-radius:5px;display:block}
+.bench-val{font-family:var(--mono);font-size:11.5px;text-align:right;color:var(--ink)}
+.bench-val em{font-style:normal;color:var(--muted);font-size:10.5px}
+.bench-note{font-size:10.5px;color:var(--muted);margin-top:1px}
+
+/* ---------- 列表 ---------- */
+.lists{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);min-height:0}
+.lists .card{padding:9px 12px;gap:7px}
+.list{display:grid;align-content:start;overflow:auto;min-height:0}
+.list li{list-style:none}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 10px;padding:6px 4px;border-bottom:1px solid #173147}
+.row .t{font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .s{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .v{font-family:var(--mono);font-size:13.5px;font-weight:600;text-align:right;align-self:center}
+.row .v small{display:block;font-size:9.5px;color:var(--muted);font-weight:400;text-align:right}
+.lists .row .v small{display:inline;margin-left:3px;font-size:10.5px;text-align:left}
+.chip{display:inline-block;padding:0 5px;border-radius:4px;font-size:10px;line-height:1.6;
+  border:1px solid transparent;margin-right:4px;vertical-align:1px}
+.chip.high{background:#e0685a1f;color:#f19a8e;border-color:#e0685a4d}
+.chip.mid{background:#e0a3401f;color:#f0c184;border-color:#e0a3404d}
+.chip.low{background:#3b8fc01f;color:#8fc4ea;border-color:#3b8fc04d}
+.chip.new{background:#3fc79a24;color:#6fe0bd;border-color:#3fc79a66}
+.chip.st{background:#1d3c5659;color:var(--ink-2);border-color:#2a4b66}
+.marquee{overflow:hidden;min-height:0;flex:1}
+.marquee-track{animation:roll 28s linear infinite}
+body.static .marquee-track{animation:none}
+.marquee:hover .marquee-track{animation-play-state:paused}
+@keyframes roll{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+
+/* ---------- 底部 ticker ---------- */
+.ticker{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--radius);
+  background:linear-gradient(96deg,#0d2134,#0a1a29);padding:0 4px;overflow:hidden}
+.ticker .ti{display:flex;align-items:center;gap:8px;padding:8px 15px;border-right:1px solid #17314a;flex:1;min-width:0}
+.ticker .ti:last-child{border-right:0}
+.ticker .ti svg{width:14px;height:14px;color:#5b8cb3;flex:none}
+.ticker .ti span{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticker .ti b{font-family:var(--mono);font-size:13.5px;color:var(--ink);font-weight:600;margin-left:auto;padding-left:8px}
+.foot-note{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#5f768b;padding:0 4px}
+
+@media (max-width:1700px){
+  .ov{display:none}
+  .map-inline{display:flex}
+  .scope-note{display:none}
+}
+@media (max-width:1400px){
+  .screen{height:auto}
+  .main{grid-template-columns:1fr}
+  .col-c{grid-template-rows:520px 260px}
+  .foot-note{display:none}
+}
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <header class="head">
+    <div class="title">
+      <div class="title-main">
+        <span class="title-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <h1>网络安全等级保护<span>指挥驾驶舱</span></h1>
+      </div>
+      <p class="title-sub">浙江省衢州市 · <span id="scopeName">全域</span></p>
+    </div>
+
+    <nav class="tabs">
+      <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>态势总览</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>风险分析</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/></svg>实时预警</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></svg>统计分析</a>
+    </nav>
+
+    <div class="head-right">
+      <div class="scope">
+        <b>统计截至 11-27 19:29</b>
+        <span class="live">每 30 秒更新 · 全市 6 区县 + 未归区 1</span>
+      </div>
+      <div class="tools">
+        <button class="btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>刷新</button>
+        <button class="btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>全屏</button>
+        <button class="btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>返回工作台</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 结论条 -->
+  <section class="conclusion" aria-label="全域态势结论">
+    <span class="flag">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      全域待办 14 项
+    </span>
+    <p>其中 <em>3 项已逾期</em>、<em>5 项活跃预警</em>待处置；<b>柯城区</b>风险指数最高（9），建议优先督办其 <b>2 项逾期隐患</b>。</p>
+    <div class="worst"><span>最重区域</span><b>柯城区</b><span class="idx">指数 9</span></div>
+  </section>
+
+  <div class="main">
+
+    <!-- ===== 左栏 ===== -->
+    <div class="col col-l">
+      <section class="card">
+        <header class="card-hd"><h2>核心指标</h2><span class="more">较上期 30 日口径</span></header>
+        <div class="metrics">
+          <div class="metric">
+            <span class="lb">未销项隐患</span>
+            <span class="row"><b class="num">12</b><span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>2</span></span>
+            <span class="sub">高风险 5 · 中 4 · 低 3</span>
+          </div>
+          <div class="metric">
+            <span class="lb">整改完成率</span>
+            <span class="row"><b class="num">68%</b><span class="delta down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>5pp</span></span>
+            <span class="sub">已销项 41 / 60 项</span>
+          </div>
+          <div class="metric">
+            <span class="lb">活跃预警</span>
+            <span class="row"><b class="num">5</b><span class="delta down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>1</span></span>
+            <span class="sub">待处理 3 · 处理中 2</span>
+          </div>
+          <div class="metric">
+            <span class="lb">备案总数</span>
+            <span class="row"><b class="num">1,286</b><span class="delta flat">本年 +142</span></span>
+            <span class="sub">涉及 214 家备案单位</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-hd"><h2>业务分类统计</h2><span class="more">全域</span></header>
+        <div class="cat-list" id="catList"></div>
+      </section>
+
+      <section class="card trend">
+        <header class="card-hd">
+          <h2>业务趋势</h2>
+          <div class="right"><span class="more">11-21 至 11-27</span></div>
+        </header>
+        <div class="trend-plot" id="trend"></div>
+        <div class="legend" id="trendLegend"></div>
+      </section>
+    </div>
+
+    <!-- ===== 中栏 ===== -->
+    <div class="col col-c">
+      <section class="card map-card">
+        <header class="card-hd">
+          <h2>区县处置态势</h2>
+          <div class="right">
+            <div class="map-inline" id="mapInline">
+              <span class="lgi"><i style="background:#e0685a"></i>高</span>
+              <span class="lgi"><i style="background:#e0a340"></i>中</span>
+              <span class="lgi"><i style="background:#3b8fc0"></i>低</span>
+              <span class="sep"></span>
+              <span class="mi"><b class="nm" id="miName">全域</b> 系统 <b id="miSys">214</b> · 隐患 <b id="miHaz">12</b> · 逾期 <b id="miOvd" class="bad">3</b></span>
+            </div>
+            <span class="more scope-note">综合风险指数 · 逾期 40% / 高风险 40% / 待复测 20%</span>
+            <div class="seg" role="group" aria-label="区县展示方式">
+              <button type="button" id="btnMap" aria-pressed="true">地图</button>
+              <button type="button" id="btnRank" aria-pressed="false">排名</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="map-body">
+          <div class="map-stage" id="mapStage">
+            <svg class="map" id="mapSvg" preserveAspectRatio="xMidYMid meet"></svg>
+
+            <div class="rank-table" id="rankTable">
+              <table>
+                <thead><tr><th>区县</th><th>风险指数</th><th>高风险</th><th>已逾期</th><th>涉及系统</th></tr></thead>
+                <tbody id="rankBody"></tbody>
+              </table>
+            </div>
+
+            <div class="ov ov-legend">
+              <div class="ov-hd">风险指数</div>
+              <div class="lg">
+                <div><i style="background:#e0685a"></i>高<b>7+</b></div>
+                <div><i style="background:#e0a340"></i>中<b>4-6</b></div>
+                <div><i style="background:#3b8fc0"></i>低<b>1-3</b></div>
+                <div><i style="background:#22455f"></i>无<b>0</b></div>
+              </div>
+            </div>
+
+            <div class="ov ov-scope">
+              <div class="scope-name" id="curName">全域</div>
+              <div class="kv">
+                <div><span>涉及系统</span><b id="curSys">214</b></div>
+                <div><span>未销项隐患</span><b id="curHaz">12</b></div>
+                <div><span>已逾期</span><b id="curOvd" class="bad">3</b></div>
+                <div><span>待监管复核</span><b id="curRev">4</b></div>
+              </div>
+            </div>
+
+            <div class="ov ov-hint">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              点击区县下钻 · 点击空白恢复全域
+            </div>
+            <div class="ov ov-note">浙江省衢州市 · 底图 CTAmap v2.0<br>风险着色：未销项隐患 + 逾期 + 待复测</div>
+          </div>
+
+          <aside class="hazard-panel">
+            <header><h3>重点隐患</h3><span>逾期优先</span></header>
+            <ul class="hazard-list" id="hazardList"></ul>
+            <div class="hazard-foot"><span>还有 5 项未销项隐患</span>
+              <a href="#">全部隐患<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <div class="lists">
+        <section class="card">
+          <header class="card-hd"><h2>高风险系统</h2><a class="more" href="#">查看排行<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a></header>
+          <ul class="list" id="sysList"></ul>
+        </section>
+        <section class="card">
+          <header class="card-hd"><h2>最新预警</h2><a class="more" href="#">查看全部<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a></header>
+          <div class="marquee"><div class="marquee-track" id="alertList"></div></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ===== 右栏 ===== -->
+    <div class="col col-r">
+      <section class="card">
+        <header class="card-hd"><h2>监管待办</h2><span class="more">全域</span></header>
+        <div class="duty">
+          <span class="duty-grp">风险处置</span>
+          <div class="duty-row urgent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span>已逾期隐患</span><b class="n">3</b>
+            <svg class="ar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          </div>
+          <div class="duty-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>待监管复核隐患</span><b class="n">4</b>
+            <svg class="ar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          </div>
+          <span class="duty-grp">审核流程</span>
+          <div class="duty-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/></svg>
+            <span>待处理预警</span><b class="n">5</b>
+            <svg class="ar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          </div>
+          <div class="duty-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>
+            <span>待审核整改规划</span><b class="n">2</b>
+            <svg class="ar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-hd"><h2>备案状态分布</h2><span class="more">备案台账</span></header>
+        <div class="ring-row">
+          <div class="ring">
+            <svg viewBox="0 0 112 112" width="112" height="112">
+              <circle cx="56" cy="56" r="43" fill="none" stroke="#17324c" stroke-width="16"/>
+              <circle id="arc1" cx="56" cy="56" r="43" fill="none" stroke="#5ab0f0" stroke-width="16"/>
+              <circle id="arc2" cx="56" cy="56" r="43" fill="none" stroke="#3d8fc9" stroke-width="16"/>
+              <circle id="arc3" cx="56" cy="56" r="43" fill="none" stroke="#2f6fa3" stroke-width="16"/>
+              <circle id="arc4" cx="56" cy="56" r="43" fill="none" stroke="#27567f" stroke-width="16"/>
+              <circle id="arc5" cx="56" cy="56" r="43" fill="none" stroke="#4a5f78" stroke-width="16"/>
+            </svg>
+            <div class="ring-c"><b>1,286</b><span>备案记录</span></div>
+          </div>
+          <ul class="ring-legend">
+            <li><i style="background:#5ab0f0"></i>有效备案<b>986</b></li>
+            <li><i style="background:#3d8fc9"></i>审核中<b>148</b></li>
+            <li><i style="background:#2f6fa3"></i>待补正<b>62</b></li>
+            <li><i style="background:#27567f"></i>草稿<b>58</b></li>
+            <li><i style="background:#4a5f78"></i>已注销<b>32</b></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-hd"><h2>备案覆盖</h2><a class="more" href="#">覆盖清册<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a></header>
+        <div class="bench">
+          <div class="bench-row">
+            <span class="lb">已覆盖</span>
+            <span class="bench-track"><span class="bench-fill" style="width:78%;background:#5ab0f0"></span></span>
+            <span class="bench-val">156<em> /200</em></span>
+          </div>
+          <div class="bench-row">
+            <span class="lb">未覆盖</span>
+            <span class="bench-track"><span class="bench-fill" style="width:22%;background:#33546f"></span></span>
+            <span class="bench-val">44<em> /200</em></span>
+          </div>
+          <p class="bench-note">覆盖率 78% · 较上期 ↑3pp · 未覆盖 44 家已发督办</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-hd"><h2>未销项风险分布</h2><a class="more" href="#">风险分析<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a></header>
+        <div class="bench">
+          <div class="bench-row">
+            <span class="lb">高风险</span>
+            <span class="bench-track"><span class="bench-fill" style="width:42%;background:#e0685a"></span></span>
+            <span class="bench-val">5</span>
+          </div>
+          <div class="bench-row">
+            <span class="lb">中风险</span>
+            <span class="bench-track"><span class="bench-fill" style="width:33%;background:#e0a340"></span></span>
+            <span class="bench-val">4</span>
+          </div>
+          <div class="bench-row">
+            <span class="lb">低风险</span>
+            <span class="bench-track"><span class="bench-fill" style="width:25%;background:#3b8fc0"></span></span>
+            <span class="bench-val">3</span>
+          </div>
+          <p class="bench-note">合计 12 项 · 其中已逾期 3 项</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="ticker">
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 2h6v4H9z"/><path d="m9 14 2 2 4-4"/></svg><span>在办实施报备</span><b>8</b></span>
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-6"/></svg><span>测评首轮通过率</span><b>92%</b></span>
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/></svg><span>预警关闭率</span><b>64%</b></span>
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>审核已逾期</span><b>3</b></span>
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg><span>已销项隐患</span><b>41</b></span>
+    <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg><span>资产登记总量</span><b>1,204</b></span>
+  </div>
+
+  <div class="foot-note">
+    <span>© 杭州杰熵人工智能科技有限公司 2026 版权所有</span>
+    <span>改版设计稿 · 示意数据 · 区县边界来自 CTAmap v2.0</span>
+  </div>
+</div>
+
+<script>
+const BOUNDARIES = {
+ "viewBox": "69.8 14.0 420.4 402.0",
+ "districts": [
+  {
+   "name": "柯城区",
+   "d": "M295.79 225.98 L295.6 225.55 L295.6 225.53 L295.72 224.67 L295.92 224.12 L295.98 223.85 L294.95 221.46 L294.2 219.81 L293.85 219.25 L293.51 218.76 L292.47 217.31 L289.74 215.18 L289.33 215.12 L287.94 214.87 L285.98 212.97 L286.28 211.94 L286.51 211.45 L287.11 211.3 L287.72 211.01 L287.63 210.49 L286.86 210.19 L284.21 209.32 L280.49 208.79 L280.12 208.41 L279.89 208.16 L279.98 207.85 L280.75 207.55 L281.73 207.43 L282.75 207.52 L283.55 207.5 L283.98 207.38 L284.52 206.87 L284.6 206.39 L284.88 205.83 L285.43 204.75 L286.11 204.15 L286.25 204.08 L286.98 203.9 L288.38 202.64 L289.65 201.35 L290.33 199.01 L290.4 197.53 L290.43 196.78 L291.89 194.84 L292.07 194.35 L292.08 193.98 L292.03 193.83 L291.78 193.6 L291.55 193.53 L290.27 193.83 L289.69 194.31 L289.09 194.49 L288.8 194.54 L288.18 194.44 L288.27 194.08 L288.58 193.74 L291.06 191.72 L292.2 189.94 L291.91 189.56 L289.18 186.49 L288.18 185.84 L287.48 185.86 L286.38 184.32 L285.68 183.18 L284.79 182.3 L284.31 182.24 L284.04 182.47 L282.6 182.03 L281.79 179.45 L282.16 178.02 L282.25 176.21 L281.35 174.06 L280.31 170.79 L280.69 169.72 L282.71 166.31 L283.4 165.83 L283.24 163.4 L283.34 161.94 L283.71 160.23 L284.01 159.94 L284.32 159.85 L284.62 159.28 L284.79 158.28 L284.72 157.29 L284.4 156.81 L284.19 156.32 L284.01 155.83 L283.76 153.96 L284.18 153.1 L284.92 152.42 L285.75 151.75 L286.41 150.04 L286.42 148.09 L286.54 146.18 L286.57 145.79 L286.76 144.56 L286.94 144.11 L288.92 141.85 L289.39 141.45 L289.94 141.59 L290.52 141.44 L291.22 141.11 L291.78 140.66 L292.22 140.25 L292.66 138.99 L292.72 138.41 L295.34 136.84 L296.71 134.24 L296.8 133.64 L296.56 132.82 L296.2 132.14 L295.88 129.59 L296.0 128.27 L296.71 127.75 L297.14 127.67 L297.59 127.76 L298.08 127.51 L298.17 125.71 L298.07 124.83 L297.92 124.2 L297.88 124.01 L298.38 123.76 L298.88 123.52 L299.17 123.39 L299.98 123.25 L300.62 122.82 L302.04 121.87 L302.31 121.63 L302.56 119.34 L302.34 119.0 L302.04 118.52 L301.84 118.33 L301.63 117.68 L301.6 116.88 L301.98 116.65 L302.96 116.28 L303.86 115.15 L305.83 115.43 L307.64 116.67 L308.52 117.08 L309.21 117.24 L312.4 117.69 L312.91 117.57 L313.44 117.32 L313.84 117.0 L313.95 116.77 L314.4 116.54 L314.84 116.76 L316.32 117.77 L318.02 118.71 L321.28 119.0 L323.07 118.41 L324.68 118.42 L325.28 118.75 L325.33 118.89 L324.96 120.51 L323.56 122.22 L323.31 122.61 L324.19 123.47 L324.56 124.7 L324.19 128.8 L323.87 129.5 L323.94 129.85 L324.66 130.96 L326.42 130.74 L327.14 130.54 L327.56 130.29 L327.92 129.71 L328.6 129.0 L329.04 128.77 L329.13 129.5 L328.76 131.51 L328.63 132.2 L327.68 133.85 L327.44 133.98 L327.33 134.29 L327.87 135.04 L328.47 135.79 L329.53 136.91 L330.47 137.46 L330.78 137.75 L331.52 138.96 L331.53 140.03 L331.39 140.75 L331.68 143.78 L331.79 144.25 L332.17 144.99 L333.13 145.35 L333.8 145.91 L334.4 146.97 L334.85 148.09 L334.77 148.76 L334.84 149.11 L334.99 149.18 L336.17 149.36 L338.32 149.9 L339.24 150.21 L340.03 150.63 L340.62 151.2 L343.12 154.36 L343.35 154.68 L343.27 156.9 L342.66 157.27 L341.79 159.47 L341.39 162.61 L341.86 163.43 L342.56 164.19 L343.46 165.09 L343.67 164.96 L344.23 164.64 L346.42 165.54 L346.78 165.82 L347.14 166.26 L346.7 166.66 L345.08 167.08 L343.6 167.28 L342.4 167.61 L341.11 168.42 L339.3 170.42 L339.28 170.79 L339.82 173.5 L338.81 174.42 L340.17 175.39 L341.65 176.77 L341.96 177.11 L342.13 177.74 L341.87 178.03 L341.44 178.07 L341.0 178.53 L341.03 180.83 L341.03 180.83 L341.11 181.05 L341.58 181.75 L342.07 182.14 L342.88 182.48 L343.88 182.7 L344.88 182.74 L345.47 182.65 L346.01 182.45 L346.48 182.11 L346.91 181.53 L347.61 180.5 L347.91 179.9 L347.91 179.52 L348.25 179.25 L348.6 179.06 L349.78 178.5 L350.69 178.22 L351.55 178.25 L352.34 178.49 L353.44 179.08 L353.48 179.1 L353.69 179.24 L354.35 179.66 L354.24 180.3 L354.07 181.28 L353.7 182.12 L352.89 183.28 L351.58 184.37 L343.72 189.28 L349.11 190.05 L349.27 190.23 L349.24 190.67 L349.34 190.81 L350.73 192.07 L351.58 192.69 L351.81 192.69 L352.71 192.22 L352.96 191.44 L352.95 191.04 L352.59 190.66 L352.79 190.02 L354.42 189.76 L355.57 190.29 L355.75 190.51 L356.03 190.76 L356.25 190.96 L356.48 191.23 L356.65 191.7 L356.75 192.34 L356.73 192.93 L356.71 193.36 L356.56 193.65 L355.9 194.38 L355.47 194.73 L355.11 194.85 L354.75 195.03 L354.41 195.35 L354.05 195.87 L354.66 196.72 L355.31 197.32 L357.36 197.01 L358.86 197.3 L360.82 198.81 L363.76 203.3 L363.09 204.34 L362.52 205.14 L362.06 205.54 L361.78 205.66 L360.47 206.01 L359.62 206.05 L359.4 206.0 L358.64 206.44 L357.79 207.27 L357.31 208.84 L357.21 209.27 L357.84 210.52 L358.64 210.77 L359.61 210.95 L359.95 212.79 L360.08 213.79 L360.03 214.33 L359.51 214.81 L358.94 214.79 L358.71 215.4 L358.67 216.15 L358.83 216.87 L359.92 219.35 L361.01 219.63 L361.18 220.3 L361.2 220.5 L361.22 222.0 L361.07 223.51 L361.02 223.94 L360.93 224.19 L359.58 225.3 L358.8 225.64 L357.46 225.65 L356.45 225.21 L355.95 225.13 L354.22 224.9 L352.79 225.24 L352.44 225.51 L352.26 225.99 L351.81 226.06 L350.41 225.84 L348.86 225.08 L347.77 223.96 L347.49 224.6 L347.37 225.38 L346.87 226.1 L346.29 227.85 L345.56 228.59 L344.28 228.54 L343.44 228.9 L343.25 229.1 L343.09 229.35 L342.93 229.72 L342.65 231.07 L342.67 231.82 L342.84 232.48 L342.69 232.84 L342.56 233.15 L342.24 233.61 L341.47 233.98 L340.64 234.33 L339.71 232.77 L340.91 231.78 L341.87 231.25 L342.39 230.99 L343.03 227.71 L342.37 223.48 L342.19 222.86 L340.88 222.78 L339.05 220.93 L338.78 219.97 L336.63 216.59 L334.46 215.21 L333.41 214.74 L330.89 214.35 L330.63 214.46 L330.47 214.52 L329.42 214.55 L329.13 214.49 L328.91 214.42 L328.28 213.98 L327.77 210.95 L328.11 210.46 L328.62 209.05 L328.73 208.36 L328.84 207.33 L328.65 206.28 L328.2 205.78 L327.46 205.07 L326.9 204.51 L325.29 202.8 L325.9 201.82 L326.67 201.14 L327.0 200.58 L326.41 199.39 L323.71 199.33 L323.14 199.95 L322.87 200.27 L321.61 201.6 L320.13 203.06 L317.94 204.23 L316.77 206.26 L315.74 207.35 L313.36 208.7 L312.06 209.41 L311.78 209.4 L311.24 209.17 L309.81 209.7 L307.14 211.57 L306.7 212.21 L306.79 212.8 L307.14 213.28 L307.55 213.54 L308.33 214.45 L308.48 214.7 L308.09 215.91 L307.91 216.18 L306.46 218.25 L305.81 218.59 L305.78 218.6 L305.69 218.63 L305.49 218.69 L305.18 218.98 L303.91 219.61 L303.25 220.0 L302.81 220.27 L302.28 220.6 L301.82 220.86 L301.54 221.0 L301.44 221.04 L301.42 221.07 L301.27 221.49 L301.25 221.68 L301.33 222.35 L301.34 222.47 L301.36 222.7 L301.39 222.8 L301.43 222.93 L301.44 223.21 L301.42 223.38 L301.26 223.68 L301.01 224.01 L298.8 225.79 L298.48 225.95 L297.54 226.09 L296.79 226.11 L295.79 225.98 Z",
+   "lx": 317.48,
+   "ly": 175.63
+  },
+  {
+   "name": "衢江区",
+   "d": "M346.68 71.19 L346.75 71.22 L347.46 72.02 L347.73 72.62 L348.31 73.36 L348.6 73.55 L350.44 74.64 L352.37 75.72 L353.16 76.42 L353.71 77.12 L353.87 77.62 L354.18 77.88 L354.88 78.2 L355.22 78.25 L357.0 78.42 L359.43 78.82 L360.06 79.72 L361.02 80.89 L361.42 81.18 L363.25 82.08 L363.86 82.23 L364.6 82.24 L365.27 81.93 L365.44 82.04 L366.0 82.61 L366.2 83.05 L364.12 85.24 L363.93 85.35 L363.15 85.58 L362.6 87.53 L364.07 88.6 L364.24 88.96 L364.3 89.2 L364.37 90.14 L364.59 91.46 L364.96 91.51 L365.62 91.29 L365.9 91.08 L366.39 90.96 L369.83 93.21 L371.61 93.7 L371.75 93.84 L373.04 97.21 L372.4 99.49 L372.08 99.85 L371.93 100.28 L371.95 100.47 L372.88 104.98 L373.58 106.27 L374.47 106.84 L374.57 106.9 L375.61 107.2 L376.77 107.85 L377.2 108.68 L377.92 109.81 L379.28 109.49 L379.73 109.38 L380.18 109.07 L380.48 108.74 L380.95 108.51 L382.32 108.36 L384.31 107.99 L384.88 107.69 L387.15 106.28 L388.42 106.31 L390.86 105.96 L390.76 106.19 L390.49 109.7 L391.4 110.58 L392.25 111.39 L393.43 112.72 L394.85 114.49 L394.9 117.38 L394.7 118.53 L394.39 119.81 L394.34 119.95 L393.23 121.47 L394.75 123.91 L396.19 125.59 L397.11 126.18 L397.22 126.19 L397.82 126.19 L398.06 126.18 L399.22 125.69 L400.43 125.66 L400.63 125.67 L400.71 125.71 L401.53 126.52 L401.93 126.93 L402.32 128.4 L402.43 128.84 L402.39 129.15 L402.33 129.36 L401.7 130.34 L401.47 130.69 L401.06 131.17 L400.06 131.76 L399.6 131.53 L399.38 131.56 L398.9 131.98 L398.75 132.55 L398.71 133.88 L398.82 134.25 L400.72 137.16 L404.66 141.62 L405.33 141.55 L405.58 141.58 L406.64 143.18 L406.73 143.85 L405.06 147.51 L404.42 148.11 L404.13 148.1 L402.56 147.68 L401.12 147.95 L400.75 148.04 L400.65 148.16 L399.39 149.63 L399.1 150.34 L398.1 150.84 L397.75 150.88 L396.99 150.96 L396.68 150.79 L396.66 150.11 L397.2 149.11 L397.03 148.19 L394.71 148.01 L394.49 148.02 L394.33 148.88 L394.54 149.43 L394.66 149.7 L395.49 151.3 L396.01 151.54 L396.45 151.63 L396.21 152.37 L395.97 152.9 L394.91 153.6 L394.48 153.81 L393.3 154.24 L392.89 154.16 L392.03 153.89 L390.89 153.48 L390.49 153.42 L390.58 153.69 L391.34 154.38 L393.13 155.1 L393.7 154.55 L395.09 153.84 L395.29 153.9 L395.4 154.07 L395.45 154.2 L395.32 154.53 L394.09 156.7 L393.77 156.99 L393.3 157.22 L393.02 157.34 L391.28 157.01 L389.49 157.85 L389.87 158.06 L390.03 158.17 L390.43 158.56 L390.52 158.71 L390.55 160.35 L390.13 160.43 L389.43 160.25 L389.23 160.13 L389.02 159.97 L388.27 158.76 L388.08 157.71 L388.19 157.58 L387.76 157.58 L387.84 158.69 L387.98 160.21 L388.17 160.71 L388.92 161.85 L392.18 162.96 L393.44 162.32 L395.01 160.82 L395.58 160.92 L395.97 161.22 L396.32 161.52 L396.46 162.74 L395.99 162.94 L395.63 162.95 L395.7 163.25 L396.34 163.91 L396.35 164.06 L396.49 164.05 L397.07 164.07 L398.01 164.04 L399.14 163.83 L399.16 163.83 L399.18 164.89 L399.03 165.54 L399.05 166.18 L399.08 166.55 L400.6 169.13 L401.89 170.35 L403.03 170.98 L405.59 171.23 L407.2 172.59 L407.39 173.8 L407.5 174.91 L406.96 179.05 L406.91 179.19 L406.45 179.29 L406.1 179.17 L405.51 178.08 L405.26 177.46 L405.14 177.04 L404.38 176.79 L403.63 176.96 L401.67 177.52 L400.22 179.04 L400.81 180.21 L400.25 181.11 L399.94 181.35 L399.44 181.62 L399.01 181.52 L398.23 181.0 L397.29 180.59 L397.36 182.4 L398.47 184.92 L398.64 185.26 L398.98 185.55 L399.09 185.59 L401.81 186.33 L402.11 186.28 L402.1 185.73 L402.42 185.68 L403.33 186.21 L403.71 186.91 L403.71 187.58 L403.7 188.01 L403.62 188.61 L405.33 190.86 L405.32 190.87 L405.3 190.9 L405.31 190.94 L405.49 191.4 L405.51 191.43 L405.53 191.44 L405.76 191.39 L405.78 191.38 L405.89 191.38 L405.98 191.45 L406.01 191.48 L406.24 191.56 L406.89 191.4 L407.12 191.31 L408.08 190.83 L411.73 193.21 L411.89 193.43 L412.92 195.13 L413.57 196.44 L413.65 196.88 L412.75 199.71 L411.68 200.79 L410.14 202.96 L410.23 203.97 L411.66 204.79 L412.13 204.83 L412.6 205.0 L412.97 205.42 L412.25 207.76 L411.97 208.31 L411.92 208.69 L412.0 209.75 L412.05 210.02 L412.42 210.96 L412.72 211.26 L412.97 211.59 L412.8 212.6 L412.57 212.95 L411.6 213.92 L410.92 214.38 L410.12 214.62 L409.56 215.13 L409.67 218.08 L410.36 219.28 L410.64 219.65 L409.45 223.69 L409.03 224.27 L408.35 224.86 L407.67 225.44 L407.64 226.11 L407.97 226.86 L408.18 227.46 L408.18 228.86 L407.85 229.14 L407.05 229.53 L406.44 229.64 L405.75 229.62 L404.95 230.07 L403.86 231.5 L403.32 232.38 L401.67 233.1 L401.06 233.12 L400.66 233.27 L399.43 233.8 L398.17 234.65 L397.62 235.08 L397.44 235.64 L397.48 236.22 L398.07 240.95 L399.9 242.35 L401.1 243.8 L401.38 244.52 L401.89 245.93 L401.34 247.99 L401.19 248.51 L399.27 251.21 L399.1 251.37 L398.35 251.88 L397.39 251.75 L397.02 252.4 L396.57 253.85 L396.61 254.68 L396.74 256.36 L396.85 256.63 L395.43 258.0 L394.7 258.28 L394.22 258.27 L393.6 258.6 L391.53 260.24 L391.42 261.21 L391.06 262.88 L390.81 263.1 L388.65 264.27 L388.26 264.26 L387.58 264.19 L386.96 264.02 L386.07 264.0 L385.29 264.51 L382.6 266.32 L379.0 269.81 L378.3 270.82 L377.67 271.93 L377.3 272.49 L376.62 272.87 L376.27 272.73 L375.84 272.86 L375.53 273.12 L374.66 273.89 L373.14 276.65 L372.36 278.1 L372.2 278.23 L371.39 278.32 L370.83 278.59 L370.3 279.34 L368.93 281.0 L367.29 282.48 L365.09 284.0 L362.31 283.4 L359.13 283.58 L358.35 283.87 L355.88 285.06 L355.49 285.48 L354.05 287.36 L353.82 288.16 L353.98 288.56 L354.34 288.79 L354.66 289.55 L354.34 290.85 L353.37 291.93 L351.46 294.58 L351.63 295.0 L351.88 297.36 L351.86 297.67 L351.47 298.23 L349.54 298.51 L349.21 298.87 L349.06 301.33 L349.08 303.3 L349.63 306.32 L350.35 306.89 L350.99 307.57 L350.46 309.24 L350.06 309.93 L349.81 310.15 L349.49 310.22 L348.48 310.77 L348.07 311.16 L347.67 312.15 L347.78 312.85 L346.47 315.18 L345.78 315.58 L344.87 315.86 L344.03 316.0 L343.14 316.63 L343.14 317.0 L343.43 318.04 L343.27 318.33 L342.51 318.82 L341.66 319.02 L340.6 319.43 L340.33 319.9 L340.1 320.97 L339.29 322.52 L338.36 323.46 L336.72 324.72 L336.4 324.85 L335.95 323.76 L335.63 322.95 L335.61 322.62 L335.81 322.02 L335.63 320.19 L335.45 319.95 L335.19 319.66 L332.68 319.76 L331.26 317.05 L330.07 316.14 L327.62 316.48 L326.25 315.96 L325.91 315.27 L324.54 314.6 L323.4 314.09 L322.8 313.96 L322.27 313.93 L321.53 314.06 L319.11 315.6 L318.95 316.84 L318.14 317.67 L316.88 318.7 L316.53 318.66 L316.12 318.54 L314.69 317.79 L314.58 316.95 L314.27 313.56 L313.19 311.18 L312.9 310.9 L311.94 309.67 L312.03 309.47 L313.6 307.78 L312.91 306.31 L313.01 305.87 L313.72 303.93 L314.78 302.1 L315.25 301.62 L315.74 301.54 L315.95 301.36 L317.94 298.94 L318.05 298.21 L318.99 295.71 L319.7 295.41 L319.71 294.42 L318.44 292.97 L317.39 292.78 L319.73 289.79 L320.59 288.7 L320.87 288.11 L320.88 287.66 L320.41 283.61 L320.02 283.34 L317.73 281.8 L317.1 281.85 L316.12 281.38 L315.99 281.19 L316.44 279.87 L316.53 278.89 L316.44 278.67 L315.83 278.48 L314.98 278.35 L314.25 278.99 L312.84 278.24 L312.17 277.01 L310.9 273.81 L311.13 272.36 L311.56 270.91 L312.3 269.15 L313.08 268.32 L313.93 265.51 L313.22 265.15 L312.83 265.15 L312.07 265.3 L311.64 264.8 L310.8 261.33 L310.47 258.18 L310.45 257.45 L310.53 257.31 L311.52 254.54 L311.08 249.68 L310.87 249.08 L309.68 248.09 L309.22 247.94 L308.47 247.88 L308.0 248.01 L306.99 247.37 L306.7 247.1 L306.51 246.91 L306.43 245.94 L306.06 244.19 L305.57 241.89 L303.79 240.17 L303.55 240.16 L303.09 239.83 L300.17 237.61 L298.62 235.52 L297.93 234.57 L297.72 234.22 L297.42 233.07 L297.38 232.55 L297.88 230.71 L296.55 228.33 L295.79 225.98 L296.79 226.11 L297.54 226.09 L298.48 225.95 L298.8 225.79 L301.01 224.01 L301.26 223.68 L301.42 223.38 L301.44 223.21 L301.43 222.93 L301.39 222.8 L301.36 222.7 L301.34 222.47 L301.33 222.35 L301.25 221.68 L301.27 221.49 L301.42 221.07 L301.44 221.04 L301.54 221.0 L301.82 220.86 L302.28 220.6 L302.81 220.27 L303.25 220.0 L303.91 219.61 L305.18 218.98 L305.49 218.69 L305.69 218.63 L305.78 218.6 L305.81 218.59 L306.46 218.25 L307.91 216.18 L308.09 215.91 L308.48 214.7 L308.33 214.45 L307.55 213.54 L307.14 213.28 L306.79 212.8 L306.7 212.21 L307.14 211.57 L309.81 209.7 L311.24 209.17 L311.78 209.4 L312.06 209.41 L313.36 208.7 L315.74 207.35 L316.77 206.26 L317.94 204.23 L320.13 203.06 L321.61 201.6 L322.87 200.27 L323.14 199.95 L323.71 199.33 L326.41 199.39 L327.0 200.58 L326.67 201.14 L325.9 201.82 L325.29 202.8 L326.9 204.51 L327.46 205.07 L328.2 205.78 L328.65 206.28 L328.84 207.33 L328.73 208.36 L328.62 209.05 L328.11 210.46 L327.77 210.95 L328.28 213.98 L328.91 214.42 L329.13 214.49 L329.42 214.55 L330.47 214.52 L330.63 214.46 L330.89 214.35 L333.41 214.74 L334.46 215.21 L336.63 216.59 L338.78 219.97 L339.05 220.93 L340.88 222.78 L342.19 222.86 L342.37 223.48 L343.03 227.71 L342.39 230.99 L341.87 231.25 L340.91 231.78 L339.71 232.77 L340.64 234.33 L341.47 233.98 L342.24 233.61 L342.56 233.15 L342.69 232.84 L342.84 232.48 L342.67 231.82 L342.65 231.07 L342.93 229.72 L343.09 229.35 L343.25 229.1 L343.44 228.9 L344.28 228.54 L345.56 228.59 L346.29 227.85 L346.87 226.1 L347.37 225.38 L347.49 224.6 L347.77 223.96 L348.86 225.08 L350.41 225.84 L351.81 226.06 L352.26 225.99 L352.44 225.51 L352.79 225.24 L354.22 224.9 L355.95 225.13 L356.45 225.21 L357.46 225.65 L358.8 225.64 L359.58 225.3 L360.93 224.19 L361.02 223.94 L361.07 223.51 L361.22 222.0 L361.2 220.5 L361.18 220.3 L361.01 219.63 L359.92 219.35 L358.83 216.87 L358.67 216.15 L358.71 215.4 L358.94 214.79 L359.51 214.81 L360.03 214.33 L360.08 213.79 L359.95 212.79 L359.61 210.95 L358.64 210.77 L357.84 210.52 L357.21 209.27 L357.31 208.84 L357.79 207.27 L358.64 206.44 L359.4 206.0 L359.62 206.05 L360.47 206.01 L361.78 205.66 L362.06 205.54 L362.52 205.14 L363.09 204.34 L363.76 203.3 L360.82 198.81 L358.86 197.3 L357.36 197.01 L355.31 197.32 L354.66 196.72 L354.05 195.87 L354.41 195.35 L354.75 195.03 L355.11 194.85 L355.47 194.73 L355.9 194.38 L356.56 193.65 L356.71 193.36 L356.73 192.93 L356.75 192.34 L356.65 191.7 L356.48 191.23 L356.25 190.96 L356.03 190.76 L355.75 190.51 L355.57 190.29 L354.42 189.76 L352.79 190.02 L352.59 190.66 L352.95 191.04 L352.96 191.44 L352.71 192.22 L351.81 192.69 L351.58 192.69 L350.73 192.07 L349.34 190.81 L349.24 190.67 L349.27 190.23 L349.11 190.05 L343.72 189.28 L351.58 184.37 L352.89 183.28 L353.7 182.12 L354.07 181.28 L354.24 180.3 L354.35 179.66 L353.69 179.24 L353.48 179.1 L353.44 179.08 L352.34 178.49 L351.55 178.25 L350.69 178.22 L349.78 178.5 L348.6 179.06 L348.25 179.25 L347.91 179.52 L347.91 179.9 L347.61 180.5 L346.91 181.53 L346.48 182.11 L346.01 182.45 L345.47 182.65 L344.88 182.74 L343.88 182.7 L342.88 182.48 L342.07 182.14 L341.58 181.75 L341.11 181.05 L341.03 180.83 L341.03 180.83 L341.0 178.53 L341.44 178.07 L341.87 178.03 L342.13 177.74 L341.96 177.11 L341.65 176.77 L340.17 175.39 L338.81 174.42 L339.82 173.5 L339.28 170.79 L339.3 170.42 L341.11 168.42 L342.4 167.61 L343.6 167.28 L345.08 167.08 L346.7 166.66 L347.14 166.26 L346.78 165.82 L346.42 165.54 L344.23 164.64 L343.67 164.96 L343.46 165.09 L342.56 164.19 L341.86 163.43 L341.39 162.61 L341.79 159.47 L342.66 157.27 L343.27 156.9 L343.35 154.68 L343.12 154.36 L340.62 151.2 L340.03 150.63 L339.24 150.21 L338.32 149.9 L336.17 149.36 L334.99 149.18 L334.84 149.11 L334.77 148.76 L334.85 148.09 L334.4 146.97 L333.8 145.91 L333.13 145.35 L332.17 144.99 L331.79 144.25 L331.68 143.78 L331.39 140.75 L331.53 140.03 L331.52 138.96 L330.78 137.75 L330.47 137.46 L329.53 136.91 L328.47 135.79 L327.87 135.04 L327.33 134.29 L327.44 133.98 L327.68 133.85 L328.63 132.2 L328.76 131.51 L329.13 129.5 L329.04 128.77 L328.6 129.0 L327.92 129.71 L327.56 130.29 L327.14 130.54 L326.42 130.74 L324.66 130.96 L323.94 129.85 L323.87 129.5 L324.19 128.8 L324.56 124.7 L324.19 123.47 L323.31 122.61 L323.56 122.22 L324.96 120.51 L325.33 118.89 L325.28 118.75 L324.68 118.42 L323.07 118.41 L321.28 119.0 L318.02 118.71 L316.32 117.77 L314.84 116.76 L314.4 116.54 L313.95 116.77 L313.84 117.0 L313.44 117.32 L312.91 117.57 L312.4 117.69 L309.21 117.24 L308.52 117.08 L307.64 116.67 L305.83 115.43 L303.86 115.15 L302.91 112.9 L301.83 109.09 L301.65 108.79 L301.01 108.02 L302.11 107.32 L304.22 106.13 L304.38 106.02 L304.72 105.33 L304.86 104.5 L304.75 101.12 L303.89 100.55 L303.06 99.79 L303.03 99.55 L303.74 97.22 L304.96 96.15 L305.36 96.15 L305.87 96.45 L306.43 96.52 L307.96 96.18 L308.44 95.8 L310.05 94.14 L310.53 93.04 L314.1 90.32 L315.56 89.3 L316.6 88.62 L319.01 87.23 L320.34 86.84 L320.8 86.98 L321.18 87.29 L322.12 87.78 L322.42 87.7 L323.27 87.22 L323.65 86.9 L324.88 84.66 L328.33 81.78 L329.08 81.82 L329.68 81.75 L331.24 81.38 L332.33 80.05 L332.41 79.38 L332.51 78.67 L333.75 76.65 L335.55 74.86 L335.89 74.59 L336.97 73.74 L337.33 73.5 L337.78 73.31 L339.26 72.8 L340.67 73.37 L341.21 73.72 L343.36 73.21 L343.81 71.91 L344.02 71.68 L346.45 71.1 L346.68 71.19 Z",
+   "lx": 356.02,
+   "ly": 194.34
+  },
+  {
+   "name": "常山县",
+   "d": "M301.01 108.02 L301.65 108.79 L301.83 109.09 L302.91 112.9 L303.86 115.15 L302.96 116.28 L301.98 116.65 L301.6 116.88 L301.63 117.68 L301.84 118.33 L302.04 118.52 L302.34 119.0 L302.56 119.34 L302.31 121.63 L302.04 121.87 L300.62 122.82 L299.98 123.25 L299.17 123.39 L298.88 123.52 L298.38 123.76 L297.88 124.01 L297.92 124.2 L298.07 124.83 L298.17 125.71 L298.08 127.51 L297.59 127.76 L297.14 127.67 L296.71 127.75 L296.0 128.27 L295.88 129.59 L296.2 132.14 L296.56 132.82 L296.8 133.64 L296.71 134.24 L295.34 136.84 L292.72 138.41 L292.66 138.99 L292.22 140.25 L291.78 140.66 L291.22 141.11 L290.52 141.44 L289.94 141.59 L289.39 141.45 L288.92 141.85 L286.94 144.11 L286.76 144.56 L286.57 145.79 L286.54 146.18 L286.42 148.09 L286.41 150.04 L285.75 151.75 L284.92 152.42 L284.18 153.1 L283.76 153.96 L284.01 155.83 L284.19 156.32 L284.4 156.81 L284.72 157.29 L284.79 158.28 L284.62 159.28 L284.32 159.85 L284.01 159.94 L283.71 160.23 L283.34 161.94 L283.24 163.4 L283.4 165.83 L282.71 166.31 L280.69 169.72 L280.31 170.79 L281.35 174.06 L282.25 176.21 L282.16 178.02 L281.79 179.45 L282.6 182.03 L284.04 182.47 L284.31 182.24 L284.79 182.3 L285.68 183.18 L286.38 184.32 L287.48 185.86 L288.18 185.84 L289.18 186.49 L291.91 189.56 L292.2 189.94 L291.06 191.72 L288.58 193.74 L288.27 194.08 L288.18 194.44 L288.8 194.54 L289.09 194.49 L289.69 194.31 L290.27 193.83 L291.55 193.53 L291.78 193.6 L292.03 193.83 L292.08 193.98 L292.07 194.35 L291.89 194.84 L290.43 196.78 L290.4 197.53 L290.33 199.01 L289.65 201.35 L288.38 202.64 L286.98 203.9 L286.25 204.08 L286.11 204.15 L285.43 204.75 L284.88 205.83 L284.6 206.39 L284.52 206.87 L283.98 207.38 L283.55 207.5 L282.75 207.52 L281.73 207.43 L280.75 207.55 L279.98 207.85 L279.89 208.16 L280.12 208.41 L280.49 208.79 L280.23 209.12 L279.41 209.74 L278.86 210.06 L278.21 210.35 L278.38 210.95 L278.41 212.95 L277.94 213.74 L276.18 214.31 L275.28 214.58 L273.28 215.09 L272.84 214.96 L272.06 214.9 L268.72 216.19 L267.62 216.93 L264.62 217.6 L264.06 217.33 L262.87 216.7 L262.6 216.5 L262.5 216.26 L261.21 215.54 L259.38 214.66 L258.47 214.6 L256.92 215.52 L256.76 216.0 L257.03 216.91 L257.65 217.58 L258.37 218.51 L258.76 219.53 L258.73 219.74 L258.04 220.93 L255.23 223.66 L254.72 223.86 L253.39 223.93 L253.11 223.93 L249.56 223.54 L245.53 221.95 L244.42 221.31 L243.2 221.54 L243.1 221.93 L242.91 223.16 L241.94 224.32 L241.69 224.39 L236.78 224.49 L235.72 223.98 L235.13 223.85 L234.83 223.91 L233.01 224.79 L232.43 225.44 L232.49 226.98 L231.8 228.28 L231.2 228.65 L230.56 228.94 L229.18 227.96 L229.01 227.55 L228.88 226.4 L228.53 225.75 L227.93 225.06 L227.31 225.4 L227.18 225.76 L226.84 225.86 L225.17 225.92 L222.19 226.12 L221.68 226.25 L221.27 226.96 L221.55 228.35 L222.27 228.93 L222.68 229.89 L222.02 230.93 L221.25 231.03 L220.5 232.92 L219.52 235.36 L217.51 239.43 L216.54 240.68 L215.85 241.46 L215.52 241.69 L215.01 242.27 L214.21 243.24 L214.31 243.9 L214.45 244.77 L214.51 245.11 L214.56 245.39 L213.7 246.21 L213.47 246.37 L213.17 246.34 L211.94 245.98 L210.78 245.51 L210.11 244.89 L210.0 244.44 L210.72 243.31 L210.71 243.09 L210.52 241.43 L210.17 241.0 L209.49 241.37 L209.43 241.6 L209.79 241.69 L209.76 241.92 L209.3 242.09 L208.33 242.02 L207.91 241.88 L207.0 241.3 L206.46 240.82 L206.1 240.36 L203.64 239.32 L202.29 239.13 L201.34 239.06 L200.76 239.2 L199.79 239.75 L197.34 238.89 L197.15 237.84 L197.06 237.75 L196.69 237.44 L196.55 237.39 L196.4 237.4 L195.95 237.47 L192.38 238.18 L191.65 238.44 L191.01 238.04 L190.3 237.71 L190.04 237.98 L189.58 238.7 L189.54 241.08 L189.68 241.23 L189.11 242.5 L188.73 243.18 L187.33 243.96 L186.95 244.05 L186.1 244.04 L185.63 244.1 L185.22 244.48 L184.83 244.13 L184.75 243.75 L185.04 240.7 L185.82 240.12 L186.02 239.95 L185.6 239.33 L184.22 238.15 L183.2 237.51 L182.96 237.25 L182.41 235.55 L182.58 235.22 L182.86 234.77 L182.04 233.3 L181.32 232.59 L180.09 231.94 L178.13 231.36 L177.82 231.29 L176.98 231.29 L176.68 231.81 L174.79 231.87 L173.77 231.62 L172.79 231.35 L172.07 231.54 L171.73 231.57 L170.62 231.65 L170.05 231.46 L168.8 230.64 L168.25 230.14 L166.98 230.1 L163.64 229.39 L161.97 228.68 L159.19 225.77 L159.59 224.86 L161.75 223.44 L161.08 222.56 L160.39 221.95 L159.78 221.62 L159.27 221.07 L158.76 218.92 L158.4 217.19 L157.69 216.51 L157.32 216.31 L156.56 215.09 L156.53 214.6 L156.42 213.89 L156.33 213.57 L155.52 212.07 L155.19 211.48 L154.72 210.31 L154.74 210.0 L154.74 209.21 L154.7 208.75 L154.6 208.15 L154.49 207.66 L154.14 207.14 L153.57 206.61 L153.32 206.46 L152.87 205.57 L152.26 204.22 L152.21 203.64 L151.86 201.75 L151.36 199.68 L151.1 199.47 L150.69 199.19 L150.4 199.12 L149.91 199.2 L148.16 198.94 L147.39 198.39 L146.82 197.79 L146.82 197.57 L147.53 196.04 L148.37 195.18 L148.87 194.99 L149.05 195.09 L151.42 196.82 L152.2 196.98 L157.62 197.84 L157.85 197.59 L158.61 196.99 L158.78 196.93 L161.81 197.45 L164.22 197.91 L165.89 197.75 L171.81 196.39 L174.26 195.46 L176.97 195.15 L177.89 194.49 L178.69 193.26 L179.01 192.62 L178.37 191.96 L177.25 191.23 L176.34 190.23 L177.34 187.82 L178.39 185.89 L179.53 184.11 L183.71 181.74 L186.38 180.32 L190.34 179.07 L194.43 179.23 L195.3 179.95 L195.57 180.35 L196.98 182.31 L197.2 182.46 L197.77 182.73 L197.89 182.75 L200.58 181.97 L201.82 180.47 L201.92 179.99 L202.21 178.92 L202.39 178.39 L202.83 177.89 L203.2 177.8 L203.96 177.82 L204.39 177.36 L206.23 174.97 L206.54 174.5 L206.53 174.4 L206.28 174.3 L205.24 173.2 L204.97 172.34 L205.91 170.95 L206.82 168.51 L206.75 166.98 L207.23 165.24 L207.64 164.5 L209.43 163.29 L209.61 163.28 L210.16 163.46 L210.34 164.1 L210.06 164.48 L210.42 164.99 L212.78 164.84 L214.14 164.45 L215.66 163.9 L217.1 163.27 L219.78 161.23 L219.87 160.81 L219.77 160.03 L220.49 158.72 L220.75 158.27 L220.96 157.92 L221.55 157.46 L222.27 157.17 L223.26 156.92 L223.59 156.69 L226.08 154.63 L226.73 153.98 L228.27 152.32 L228.69 151.54 L229.09 151.22 L229.69 151.13 L230.97 150.73 L231.5 149.89 L231.6 149.68 L231.55 148.83 L231.94 147.86 L234.31 145.87 L234.72 146.2 L234.77 146.36 L235.36 146.34 L235.94 146.12 L237.07 145.46 L239.79 143.42 L239.97 142.77 L241.89 141.56 L243.23 141.05 L245.19 139.44 L246.56 137.87 L247.1 137.16 L247.44 136.22 L247.34 135.73 L247.1 135.04 L246.81 134.43 L246.44 133.93 L246.26 133.57 L246.24 133.29 L246.51 132.06 L246.84 131.45 L249.01 128.75 L249.63 128.21 L250.22 128.04 L250.51 127.98 L251.11 128.32 L251.4 128.34 L251.99 127.92 L256.74 123.9 L258.6 122.25 L258.91 121.77 L259.57 120.77 L260.06 118.17 L260.16 117.38 L259.89 116.4 L259.53 115.74 L259.48 115.37 L259.78 115.19 L261.05 114.62 L261.79 114.34 L262.03 114.33 L263.72 114.6 L265.34 114.35 L270.33 113.21 L274.46 111.99 L275.03 111.84 L278.62 111.28 L279.3 111.42 L280.32 111.71 L280.84 112.25 L281.23 112.6 L282.23 113.51 L287.72 116.57 L287.92 116.45 L289.71 115.0 L290.26 114.15 L290.53 113.26 L290.55 112.62 L292.44 112.46 L293.12 112.51 L293.64 112.41 L293.87 111.97 L294.15 110.75 L294.15 109.88 L297.3 107.91 L298.05 107.88 L300.32 107.86 L300.72 107.89 L301.01 108.02 Z",
+   "lx": 234.68,
+   "ly": 184.13
+  },
+  {
+   "name": "开化县",
+   "d": "M174.09 26.73 L174.04 27.11 L174.09 31.09 L176.77 34.24 L177.34 34.37 L177.87 34.32 L178.72 34.3 L179.66 34.46 L180.31 34.61 L181.97 36.65 L182.43 38.27 L184.0 39.86 L185.22 40.2 L187.3 42.05 L188.19 43.0 L188.94 43.17 L189.82 43.24 L190.1 43.03 L191.15 42.67 L193.06 42.95 L195.62 44.21 L195.75 44.37 L195.52 44.92 L195.2 45.07 L194.63 45.43 L192.94 47.91 L192.82 48.09 L193.29 49.0 L193.7 49.3 L194.98 49.46 L196.24 50.46 L195.63 51.87 L195.65 52.34 L196.25 53.01 L196.79 53.45 L200.56 56.13 L201.05 56.44 L202.72 57.42 L203.78 57.88 L205.91 58.03 L208.04 58.58 L208.77 59.16 L208.71 59.47 L208.86 60.47 L209.18 61.13 L209.66 61.79 L210.72 63.04 L212.94 62.57 L213.44 62.45 L214.02 62.06 L214.49 61.64 L215.33 60.86 L216.72 60.08 L217.99 59.94 L218.28 60.02 L219.06 60.36 L219.79 61.54 L222.17 61.86 L222.63 61.58 L228.1 60.52 L230.07 62.17 L230.02 62.74 L229.56 64.54 L229.95 65.45 L232.54 68.18 L232.83 68.36 L235.28 69.79 L237.03 69.68 L238.04 69.38 L238.6 68.47 L239.0 68.36 L240.05 68.35 L244.38 69.13 L244.42 69.15 L244.47 69.14 L244.86 69.21 L245.35 69.82 L245.65 70.15 L246.52 71.05 L247.33 71.24 L247.89 70.61 L252.76 72.18 L254.12 73.25 L254.2 73.62 L254.29 74.51 L254.22 75.5 L255.04 76.73 L257.12 78.4 L257.9 78.85 L258.47 79.24 L258.51 80.22 L257.96 81.43 L257.93 82.03 L259.47 83.72 L261.26 85.86 L262.75 87.78 L263.01 88.23 L263.29 88.81 L264.3 91.47 L264.61 92.53 L264.39 92.99 L264.11 93.05 L260.52 91.73 L259.08 90.16 L258.85 89.5 L258.77 88.72 L258.46 88.05 L257.23 87.15 L256.71 87.37 L256.28 87.73 L256.2 87.92 L255.05 90.84 L255.01 90.98 L255.94 92.18 L257.74 96.05 L257.82 96.29 L257.85 97.2 L257.54 97.91 L256.94 98.7 L255.92 100.54 L259.58 106.52 L259.83 106.58 L260.32 106.32 L260.87 106.05 L261.22 105.96 L262.38 105.92 L262.76 106.03 L263.06 106.3 L263.12 106.58 L263.46 108.9 L263.52 109.43 L263.34 110.84 L262.99 111.35 L262.5 111.63 L261.51 112.68 L261.91 114.25 L262.03 114.33 L261.79 114.34 L261.05 114.62 L259.78 115.19 L259.48 115.37 L259.53 115.74 L259.89 116.4 L260.16 117.38 L260.06 118.17 L259.57 120.77 L258.91 121.77 L258.6 122.25 L256.74 123.9 L251.99 127.92 L251.4 128.34 L251.11 128.32 L250.51 127.98 L250.22 128.04 L249.63 128.21 L249.01 128.75 L246.84 131.45 L246.51 132.06 L246.24 133.29 L246.26 133.57 L246.44 133.93 L246.81 134.43 L247.1 135.04 L247.34 135.73 L247.44 136.22 L247.1 137.16 L246.56 137.87 L245.19 139.44 L243.23 141.05 L241.89 141.56 L239.97 142.77 L239.79 143.42 L237.07 145.46 L235.94 146.12 L235.36 146.34 L234.77 146.36 L234.72 146.2 L234.31 145.87 L231.94 147.86 L231.55 148.83 L231.6 149.68 L231.5 149.89 L230.97 150.73 L229.69 151.13 L229.09 151.22 L228.69 151.54 L228.27 152.32 L226.73 153.98 L226.08 154.63 L223.59 156.69 L223.26 156.92 L222.27 157.17 L221.55 157.46 L220.96 157.92 L220.75 158.27 L220.49 158.72 L219.77 160.03 L219.87 160.81 L219.78 161.23 L217.1 163.27 L215.66 163.9 L214.14 164.45 L212.78 164.84 L210.42 164.99 L210.06 164.48 L210.34 164.1 L210.16 163.46 L209.61 163.28 L209.43 163.29 L207.64 164.5 L207.23 165.24 L206.75 166.98 L206.82 168.51 L205.91 170.95 L204.97 172.34 L205.24 173.2 L206.28 174.3 L206.53 174.4 L206.54 174.5 L206.23 174.97 L204.39 177.36 L203.96 177.82 L203.2 177.8 L202.83 177.89 L202.39 178.39 L202.21 178.92 L201.92 179.99 L201.82 180.47 L200.58 181.97 L197.89 182.75 L197.77 182.73 L197.2 182.46 L196.98 182.31 L195.57 180.35 L195.3 179.95 L194.43 179.23 L190.34 179.07 L186.38 180.32 L183.71 181.74 L179.53 184.11 L178.39 185.89 L177.34 187.82 L176.34 190.23 L177.25 191.23 L178.37 191.96 L179.01 192.62 L178.69 193.26 L177.89 194.49 L176.97 195.15 L174.26 195.46 L171.81 196.39 L165.89 197.75 L164.22 197.91 L161.81 197.45 L158.78 196.93 L158.61 196.99 L157.85 197.59 L157.62 197.84 L152.2 196.98 L151.42 196.82 L149.05 195.09 L148.87 194.99 L148.37 195.18 L147.53 196.04 L146.82 197.57 L146.82 197.79 L146.16 197.81 L145.82 197.91 L145.69 198.45 L145.28 198.84 L144.89 199.04 L144.42 198.93 L142.86 198.7 L142.11 198.83 L140.86 199.25 L140.24 199.81 L139.31 200.36 L137.29 201.44 L136.38 201.51 L135.4 201.76 L134.98 202.1 L134.55 202.43 L133.77 202.62 L133.02 202.68 L130.92 203.34 L130.55 203.46 L129.67 203.83 L129.17 204.35 L128.29 203.96 L127.65 203.57 L127.11 202.68 L127.16 202.16 L127.65 200.66 L128.23 199.93 L129.53 199.36 L130.36 199.33 L131.55 198.66 L131.8 198.09 L132.31 197.33 L134.01 195.48 L134.81 195.14 L135.79 194.39 L136.59 193.67 L137.9 191.94 L137.83 191.22 L137.09 190.52 L136.51 190.19 L135.64 189.87 L135.08 189.94 L133.97 190.3 L132.8 189.83 L132.74 189.74 L132.42 188.89 L132.61 188.44 L132.21 188.16 L131.4 188.22 L130.58 188.78 L129.48 188.21 L128.96 187.74 L129.01 187.44 L128.82 186.74 L128.01 184.93 L126.72 183.6 L125.06 181.19 L123.93 181.13 L122.31 180.18 L119.15 178.51 L118.34 178.19 L117.84 178.43 L116.19 178.98 L115.56 179.13 L115.53 178.97 L115.45 178.51 L115.27 177.99 L113.15 178.67 L112.76 178.82 L112.54 179.44 L112.48 180.55 L110.62 180.21 L108.56 179.18 L106.09 175.91 L105.96 175.49 L106.55 174.94 L107.33 173.86 L108.2 171.57 L107.22 169.66 L106.61 169.17 L105.99 169.5 L105.36 170.0 L104.61 170.57 L103.88 170.57 L103.42 170.82 L102.66 171.25 L101.55 173.05 L101.45 174.87 L101.37 176.33 L101.3 176.75 L98.85 177.22 L98.11 177.13 L98.57 176.42 L99.33 175.32 L100.11 174.74 L100.96 172.99 L100.91 171.93 L100.51 170.56 L100.28 170.45 L99.26 170.9 L98.75 172.39 L98.4 173.47 L97.16 174.59 L96.0 173.16 L95.81 172.89 L95.23 171.91 L94.48 170.12 L94.85 169.3 L94.76 166.08 L94.71 165.85 L94.39 164.61 L93.88 164.4 L93.38 164.48 L93.17 164.41 L92.5 163.59 L91.78 162.49 L90.73 163.05 L89.79 162.89 L89.35 162.26 L89.1 161.5 L89.12 161.36 L89.56 160.85 L89.58 160.52 L89.47 160.3 L89.25 160.12 L88.6 159.64 L88.22 159.39 L87.83 159.22 L87.57 158.75 L87.44 157.43 L89.75 155.39 L90.72 155.03 L91.2 154.68 L91.25 154.51 L90.91 153.96 L90.71 153.78 L90.34 153.76 L89.9 153.28 L90.27 152.12 L90.62 151.59 L90.66 151.02 L90.57 150.82 L90.4 150.61 L88.66 149.03 L88.04 148.84 L87.37 148.84 L86.74 148.92 L85.27 148.11 L84.52 147.54 L83.5 147.01 L83.21 146.86 L82.45 146.81 L81.69 146.93 L81.13 146.83 L80.54 146.55 L80.04 146.21 L78.95 145.26 L78.69 144.7 L78.36 143.59 L78.95 142.25 L79.64 140.76 L80.69 139.84 L81.42 139.81 L83.55 139.3 L83.82 139.16 L83.73 138.23 L83.28 137.59 L81.4 136.31 L80.2 135.92 L79.23 135.34 L78.92 134.18 L78.98 134.08 L79.56 133.9 L79.73 133.66 L80.56 131.64 L80.74 131.16 L80.75 131.02 L80.63 129.97 L80.47 128.31 L80.67 127.33 L80.73 125.87 L80.71 125.28 L79.85 124.2 L78.87 123.85 L77.93 123.51 L76.96 123.33 L76.67 123.34 L76.09 122.7 L75.8 122.19 L75.9 121.48 L76.09 121.18 L76.91 120.62 L77.39 120.16 L77.85 119.47 L77.63 119.01 L77.41 117.66 L77.39 117.47 L78.54 115.04 L79.45 113.33 L79.94 112.6 L79.97 112.08 L79.35 111.45 L79.83 109.28 L80.1 108.74 L81.34 107.42 L82.16 106.8 L82.69 106.95 L83.54 107.2 L83.86 107.34 L83.95 107.56 L84.41 107.69 L84.65 107.73 L87.63 107.29 L90.67 106.81 L92.69 106.62 L93.13 106.27 L93.39 105.92 L93.14 105.4 L92.58 105.45 L92.41 105.25 L91.94 104.29 L91.79 102.8 L91.92 102.32 L92.68 101.15 L92.7 99.98 L92.07 98.63 L91.14 98.1 L90.66 98.04 L90.56 97.95 L90.57 97.62 L90.58 97.3 L90.67 95.75 L91.33 94.91 L91.62 94.02 L91.66 92.98 L91.66 91.81 L91.53 89.45 L91.44 88.75 L91.1 86.61 L90.83 86.22 L90.46 85.69 L89.85 85.73 L89.41 85.5 L89.47 84.93 L89.75 84.56 L90.39 84.11 L91.29 83.99 L93.08 84.36 L93.52 84.5 L94.02 84.83 L94.53 85.03 L97.71 86.0 L98.91 86.26 L99.38 86.2 L100.12 85.88 L100.45 85.33 L100.44 85.09 L100.69 84.58 L101.08 84.29 L102.24 83.53 L102.55 83.39 L103.07 83.53 L104.02 84.33 L107.46 85.75 L108.63 86.09 L109.36 86.2 L110.16 85.77 L110.78 85.46 L111.74 85.12 L113.31 85.19 L114.45 85.62 L115.0 85.94 L115.56 86.28 L116.77 86.76 L119.26 87.04 L119.89 86.88 L120.04 86.25 L119.97 85.83 L119.62 85.44 L119.03 83.82 L120.9 82.66 L122.62 81.79 L122.75 81.5 L121.4 78.77 L120.17 78.18 L118.93 77.94 L118.72 77.43 L118.91 76.89 L119.03 76.71 L119.31 76.56 L120.05 76.37 L120.99 75.88 L122.82 74.62 L123.93 73.11 L123.73 72.41 L123.8 71.69 L123.98 71.37 L124.54 70.82 L127.18 68.75 L128.67 68.46 L128.8 68.5 L131.34 67.71 L131.83 66.83 L131.98 66.44 L132.07 64.04 L131.95 63.35 L131.79 62.77 L131.15 61.88 L130.41 61.02 L130.23 60.25 L130.45 59.86 L130.68 59.78 L131.21 59.28 L131.62 58.12 L131.7 57.38 L131.59 57.24 L130.82 56.63 L129.7 55.84 L128.99 55.55 L127.56 54.31 L127.01 53.82 L126.3 53.16 L126.2 52.63 L126.96 52.04 L127.12 51.98 L127.92 51.89 L128.35 51.95 L128.98 52.52 L129.23 52.56 L130.21 51.93 L130.64 51.55 L131.14 50.35 L131.1 49.72 L131.43 49.24 L133.04 47.06 L133.86 45.22 L134.06 44.68 L135.21 43.52 L136.79 42.77 L137.26 42.55 L137.81 42.51 L138.7 42.84 L140.15 42.68 L141.15 42.28 L142.85 41.46 L143.9 40.96 L144.2 40.72 L147.78 42.12 L148.86 41.88 L151.09 41.68 L151.9 42.36 L152.76 42.95 L152.97 42.98 L154.2 42.68 L154.54 42.4 L154.7 42.21 L155.87 42.04 L157.48 42.68 L157.42 43.11 L157.55 43.95 L157.66 44.2 L159.12 44.62 L159.77 44.68 L162.53 44.07 L163.52 43.81 L164.81 43.12 L164.92 42.51 L165.04 39.94 L164.83 39.47 L164.63 38.26 L164.76 37.05 L164.86 36.6 L165.32 35.79 L165.36 35.06 L165.18 34.63 L164.72 34.06 L164.26 32.72 L164.15 31.42 L164.18 30.95 L163.81 29.52 L163.21 28.79 L163.01 28.25 L162.45 26.37 L162.27 25.43 L162.01 21.91 L162.46 20.86 L162.93 20.5 L163.65 20.0 L164.45 20.47 L165.1 20.75 L165.58 20.79 L166.16 20.67 L166.77 20.14 L167.29 20.11 L168.28 20.21 L169.76 20.61 L169.81 21.31 L169.98 22.25 L171.33 24.62 L172.75 25.4 L173.62 26.1 L173.79 26.47 L174.09 26.73 Z",
+   "lx": 168.12,
+   "ly": 117.07
+  },
+  {
+   "name": "龙游县",
+   "d": "M457.31 97.6 L456.58 98.17 L455.47 100.04 L455.14 101.14 L452.86 103.47 L451.33 104.35 L450.45 104.66 L449.36 104.94 L449.13 108.5 L449.42 109.18 L449.98 109.82 L450.37 110.08 L450.44 110.2 L450.71 111.15 L449.63 113.18 L447.7 113.4 L446.31 113.12 L446.02 113.26 L445.61 113.86 L445.76 114.29 L445.84 114.37 L446.85 114.8 L448.62 115.53 L448.95 115.54 L449.3 115.34 L449.48 115.15 L449.63 114.85 L449.35 114.62 L450.2 114.4 L451.85 114.92 L452.11 115.25 L452.38 115.75 L452.93 118.35 L452.95 119.66 L452.81 120.88 L452.46 120.55 L452.09 120.59 L451.84 120.96 L451.8 121.03 L451.83 121.53 L452.01 122.2 L452.43 123.7 L453.13 125.54 L453.24 125.71 L453.74 125.95 L455.21 128.61 L455.11 128.88 L455.02 129.04 L454.59 129.42 L454.3 129.41 L454.18 129.61 L454.16 130.05 L454.52 130.82 L455.12 131.94 L455.41 132.49 L456.07 131.97 L456.4 131.75 L459.01 131.97 L459.83 132.34 L460.11 132.82 L460.56 133.78 L460.69 134.21 L460.73 134.46 L460.62 134.73 L460.17 135.21 L460.23 136.16 L460.26 136.61 L461.15 137.39 L462.14 137.38 L464.29 137.76 L465.83 138.63 L465.99 139.47 L466.12 140.05 L467.23 141.88 L467.72 142.13 L468.11 142.06 L468.58 141.74 L468.74 141.69 L470.54 143.26 L470.78 143.77 L470.59 144.17 L470.38 143.93 L470.28 143.94 L470.05 144.29 L469.95 144.61 L469.92 146.55 L470.36 146.93 L471.99 148.2 L472.15 148.35 L472.21 148.3 L473.66 147.97 L473.99 147.97 L474.11 148.01 L474.13 147.97 L475.15 147.39 L475.91 146.14 L476.3 145.67 L476.93 145.28 L477.73 145.09 L478.15 145.21 L478.14 145.24 L478.14 145.25 L478.32 145.41 L478.48 145.56 L478.44 145.69 L478.33 145.82 L478.21 145.95 L478.14 146.03 L478.04 146.15 L477.9 146.31 L478.05 146.41 L478.04 146.46 L478.82 147.77 L479.41 148.64 L479.81 149.04 L480.29 149.34 L480.62 149.5 L480.66 149.49 L481.14 150.82 L481.33 151.94 L481.21 151.96 L481.19 151.99 L480.64 152.65 L480.24 152.78 L478.65 154.11 L477.68 155.96 L477.65 156.2 L478.15 157.12 L479.4 159.15 L480.44 159.88 L480.55 160.6 L480.59 160.91 L480.18 162.97 L479.83 163.53 L478.97 162.93 L478.32 162.82 L477.86 165.03 L478.23 167.08 L478.0 168.04 L477.13 169.47 L476.28 171.25 L476.24 171.47 L476.07 172.81 L476.2 173.95 L477.84 177.65 L478.5 177.94 L479.0 178.31 L478.66 179.72 L478.62 179.89 L478.31 180.57 L477.83 181.12 L477.48 181.41 L476.93 182.18 L476.92 182.69 L476.61 184.22 L476.13 184.81 L475.09 186.27 L474.17 188.21 L474.12 191.2 L475.34 192.68 L476.39 193.59 L477.73 193.85 L478.23 193.85 L478.57 194.72 L478.75 195.63 L478.4 197.8 L480.02 201.34 L480.97 202.8 L482.13 203.02 L482.85 203.64 L483.63 204.92 L484.16 206.23 L484.2 206.62 L484.01 208.1 L483.94 208.49 L483.74 208.99 L483.62 208.96 L483.26 208.61 L482.7 209.31 L482.07 210.69 L481.71 211.55 L481.57 213.29 L481.24 214.2 L480.77 215.44 L480.46 215.78 L480.19 215.86 L478.75 215.74 L478.54 215.61 L478.37 215.17 L476.07 215.05 L474.21 215.7 L473.44 216.55 L474.03 216.9 L473.37 220.19 L473.17 222.55 L473.25 222.79 L473.52 222.99 L474.21 222.79 L475.28 222.37 L476.09 221.99 L477.39 221.61 L478.12 221.55 L478.72 221.52 L480.04 222.02 L481.02 222.68 L481.08 223.09 L480.95 223.54 L480.45 223.33 L480.66 223.98 L481.13 225.02 L482.11 225.93 L483.33 226.24 L483.93 227.15 L484.08 227.47 L483.92 227.99 L480.98 231.99 L479.78 233.58 L476.55 234.64 L476.53 233.8 L475.69 232.46 L473.96 232.13 L473.6 232.19 L473.34 232.6 L472.36 233.63 L470.92 234.73 L470.2 234.97 L469.71 234.81 L468.98 234.25 L468.37 234.01 L466.68 233.75 L465.22 234.09 L464.1 234.54 L463.17 234.96 L462.03 234.5 L461.34 233.85 L459.97 234.37 L459.64 235.23 L460.03 235.68 L460.16 235.7 L460.52 235.52 L460.53 235.08 L461.03 234.73 L461.52 234.76 L461.71 234.94 L462.11 235.43 L462.82 236.61 L462.81 236.87 L462.52 237.35 L462.07 237.96 L461.5 238.25 L460.18 237.66 L459.85 237.69 L458.18 239.78 L458.37 240.13 L458.72 240.37 L459.0 240.54 L457.08 242.53 L455.42 244.57 L454.6 245.64 L454.57 246.08 L454.87 246.72 L454.26 247.26 L453.0 247.56 L451.44 247.75 L450.3 247.78 L446.13 246.54 L446.1 246.52 L446.05 246.54 L446.0 246.44 L445.21 245.53 L444.66 244.82 L444.47 244.66 L444.32 244.55 L444.09 244.5 L443.82 244.49 L443.79 244.49 L443.64 244.51 L443.54 244.65 L443.18 244.7 L443.07 244.68 L443.0 244.57 L442.96 244.28 L442.89 244.29 L442.75 244.33 L442.19 244.82 L442.25 245.67 L442.16 245.79 L441.73 246.08 L440.47 245.96 L440.26 245.82 L440.35 244.77 L440.52 244.45 L440.75 244.31 L440.88 243.55 L440.47 243.38 L437.61 242.63 L437.44 242.72 L436.16 243.44 L435.67 243.74 L435.51 244.04 L435.0 245.19 L433.57 247.01 L430.74 249.96 L428.59 250.39 L425.67 252.83 L425.5 253.06 L423.8 253.77 L420.25 255.18 L419.15 255.4 L416.83 255.45 L414.17 255.34 L410.16 253.59 L407.97 252.6 L407.31 253.01 L406.91 253.67 L406.31 254.6 L406.09 254.91 L405.17 255.63 L404.33 256.05 L404.07 255.85 L403.41 255.12 L401.03 255.39 L396.85 256.63 L396.74 256.36 L396.61 254.68 L396.57 253.85 L397.02 252.4 L397.39 251.75 L398.35 251.88 L399.1 251.37 L399.27 251.21 L401.19 248.51 L401.34 247.99 L401.89 245.93 L401.38 244.52 L401.1 243.8 L399.9 242.35 L398.07 240.95 L397.48 236.22 L397.44 235.64 L397.62 235.08 L398.17 234.65 L399.43 233.8 L400.66 233.27 L401.06 233.12 L401.67 233.1 L403.32 232.38 L403.86 231.5 L404.95 230.07 L405.75 229.62 L406.44 229.64 L407.05 229.53 L407.85 229.14 L408.18 228.86 L408.18 227.46 L407.97 226.86 L407.64 226.11 L407.67 225.44 L408.35 224.86 L409.03 224.27 L409.45 223.69 L410.64 219.65 L410.36 219.28 L409.67 218.08 L409.56 215.13 L410.12 214.62 L410.92 214.38 L411.6 213.92 L412.57 212.95 L412.8 212.6 L412.97 211.59 L412.72 211.26 L412.42 210.96 L412.05 210.02 L412.0 209.75 L411.92 208.69 L411.97 208.31 L412.25 207.76 L412.97 205.42 L412.6 205.0 L412.13 204.83 L411.66 204.79 L410.23 203.97 L410.14 202.96 L411.68 200.79 L412.75 199.71 L413.65 196.88 L413.57 196.44 L412.92 195.13 L411.89 193.43 L411.73 193.21 L408.08 190.83 L407.12 191.31 L406.89 191.4 L406.24 191.56 L406.01 191.48 L405.98 191.45 L405.89 191.38 L405.78 191.38 L405.76 191.39 L405.53 191.44 L405.51 191.43 L405.49 191.4 L405.31 190.94 L405.3 190.9 L405.32 190.87 L405.33 190.86 L403.62 188.61 L403.7 188.01 L403.71 187.58 L403.71 186.91 L403.33 186.21 L402.42 185.68 L402.1 185.73 L402.11 186.28 L401.81 186.33 L399.09 185.59 L398.98 185.55 L398.64 185.26 L398.47 184.92 L397.36 182.4 L397.29 180.59 L398.23 181.0 L399.01 181.52 L399.44 181.62 L399.94 181.35 L400.25 181.11 L400.81 180.21 L400.22 179.04 L401.67 177.52 L403.63 176.96 L404.38 176.79 L405.14 177.04 L405.26 177.46 L405.51 178.08 L406.1 179.17 L406.45 179.29 L406.91 179.19 L406.96 179.05 L407.5 174.91 L407.39 173.8 L407.2 172.59 L405.59 171.23 L403.03 170.98 L401.89 170.35 L400.6 169.13 L399.08 166.55 L399.05 166.18 L399.03 165.54 L399.18 164.89 L399.16 163.83 L399.14 163.83 L398.01 164.04 L397.07 164.07 L396.49 164.05 L396.35 164.06 L396.34 163.91 L395.7 163.25 L395.63 162.95 L395.99 162.94 L396.46 162.74 L396.32 161.52 L395.97 161.22 L395.58 160.92 L395.01 160.82 L393.44 162.32 L392.18 162.96 L388.92 161.85 L388.17 160.71 L387.98 160.21 L387.84 158.69 L387.76 157.58 L388.19 157.58 L388.08 157.71 L388.27 158.76 L389.02 159.97 L389.23 160.13 L389.43 160.25 L390.13 160.43 L390.55 160.35 L390.52 158.71 L390.43 158.56 L390.03 158.17 L389.87 158.06 L389.49 157.85 L391.28 157.01 L393.02 157.34 L393.3 157.22 L393.77 156.99 L394.09 156.7 L395.32 154.53 L395.45 154.2 L395.4 154.07 L395.29 153.9 L395.09 153.84 L393.7 154.55 L393.13 155.1 L391.34 154.38 L390.58 153.69 L390.49 153.42 L390.89 153.48 L392.03 153.89 L392.89 154.16 L393.3 154.24 L394.48 153.81 L394.91 153.6 L395.97 152.9 L396.21 152.37 L396.45 151.63 L396.01 151.54 L395.49 151.3 L394.66 149.7 L394.54 149.43 L394.33 148.88 L394.49 148.02 L394.71 148.01 L397.03 148.19 L397.2 149.11 L396.66 150.11 L396.68 150.79 L396.99 150.96 L397.75 150.88 L398.1 150.84 L399.1 150.34 L399.39 149.63 L400.65 148.16 L400.75 148.04 L401.12 147.95 L402.56 147.68 L404.13 148.1 L404.42 148.11 L405.06 147.51 L406.73 143.85 L406.64 143.18 L405.58 141.58 L405.33 141.55 L404.66 141.62 L400.72 137.16 L398.82 134.25 L398.71 133.88 L398.75 132.55 L398.9 131.98 L399.38 131.56 L399.6 131.53 L400.06 131.76 L401.06 131.17 L401.47 130.69 L401.7 130.34 L402.33 129.36 L402.39 129.15 L402.43 128.84 L402.32 128.4 L401.93 126.93 L401.53 126.52 L400.71 125.71 L400.63 125.67 L400.43 125.66 L399.22 125.69 L398.06 126.18 L397.82 126.19 L397.22 126.19 L397.11 126.18 L396.19 125.59 L394.75 123.91 L393.23 121.47 L394.34 119.95 L394.39 119.81 L394.7 118.53 L394.9 117.38 L394.85 114.49 L393.43 112.72 L392.25 111.39 L391.4 110.58 L390.49 109.7 L390.76 106.19 L390.86 105.96 L392.75 105.7 L393.72 105.47 L396.94 104.06 L400.59 105.16 L401.25 104.87 L402.21 104.08 L402.55 103.68 L403.83 102.89 L405.35 102.77 L406.61 103.69 L406.93 103.73 L410.76 104.16 L410.65 103.89 L410.66 103.29 L410.77 103.12 L414.74 100.99 L415.97 100.75 L416.61 101.03 L417.45 101.43 L417.78 101.75 L417.76 102.02 L417.54 102.46 L417.04 103.0 L416.67 103.87 L416.87 104.31 L417.32 104.83 L419.23 106.04 L420.07 106.01 L421.78 105.14 L422.76 104.44 L423.46 103.96 L424.11 103.82 L424.65 104.04 L426.53 106.31 L428.78 106.48 L429.18 106.48 L429.65 106.72 L431.43 108.1 L431.8 109.46 L431.68 109.7 L431.76 110.3 L431.99 110.94 L432.55 111.08 L432.81 111.12 L436.03 109.97 L436.78 107.62 L436.35 106.06 L435.91 105.27 L435.79 105.01 L435.78 103.98 L436.05 103.67 L436.91 103.22 L439.45 103.13 L440.0 103.99 L440.39 104.57 L441.58 105.25 L442.98 105.28 L443.36 104.94 L443.45 104.75 L443.26 104.29 L443.05 104.15 L442.26 103.69 L441.37 101.24 L441.34 101.09 L441.45 100.88 L443.42 100.67 L443.91 100.36 L442.52 97.07 L441.03 95.78 L439.22 94.23 L438.87 94.17 L438.61 94.25 L438.38 94.73 L438.04 94.92 L437.08 94.55 L436.57 94.03 L435.0 91.42 L434.81 90.95 L434.81 90.83 L435.87 90.23 L436.92 90.0 L437.51 89.9 L437.89 89.0 L437.86 88.67 L438.09 87.27 L438.82 84.64 L439.44 84.31 L440.09 84.39 L440.56 84.57 L441.6 84.75 L441.95 84.65 L442.29 84.35 L442.17 83.39 L442.52 83.1 L443.19 83.07 L446.8 83.11 L448.66 84.36 L448.34 84.99 L447.75 88.88 L448.06 90.34 L448.67 91.44 L449.06 91.97 L449.92 93.01 L450.17 93.32 L450.29 93.53 L450.66 94.14 L450.25 94.76 L449.82 95.28 L448.68 94.88 L448.57 94.97 L448.93 95.63 L449.6 96.72 L450.43 96.83 L452.87 96.2 L452.99 96.05 L455.09 96.37 L457.31 97.6 Z",
+   "lx": 436.46,
+   "ly": 176.65
+  },
+  {
+   "name": "江山市",
+   "d": "M295.79 225.98 L296.55 228.33 L297.88 230.71 L297.38 232.55 L297.42 233.07 L297.72 234.22 L297.93 234.57 L298.62 235.52 L300.17 237.61 L303.09 239.83 L303.55 240.16 L303.79 240.17 L305.57 241.89 L306.06 244.19 L306.43 245.94 L306.51 246.91 L306.7 247.1 L306.99 247.37 L308.0 248.01 L308.47 247.88 L309.22 247.94 L309.68 248.09 L310.87 249.08 L311.08 249.68 L311.52 254.54 L310.53 257.31 L310.45 257.45 L310.47 258.18 L310.8 261.33 L311.64 264.8 L312.07 265.3 L312.83 265.15 L313.22 265.15 L313.93 265.51 L313.08 268.32 L312.3 269.15 L311.56 270.91 L311.13 272.36 L310.9 273.81 L312.17 277.01 L312.84 278.24 L314.25 278.99 L314.98 278.35 L315.83 278.48 L316.44 278.67 L316.53 278.89 L316.44 279.87 L315.99 281.19 L316.12 281.38 L317.1 281.85 L317.73 281.8 L320.02 283.34 L320.41 283.61 L320.88 287.66 L320.87 288.11 L320.59 288.7 L319.73 289.79 L317.39 292.78 L318.44 292.97 L319.71 294.42 L319.7 295.41 L318.99 295.71 L318.05 298.21 L317.94 298.94 L315.95 301.36 L315.74 301.54 L315.25 301.62 L314.78 302.1 L313.72 303.93 L313.01 305.87 L312.91 306.31 L313.6 307.78 L312.03 309.47 L311.94 309.67 L312.9 310.9 L313.19 311.18 L314.27 313.56 L314.58 316.95 L314.69 317.79 L313.57 317.97 L312.85 318.2 L310.76 319.33 L309.52 320.53 L308.9 321.88 L308.16 323.1 L307.72 323.33 L307.16 323.35 L306.6 323.13 L305.58 322.59 L305.19 322.28 L303.69 321.72 L301.58 321.31 L300.86 321.25 L300.29 321.25 L299.75 321.5 L298.72 323.66 L297.62 325.79 L297.44 326.04 L294.32 328.84 L293.79 329.12 L292.53 328.94 L292.22 329.07 L292.03 329.36 L291.33 330.99 L291.35 331.56 L291.38 332.04 L291.62 332.64 L292.27 332.71 L292.43 332.83 L292.72 333.33 L293.4 335.1 L292.75 336.29 L292.42 336.91 L291.9 338.09 L291.87 340.56 L292.01 341.0 L293.59 342.48 L293.36 345.8 L293.28 347.0 L292.79 347.39 L292.43 347.63 L291.41 349.61 L291.6 352.19 L290.92 355.49 L291.09 356.05 L291.66 356.36 L293.11 356.44 L293.74 356.25 L294.47 355.65 L298.85 354.6 L301.17 354.69 L301.28 355.07 L300.9 355.73 L301.06 357.13 L301.14 357.28 L301.93 359.97 L301.9 360.3 L301.71 360.8 L301.45 361.08 L300.91 361.2 L300.05 361.64 L299.47 362.47 L296.87 367.34 L296.47 368.6 L296.74 369.85 L297.14 370.45 L297.28 370.82 L297.13 371.57 L296.02 373.47 L293.93 376.12 L291.68 378.92 L291.35 379.12 L288.12 380.62 L287.49 380.56 L286.94 380.21 L286.76 380.28 L285.21 381.92 L284.6 382.6 L284.6 383.26 L284.31 387.13 L284.23 387.74 L284.0 387.89 L282.28 389.42 L282.39 389.99 L282.41 390.9 L281.97 393.5 L281.71 393.96 L280.66 394.72 L280.19 395.54 L279.48 397.16 L279.09 398.06 L276.83 399.95 L275.54 400.0 L273.91 399.83 L272.19 400.39 L271.83 400.14 L271.77 399.86 L271.73 399.22 L270.93 398.49 L269.77 397.88 L268.93 397.98 L267.96 398.76 L267.28 399.02 L266.69 398.72 L265.72 398.94 L264.39 400.57 L264.17 401.19 L264.27 401.78 L263.73 402.54 L263.45 402.79 L262.27 403.01 L261.38 402.48 L260.73 403.24 L260.66 403.55 L260.63 403.79 L259.95 404.35 L259.09 404.26 L257.4 402.67 L257.86 401.32 L258.02 400.38 L257.87 399.73 L257.78 399.55 L257.57 399.65 L257.31 399.95 L255.95 402.6 L255.73 403.55 L255.36 404.18 L253.76 405.14 L252.33 404.44 L251.76 403.96 L251.73 403.03 L251.81 401.74 L252.17 401.29 L252.45 401.08 L252.54 400.61 L252.65 399.91 L252.52 399.53 L249.94 396.79 L248.9 395.95 L247.93 395.23 L247.38 394.87 L247.05 395.29 L246.52 395.59 L245.68 395.1 L244.65 394.52 L242.25 396.02 L241.17 397.25 L240.92 397.34 L239.95 397.48 L239.6 397.53 L238.7 397.46 L238.3 396.96 L237.83 396.65 L237.22 396.52 L236.88 396.76 L236.8 396.89 L236.55 398.38 L236.56 398.98 L234.02 399.67 L232.74 399.72 L230.8 398.55 L229.53 397.63 L228.85 397.72 L228.17 397.84 L228.07 397.9 L227.99 398.06 L228.11 398.44 L228.59 399.15 L228.64 399.46 L227.86 400.04 L227.12 400.17 L226.89 400.07 L226.65 399.91 L226.55 399.69 L226.67 399.06 L226.67 398.66 L226.49 398.39 L224.87 397.44 L224.08 397.11 L223.14 397.16 L221.24 398.26 L220.48 398.81 L220.63 399.73 L220.72 400.12 L220.25 400.91 L219.77 402.07 L219.88 402.38 L220.14 402.66 L221.34 403.62 L222.15 403.84 L222.39 404.07 L222.49 404.26 L222.99 406.3 L223.03 407.49 L222.74 407.58 L222.12 407.71 L221.62 407.7 L221.34 407.86 L220.46 408.56 L220.02 409.75 L219.65 410.0 L219.34 409.95 L218.65 409.63 L217.71 408.66 L216.88 407.75 L216.07 407.37 L214.0 407.82 L212.89 407.73 L212.43 407.83 L211.68 408.2 L211.48 408.49 L210.97 408.51 L209.75 408.37 L209.65 408.35 L208.31 407.68 L208.13 407.46 L207.61 407.03 L207.1 406.93 L207.0 406.91 L206.91 406.86 L206.7 406.63 L206.59 406.46 L205.56 406.13 L204.79 405.88 L205.47 404.69 L205.95 404.28 L206.61 403.68 L206.64 403.55 L206.4 402.89 L206.26 402.81 L205.86 402.78 L205.31 402.8 L204.75 402.98 L204.28 403.02 L203.11 402.89 L203.04 402.69 L203.69 402.05 L204.06 401.25 L203.83 400.59 L203.7 400.42 L202.68 400.5 L202.19 400.84 L201.92 400.79 L201.4 399.17 L200.84 397.78 L200.42 397.22 L201.13 395.32 L201.43 394.52 L201.62 394.44 L201.87 394.4 L205.46 392.99 L207.66 391.75 L208.55 391.16 L209.72 390.34 L211.74 388.86 L212.99 387.32 L213.16 387.05 L213.34 386.62 L213.36 386.38 L212.98 385.89 L213.28 385.48 L213.55 385.23 L215.23 384.82 L216.16 385.04 L217.59 383.14 L218.15 382.0 L218.12 381.65 L217.08 380.42 L216.39 380.0 L215.7 380.35 L215.86 380.43 L216.16 380.51 L216.42 381.24 L216.05 382.37 L214.79 383.06 L214.41 383.25 L212.69 382.36 L212.68 382.15 L213.46 381.77 L214.12 381.54 L214.96 380.95 L215.28 380.63 L215.35 380.35 L214.72 380.23 L214.79 380.54 L214.72 380.81 L214.16 381.26 L214.04 381.24 L213.44 380.71 L213.5 380.54 L213.81 380.29 L214.22 379.11 L213.81 378.0 L212.91 377.32 L212.7 376.02 L212.69 375.53 L212.71 375.11 L212.8 373.98 L212.67 373.55 L212.39 372.95 L211.95 372.79 L211.66 372.8 L211.31 372.69 L210.81 372.39 L210.78 371.3 L210.92 370.61 L209.62 368.25 L209.04 366.27 L208.24 364.88 L207.68 364.33 L206.81 363.99 L206.21 363.82 L205.0 363.27 L203.83 362.56 L203.7 362.24 L203.71 361.88 L203.9 361.82 L203.89 361.53 L203.58 360.67 L202.97 359.97 L202.78 359.9 L202.0 359.86 L201.38 360.31 L201.15 360.47 L200.53 360.41 L200.91 359.3 L202.21 358.81 L203.38 357.99 L203.0 356.97 L203.53 356.19 L205.36 355.6 L205.91 355.5 L206.21 355.63 L207.08 355.72 L208.89 354.92 L208.57 354.54 L207.54 353.75 L207.82 354.06 L207.79 354.21 L206.89 354.59 L206.7 354.48 L206.65 354.27 L207.34 353.05 L207.67 352.62 L208.53 352.43 L208.81 352.14 L209.42 351.05 L209.6 350.52 L209.5 349.66 L209.75 348.67 L210.26 347.08 L210.94 346.64 L211.75 344.73 L211.15 344.35 L210.83 343.45 L210.7 342.91 L210.66 342.66 L210.76 342.6 L211.78 342.85 L212.19 343.45 L212.85 344.09 L212.91 343.27 L212.89 342.99 L212.19 342.17 L212.06 342.18 L211.54 341.68 L211.93 341.28 L212.11 341.32 L212.17 341.42 L212.45 341.4 L212.85 341.16 L212.78 340.71 L213.79 339.31 L214.23 339.04 L214.65 339.02 L216.0 339.03 L215.97 339.23 L215.62 339.53 L215.85 339.53 L216.58 338.47 L216.67 338.23 L216.65 337.9 L216.46 337.62 L216.03 337.95 L215.54 337.97 L215.25 337.97 L215.02 337.82 L215.02 337.53 L215.17 336.93 L215.37 336.8 L214.77 336.03 L213.5 334.67 L213.33 334.64 L211.83 334.56 L210.17 334.81 L209.6 335.0 L209.45 335.41 L208.82 335.97 L208.34 336.21 L207.7 336.2 L207.21 335.75 L206.23 334.19 L204.58 332.85 L203.98 331.86 L203.66 331.62 L202.9 331.07 L202.82 331.04 L202.66 331.15 L202.68 331.62 L202.58 331.73 L200.82 331.51 L200.59 331.48 L196.35 330.41 L196.01 330.05 L195.61 329.59 L195.75 329.36 L196.51 328.53 L196.98 328.19 L197.46 328.29 L197.58 328.63 L198.6 328.97 L199.01 328.96 L200.68 328.46 L202.19 327.68 L204.16 326.62 L205.31 325.03 L205.35 324.22 L205.33 324.16 L203.07 322.63 L202.01 322.9 L200.92 322.89 L199.12 321.95 L198.96 321.87 L198.88 321.34 L198.79 320.19 L199.09 320.13 L198.54 317.5 L198.93 317.49 L199.14 317.68 L199.43 318.39 L199.33 318.84 L199.5 319.14 L199.65 319.21 L199.84 319.06 L199.88 318.34 L199.42 317.6 L198.8 316.96 L198.31 316.54 L197.93 316.61 L197.46 315.16 L197.64 314.87 L197.87 314.75 L199.32 314.82 L199.86 314.49 L199.91 314.22 L199.43 314.03 L199.29 314.15 L199.0 314.16 L197.73 313.82 L197.13 313.47 L195.43 312.09 L194.93 311.65 L194.94 311.32 L195.12 310.89 L195.49 310.81 L195.58 310.24 L195.58 310.11 L195.41 309.35 L195.21 309.13 L195.04 308.97 L194.64 308.82 L194.28 308.64 L194.17 307.8 L194.57 306.33 L194.76 306.19 L195.18 306.36 L195.52 306.39 L196.47 306.44 L196.76 306.32 L196.81 305.57 L196.72 305.33 L196.42 305.17 L196.1 305.33 L196.04 305.12 L196.13 304.3 L196.26 303.12 L197.03 302.53 L197.2 302.67 L197.25 302.91 L197.64 302.91 L198.2 302.73 L199.09 302.25 L199.11 301.93 L197.58 299.94 L196.09 299.49 L195.29 299.33 L195.23 298.91 L195.22 295.38 L195.42 295.01 L195.72 294.82 L196.73 294.52 L197.41 294.68 L197.02 295.02 L196.8 295.03 L196.41 295.4 L196.5 295.57 L196.64 295.64 L198.47 294.86 L198.98 294.48 L200.67 292.46 L201.68 289.99 L201.62 289.7 L201.09 289.11 L200.54 289.08 L200.1 288.66 L198.4 285.62 L198.27 285.25 L198.1 284.6 L198.07 284.44 L197.94 283.58 L198.08 283.37 L198.66 283.03 L199.5 283.03 L200.96 282.53 L201.24 282.01 L200.89 281.87 L200.81 281.96 L200.6 282.04 L200.12 281.83 L199.96 281.75 L199.76 281.64 L200.84 280.66 L200.75 280.35 L200.59 279.34 L200.67 279.04 L200.83 278.63 L201.29 278.14 L201.05 277.25 L200.73 276.78 L200.57 276.47 L200.33 275.04 L200.42 274.78 L200.65 274.55 L201.06 274.71 L201.37 274.34 L201.21 273.79 L201.04 273.39 L200.84 273.26 L199.84 272.78 L198.58 273.14 L197.97 273.35 L197.77 273.33 L195.68 271.16 L195.57 270.3 L195.93 269.82 L196.19 269.82 L196.35 269.08 L194.98 267.94 L193.57 267.64 L192.41 266.44 L191.93 266.0 L190.05 266.51 L189.65 266.7 L189.11 267.25 L188.3 266.89 L188.17 265.45 L188.21 265.26 L188.75 263.74 L189.16 263.47 L189.8 263.42 L190.7 263.2 L191.5 262.84 L191.76 262.57 L191.5 260.81 L191.33 260.68 L191.12 260.96 L190.51 260.69 L190.25 260.56 L189.79 260.09 L189.65 259.85 L189.64 259.79 L189.8 259.53 L189.98 259.39 L190.43 259.09 L190.59 259.07 L190.83 259.18 L190.98 259.36 L190.89 259.73 L190.73 259.68 L190.35 259.8 L190.44 260.22 L190.6 260.16 L191.22 259.8 L191.34 259.47 L191.06 258.42 L190.12 257.94 L189.51 257.71 L188.86 257.83 L188.68 257.25 L188.78 256.96 L189.21 256.65 L189.42 256.52 L189.61 256.45 L190.12 256.52 L190.26 256.65 L191.17 256.59 L191.34 256.31 L191.14 255.84 L190.9 255.64 L189.17 254.96 L187.89 253.16 L187.85 252.59 L188.87 252.36 L188.98 252.32 L189.15 251.97 L189.08 251.4 L188.9 250.27 L187.78 249.78 L186.94 249.22 L186.6 247.95 L186.53 246.96 L186.54 245.82 L186.27 244.28 L186.1 244.04 L186.95 244.05 L187.33 243.96 L188.73 243.18 L189.11 242.5 L189.68 241.23 L189.54 241.08 L189.58 238.7 L190.04 237.98 L190.3 237.71 L191.01 238.04 L191.65 238.44 L192.38 238.18 L195.95 237.47 L196.4 237.4 L196.55 237.39 L196.69 237.44 L197.06 237.75 L197.15 237.84 L197.34 238.89 L199.79 239.75 L200.76 239.2 L201.34 239.06 L202.29 239.13 L203.64 239.32 L206.1 240.36 L206.46 240.82 L207.0 241.3 L207.91 241.88 L208.33 242.02 L209.3 242.09 L209.76 241.92 L209.79 241.69 L209.43 241.6 L209.49 241.37 L210.17 241.0 L210.52 241.43 L210.71 243.09 L210.72 243.31 L210.0 244.44 L210.11 244.89 L210.78 245.51 L211.94 245.98 L213.17 246.34 L213.47 246.37 L213.7 246.21 L214.56 245.39 L214.51 245.11 L214.45 244.77 L214.31 243.9 L214.21 243.24 L215.01 242.27 L215.52 241.69 L215.85 241.46 L216.54 240.68 L217.51 239.43 L219.52 235.36 L220.5 232.92 L221.25 231.03 L222.02 230.93 L222.68 229.89 L222.27 228.93 L221.55 228.35 L221.27 226.96 L221.68 226.25 L222.19 226.12 L225.17 225.92 L226.84 225.86 L227.18 225.76 L227.31 225.4 L227.93 225.06 L228.53 225.75 L228.88 226.4 L229.01 227.55 L229.18 227.96 L230.56 228.94 L231.2 228.65 L231.8 228.28 L232.49 226.98 L232.43 225.44 L233.01 224.79 L234.83 223.91 L235.13 223.85 L235.72 223.98 L236.78 224.49 L241.69 224.39 L241.94 224.32 L242.91 223.16 L243.1 221.93 L243.2 221.54 L244.42 221.31 L245.53 221.95 L249.56 223.54 L253.11 223.93 L253.39 223.93 L254.72 223.86 L255.23 223.66 L258.04 220.93 L258.73 219.74 L258.76 219.53 L258.37 218.51 L257.65 217.58 L257.03 216.91 L256.76 216.0 L256.92 215.52 L258.47 214.6 L259.38 214.66 L261.21 215.54 L262.5 216.26 L262.6 216.5 L262.87 216.7 L264.06 217.33 L264.62 217.6 L267.62 216.93 L268.72 216.19 L272.06 214.9 L272.84 214.96 L273.28 215.09 L275.28 214.58 L276.18 214.31 L277.94 213.74 L278.41 212.95 L278.38 210.95 L278.21 210.35 L278.86 210.06 L279.41 209.74 L280.23 209.12 L280.49 208.79 L284.21 209.32 L286.86 210.19 L287.63 210.49 L287.72 211.01 L287.11 211.3 L286.51 211.45 L286.28 211.94 L285.98 212.97 L287.94 214.87 L289.33 215.12 L289.74 215.18 L292.47 217.31 L293.51 218.76 L293.85 219.25 L294.2 219.81 L294.95 221.46 L295.98 223.85 L295.92 224.12 L295.72 224.67 L295.6 225.53 L295.6 225.55 L295.79 225.98 Z",
+   "lx": 253.33,
+   "ly": 305.61
+  }
+ ]
+};
+
+const DISTRICT_DATA = {
+  '柯城区': { idx: 9, sys: 62, haz: 5, ovd: 2, high: 3, rev: 2 },
+  '江山市': { idx: 6, sys: 41, haz: 3, ovd: 1, high: 1, rev: 1 },
+  '龙游县': { idx: 5, sys: 38, haz: 2, ovd: 0, high: 1, rev: 0 },
+  '开化县': { idx: 3, sys: 29, haz: 1, ovd: 0, high: 0, rev: 1 },
+  '常山县': { idx: 2, sys: 24, haz: 1, ovd: 0, high: 0, rev: 0 },
+  '衢江区': { idx: 1, sys: 20, haz: 0, ovd: 0, high: 0, rev: 0 },
+};
+const ALL = { idx: 9, sys: 214, haz: 12, ovd: 3, rev: 4 };
+const LABEL_OFFSET = { '衢江区': [30, 34] };
+const COLOR = { high: '#e0685a', mid: '#e0a340', low: '#3b8fc0', zero: '#22455f' };
+const tone = i => i >= 7 ? COLOR.high : i >= 4 ? COLOR.mid : i >= 1 ? COLOR.low : COLOR.zero;
+let current = null;
+
+const QUERY = new URLSearchParams(location.search);
+if (QUERY.has('static')) document.body.classList.add('static');
+
+const NS = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs){ const el = document.createElementNS(NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]); return el; }
+
+/* ---------- 地图 ---------- */
+const mapSvg = document.getElementById('mapSvg');
+mapSvg.setAttribute('viewBox', BOUNDARIES.viewBox);
+const defs = svg('defs');
+defs.innerHTML = `<pattern id="grid" width="18" height="18" patternUnits="userSpaceOnUse">
+  <path d="M18 0H0v18" fill="none" stroke="#3d83a9" stroke-opacity=".15" stroke-width="1"/></pattern>`;
+mapSvg.appendChild(defs);
+const vb = BOUNDARIES.viewBox.split(' ').map(Number);
+mapSvg.appendChild(svg('rect', { x: vb[0], y: vb[1], width: vb[2], height: vb[3], fill: '#071522' }));
+mapSvg.appendChild(svg('rect', { x: vb[0], y: vb[1], width: vb[2], height: vb[3], fill: 'url(#grid)' }));
+const gShapes = svg('g', {}); mapSvg.appendChild(gShapes);
+const gLabels = svg('g', {}); mapSvg.appendChild(gLabels);
+
+BOUNDARIES.districts.forEach(d => {
+  const m = DISTRICT_DATA[d.name] || { idx: 0, sys: 0, haz: 0, ovd: 0, rev: 0 };
+  const path = svg('path', { d: d.d, fill: tone(m.idx), 'fill-opacity': m.idx ? .84 : .5,
+    stroke: '#0a1a28', 'stroke-width': 1.2, class: 'district' });
+  path.dataset.name = d.name;
+  path.addEventListener('click', ev => { ev.stopPropagation(); select(current === d.name ? null : d.name); });
+  gShapes.appendChild(path);
+
+  const off = LABEL_OFFSET[d.name];
+  const lx = off ? d.lx + off[0] : d.lx;
+  const ly = off ? d.ly + off[1] : d.ly;
+  if (off) gLabels.appendChild(svg('line', { x1: d.lx, y1: d.ly, x2: lx, y2: ly, class: 'leader' }));
+  const label = svg('text', { x: lx, y: ly, class: 'dlabel' });
+  const n = svg('tspan', { class: 'dnum', x: lx, dy: 0 }); n.textContent = m.idx;
+  const t = svg('tspan', { x: lx, dy: 15 }); t.textContent = d.name;
+  label.appendChild(n); label.appendChild(t);
+  label.setAttribute('fill', m.idx >= 7 ? '#fff' : '#dceaf7');
+  gLabels.appendChild(label);
+});
+mapSvg.addEventListener('click', () => select(null));
+
+/* ---------- 排名 ---------- */
+const rankBody = document.getElementById('rankBody');
+function renderRank(){
+  const rows = BOUNDARIES.districts.map(d => ({ name: d.name, ...(DISTRICT_DATA[d.name] || { idx: 0 }) }))
+    .sort((a, b) => b.idx - a.idx);
+  rankBody.innerHTML = rows.map(r => `
+    <tr data-name="${r.name}" class="${r.name === current ? 'on' : ''}">
+      <th>${r.name}</th>
+      <td class="n ${r.idx >= 7 ? 'hot' : r.idx >= 4 ? 'warm' : ''}">${r.idx}</td>
+      <td class="n ${r.high ? 'hot' : ''}">${r.high ?? 0}</td>
+      <td class="n ${r.ovd ? 'hot' : ''}">${r.ovd ?? 0}</td>
+      <td class="n">${r.sys ?? 0}</td>
+    </tr>`).join('');
+  rankBody.querySelectorAll('tr').forEach(tr =>
+    tr.addEventListener('click', () => select(current === tr.dataset.name ? null : tr.dataset.name)));
+}
+renderRank();
+
+function select(name){
+  current = name;
+  gShapes.querySelectorAll('.district').forEach(p => p.classList.toggle('on', p.dataset.name === name));
+  const d = name ? DISTRICT_DATA[name] : ALL;
+  document.getElementById('curName').textContent = name || '全域';
+  document.getElementById('curSys').textContent = d.sys;
+  document.getElementById('curHaz').textContent = d.haz;
+  document.getElementById('curOvd').textContent = d.ovd;
+  document.getElementById('curRev').textContent = d.rev;
+  document.getElementById('scopeName').textContent = name || '全域';
+  document.getElementById('miName').textContent = name || '全域';
+  document.getElementById('miSys').textContent = d.sys;
+  document.getElementById('miHaz').textContent = d.haz;
+  document.getElementById('miOvd').textContent = d.ovd;
+  renderRank();
+}
+
+document.getElementById('btnMap').addEventListener('click', () => {
+  document.getElementById('mapSvg').style.display = 'block';
+  document.getElementById('rankTable').classList.remove('on');
+  document.getElementById('btnMap').setAttribute('aria-pressed', 'true');
+  document.getElementById('btnRank').setAttribute('aria-pressed', 'false');
+});
+document.getElementById('btnRank').addEventListener('click', () => {
+  document.getElementById('mapSvg').style.display = 'none';
+  document.getElementById('rankTable').classList.add('on');
+  document.getElementById('btnMap').setAttribute('aria-pressed', 'false');
+  document.getElementById('btnRank').setAttribute('aria-pressed', 'true');
+});
+
+/* ---------- 趋势图 ---------- */
+const DAYS = ['11-21','11-22','11-23','11-24','11-25','11-26','11-27'];
+const SERIES = [
+  { label: '新增备案', color: '#5ab0f0', data: [18, 22, 19, 26, 24, 31, 42] },
+  { label: '新增测评报告', color: '#7d8fd6', data: [6, 8, 5, 9, 7, 11, 13] },
+  { label: '触发预警', color: '#e0a340', data: [2, 1, 3, 2, 4, 3, 5] },
+  { label: '隐患销项', color: '#3fc79a', data: [4, 6, 3, 5, 7, 6, 9] },
+];
+function buildTrend(){
+  const host = document.getElementById('trend');
+  const W = host.clientWidth || 260, H = host.clientHeight || 160;
+  const pad = { l: 28, r: 18, t: 8, b: 18 };
+  const max = 50;
+  const x = i => pad.l + (W - pad.l - pad.r) * i / (DAYS.length - 1);
+  const y = v => H - pad.b - (H - pad.t - pad.b) * v / max;
+  const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none' });
+  for (let g = 0; g <= 5; g++){
+    const v = g * 10;
+    s.appendChild(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v),
+      stroke: '#23415d', 'stroke-dasharray': '3 4', 'stroke-width': 1 }));
+    const t = svg('text', { x: pad.l - 6, y: y(v) + 3.5, 'text-anchor': 'end', fill: '#7f9ab3',
+      'font-size': 9.5, 'font-family': 'JetBrains Mono, monospace' });
+    t.textContent = v; s.appendChild(t);
+  }
+  DAYS.forEach((d, i) => {
+    if (W < 250 && i % 2 === 1 && i !== DAYS.length - 1) return;
+    const t = svg('text', { x: x(i), y: H - 5, 'text-anchor': 'middle', fill: '#7f9ab3', 'font-size': 9.5 });
+    t.textContent = d; s.appendChild(t);
+  });
+  SERIES.forEach(se => {
+    const pts = se.data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+    s.appendChild(svg('polygon', { points: `${pad.l},${y(0)} ${pts} ${x(DAYS.length-1)},${y(0)}`,
+      fill: se.color, 'fill-opacity': .09 }));
+    s.appendChild(svg('polyline', { points: pts, fill: 'none', stroke: se.color, 'stroke-width': 1.8,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    se.data.forEach((v, i) => s.appendChild(svg('circle', { cx: x(i), cy: y(v),
+      r: i === DAYS.length - 1 ? 3.2 : 2.1, fill: '#0a1927', stroke: se.color, 'stroke-width': 1.6 })));
+  });
+  host.innerHTML = ''; host.appendChild(s);
+  document.getElementById('trendLegend').innerHTML = SERIES.map(se =>
+    `<span><i style="background:${se.color}"></i>${se.label}<b>${se.data.reduce((a, b) => a + b, 0)}</b></span>`).join('');
+}
+buildTrend();
+window.addEventListener('resize', buildTrend);
+
+/* ---------- 重点隐患（逾期优先） ---------- */
+const HAZARDS = [
+  { t: '政务云核心业务系统 备份缺失', s: '衢州市大数据局', d: '柯城区', sev: '高', dl: '11-20', ovd: true },
+  { t: '医疗平台 审计日志留存不足', s: '市卫健委', d: '江山市', sev: '高', dl: '11-24', ovd: true },
+  { t: '标识解析节点 管理端口暴露', s: '柯城区工信局', d: '柯城区', sev: '高', dl: '11-26', ovd: true },
+  { t: '智慧交通平台 证书 30 天内过期', s: '市交通局', d: '龙游县', sev: '中', dl: '12-02', ovd: false },
+  { t: '农商行系统 弱口令策略不合规', s: '衢州农商行', d: '衢江区', sev: '中', dl: '12-09', ovd: false },
+  { t: '智慧交通平台 越权访问未修复', s: '市交通局', d: '龙游县', sev: '中', dl: '12-12', ovd: false },
+  { t: '开化县系统 边界防护策略缺失', s: '县大数据局', d: '开化县', sev: '低', dl: '12-18', ovd: false },
+];
+document.getElementById('hazardList').innerHTML = HAZARDS.map(h => `
+  <li><div class="hazard-item">
+    <span class="ht"><b>${h.t}</b><span class="dl ${h.ovd ? 'od' : ''}">截止 ${h.dl}</span></span>
+    <span class="hs">
+      <span class="chip ${h.sev === '高' ? 'high' : 'mid'}">${h.sev}风险</span>
+      ${h.ovd ? '<span class="chip high">已逾期</span>' : ''}
+      <span class="src">${h.s} · ${h.d}</span>
+    </span>
+  </div></li>`).join('');
+
+/* ---------- 业务分类统计 ---------- */
+const CATS = [
+  { label: '备案记录', value: 1286, color: '#5ab0f0' },
+  { label: '在办实施报备', value: 8, color: '#3fc79a' },
+  { label: '已登记隐患', value: 60, color: '#e0a340' },
+  { label: '站内预警', value: 34, color: '#e0685a' },
+];
+const catMax = Math.max(...CATS.map(c => c.value));
+document.getElementById('catList').innerHTML = CATS.map(c => `
+  <div class="cat-row"><span class="lb">${c.label}</span><span class="n">${c.value.toLocaleString('en-US')}</span>
+  <span class="track"><i style="width:${Math.max(4, c.value * 100 / catMax)}%;background:${c.color}"></i></span></div>`).join('');
+
+/* ---------- 高风险系统 ---------- */
+const SYSTEMS = [
+  { t: '衢州政务云核心业务系统', s: '衢州市大数据局 · 等保三级', n: 4 },
+  { t: '市级医疗健康信息平台', s: '市卫健委 · 等保三级', n: 3 },
+  { t: '工业互联网标识解析节点', s: '柯城区工信局 · 等保二级', n: 2 },
+];
+document.getElementById('sysList').innerHTML = SYSTEMS.map(s => `
+  <li class="row"><span class="t">${s.t}</span><span class="v">${s.n}<small>项</small></span>
+  <span class="s">${s.s}</span><span></span></li>`).join('')
+  + '<li class="hazard-foot"><span>另有 1 个系统存在中低风险隐患</span><a href="#">全部排行<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a></li>';
+
+/* ---------- 最新预警（唯一轮播） ---------- */
+const ALERTS = [
+  { t: '政务云核心业务系统 登录暴力破解', s: '柯城区 · 衢州市大数据局', sev: '高', st: '待处理', isNew: true },
+  { t: '医疗平台 SQL 注入规则命中', s: '江山市 · 市卫健委', sev: '高', st: '待处理', isNew: false },
+  { t: '标识解析节点 端口暴露', s: '柯城区 · 柯城区工信局', sev: '中', st: '处理中', isNew: false },
+  { t: '智慧交通平台 证书即将过期', s: '龙游县 · 市交通局', sev: '中', st: '待处理', isNew: false },
+  { t: '开化县系统 弱口令策略不合规', s: '开化县 · 县大数据局', sev: '中', st: '待处理', isNew: false },
+  { t: '农商行系统 备份校验失败', s: '衢江区 · 衢州农商行', sev: '低', st: '处理中', isNew: false },
+];
+const alertItem = a => `
+  <li class="row"><span class="t">${a.t}</span><span class="v"></span>
+  <span class="s"><span class="chip ${a.sev === '高' ? 'high' : a.sev === '中' ? 'mid' : 'low'}">${a.sev}风险</span><span class="chip st">${a.st}</span>${a.isNew ? '<span class="chip new">新</span>' : ''}${a.s}</span><span></span></li>`;
+document.getElementById('alertList').innerHTML = ALERTS.map(alertItem).join('') + ALERTS.map(alertItem).join('');
+
+if (QUERY.get('district')) select(QUERY.get('district'));
+
+/* ---------- 环图弧长 ---------- */
+(function ring(){
+  const segs = [986, 148, 62, 58, 32], total = segs.reduce((a, b) => a + b, 0);
+  const C = 2 * Math.PI * 43;
+  let acc = 0;
+  ['arc1','arc2','arc3','arc4','arc5'].forEach((id, i) => {
+    const len = segs[i] / total * C;
+    const el = document.getElementById(id);
+    el.setAttribute('stroke-dasharray', `${len} ${C - len}`);
+    el.setAttribute('stroke-dashoffset', -acc);
+    acc += len;
+  });
+})();
+</script>
+</body>
+</html>
