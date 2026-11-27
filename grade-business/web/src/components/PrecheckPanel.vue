@@ -3,13 +3,15 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { CheckCircle2, Clock3, FileSearch, LoaderCircle } from '@lucide/vue'
 import { api, ApiError, attachmentURL, errorText, isAbort } from '../lib/api'
 import type { Precheck } from '../lib/domain'
-import FilingMaterialReview from './FilingMaterialReview.vue'
 
-const props = defineProps<{ path: string; revision: string }>()
+defineOptions({ inheritAttrs: false })
+const props = defineProps<{ path: string; revision: string; reviewLink?: string }>()
 const latest = shallowRef<Precheck>()
 const loading = ref(false)
 const starting = ref(false)
 const failure = ref('')
+const publishedChecks = computed(() => latest.value && !latest.value.stale &&
+  (latest.value.status === 'succeeded' || latest.value.status === 'failed') ? latest.value.checks : undefined)
 let timer: ReturnType<typeof setTimeout> | undefined
 let request: AbortController | undefined
 const steps = ['排队', '读取材料', '逐份审核', '汇总终审', '完成']
@@ -110,7 +112,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="panel detail-panel" aria-labelledby="precheck-title">
+  <section v-if="!$slots.default" v-bind="$attrs" class="panel detail-panel" aria-labelledby="precheck-title">
     <header class="panel-heading panel-compact">
       <div class="heading-icon"><FileSearch :size="20" aria-hidden="true" /><h2 id="precheck-title">材料规则预审</h2></div>
       <button class="button neutral small" type="button"
@@ -194,12 +196,10 @@ onBeforeUnmount(() => {
           <p v-if="!latest.checks?.length" class="hint-row">请重新发起预审以获取 11 项内容规则结论。</p>
         </template>
       </template>
-      <FilingMaterialReview :path="path" :revision="revision"
-        :source="latest?.checkSource"
-        :checks="latest && !latest.stale &&
-          (latest.status === 'succeeded' || latest.status === 'failed') ? latest.checks : undefined" />
+      <RouterLink v-if="reviewLink" class="button neutral small review-link" :to="reviewLink">进入材料审阅</RouterLink>
     </div>
   </section>
+  <slot :job="latest" :checks="publishedChecks" :loading="loading" :failure="failure" :refresh="() => read()" />
 </template>
 
 <style scoped>
@@ -217,4 +217,5 @@ onBeforeUnmount(() => {
 .precheck-advice h3 { margin: 0 0 .35rem; font-size: 1rem; }
 .precheck-advice p, .precheck-advice ul { margin-block: .35rem; }
 .precheck-advice small { color: var(--muted, #526476); }
+.review-link { margin-block-start: .75rem; }
 </style>

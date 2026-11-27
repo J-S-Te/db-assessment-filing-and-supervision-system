@@ -1,12 +1,79 @@
 package cases
 
 import (
+	"archive/zip"
 	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestFilingWordPreviewKeepsCitationPositions 核对分节和空段落不会改变依据段号。
+// 参数 t 为测试上下文。
+// 返回值 无。
+func TestFilingWordPreviewKeepsCitationPositions(t *testing.T) {
+	var file bytes.Buffer
+	writer := zip.NewWriter(&file)
+	part, err := writer.Create("word/document.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = part.Write([]byte(`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:p/><w:p><w:r><w:t>一、单位基本情况</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>系统名称：平台</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<w:p/><w:p><w:r><w:t>系统名称：平台</w:t></w:r></w:p></w:body></w:document>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := parseFilingWord(bytes.NewReader(file.Bytes()), int64(file.Len()), "备案表.docx", filingPackageForm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := json.Marshal(preview.Sections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"titleParagraph":2`, `"paragraphNumbers":[3,5]`} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("缺少原件段号 %s，得到 %s", want, got)
+		}
+	}
+}
+
+// TestFilingWordPreviewSelectsExactMember 验证 ZIP 内同名附件只能按完整路径选择。
+// 参数 t 为测试上下文。
+// 返回值 无。
+func TestFilingWordPreviewSelectsExactMember(t *testing.T) {
+	const wrapper = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:body><w:p><w:r><w:t>内容</w:t></w:r></w:p></w:body></w:document>`
+	word := func(content string) string {
+		return string(buildFilingPackage(t, filingPackageFixtureMember{
+			"word/document.xml", strings.Replace(wrapper, "内容", content, 1),
+		}))
+	}
+	archive := buildFilingPackage(t,
+		filingPackageFixtureMember{"甲/意见.docx", word("甲案出处")},
+		filingPackageFixtureMember{"乙/意见.docx", word("乙案出处")},
+	)
+	item := Attachment{FileName: "备案材料.zip", Size: int64(len(archive))}
+	preview, err := filingTextDocuments(bytes.NewReader(archive), item, true, "乙/意见.docx")
+	if err != nil || len(preview) != 1 || preview[0].Member != "乙/意见.docx" {
+		t.Fatalf("未选中归档成员: %+v, %v", preview, err)
+	}
+	if got := preview[0].Sections[0].Paragraphs[0]; got != "乙案出处" {
+		t.Fatalf("选中了同名的错误附件: %q", got)
+	}
+	_, err = filingTextDocuments(bytes.NewReader(archive), item, true, "意见.docx")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("仅提供文件名时应返回不存在: %v", err)
+	}
+}
 
 // TestLegacyWordAcceptedOnlyForFilingMaterials 验证旧版 Word 仅能用于备案的两类材料。
 // 参数 t 为测试上下文。

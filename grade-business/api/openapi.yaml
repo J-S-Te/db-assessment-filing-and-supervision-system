@@ -1210,6 +1210,19 @@ paths:
     get:
       operationId: getFilingMaterialText
       summary: 读取备案 Word 原件或已登记备案材料包的正文及表格文字
+      parameters:
+      - name: review
+        in: query
+        description: 传入 1 时，监管员或管理员可预览备案的其他 Word 附件或指定归档成员
+        schema:
+          type: integer
+          enum: [1]
+      - name: member
+        in: query
+        description: 审阅模式下引用的备案 ZIP 成员完整路径
+        schema:
+          type: string
+          maxLength: 512
       responses:
         '200':
           description: 按材料与章节组织的原件文字
@@ -17179,22 +17192,35 @@ components:
       properties:
         fileName:
           type: string
+        member:
+          type: string
+          description: 来自备案材料包时的完整成员路径
         category:
           type: string
-          enum: [备案表, 定级报告]
+          enum: [备案表, 定级报告, 其他材料]
         sections:
           type: array
           items:
             type: object
             additionalProperties: false
-            required: [title, paragraphs]
+            required: [title, paragraphs, paragraphNumbers]
             properties:
               title:
                 type: string
+              titleParagraph:
+                type: integer
+                minimum: 1
+                description: 来自原件段落的标题序号。界面分组标题无原件段号
               paragraphs:
                 type: array
                 items:
                   type: string
+              paragraphNumbers:
+                type: array
+                description: 与所展示段落逐一对应的原件段号，含空段落造成的间隔
+                items:
+                  type: integer
+                  minimum: 1
         truncated:
           type: boolean
         message:

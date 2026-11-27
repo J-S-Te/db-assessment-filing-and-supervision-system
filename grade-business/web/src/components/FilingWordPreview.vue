@@ -3,14 +3,7 @@ import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { FileSearch } from '@lucide/vue'
 import { api, errorText, isAbort } from '../lib/api'
 import type { Attachment } from '../lib/domain'
-
-interface FilingTextDocument {
-  fileName: string
-  category: string
-  sections: Array<{ title: string; paragraphs: string[] }>
-  truncated?: boolean
-  message?: string
-}
+import type { FilingTextDocument } from '../lib/filingReviewEvidence'
 
 const props = defineProps<{ file: Attachment; path: string; query?: string }>()
 const dialog = ref<HTMLDialogElement>()
