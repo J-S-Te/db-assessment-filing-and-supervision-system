@@ -21,7 +21,7 @@ export type District3DItem = {
   beam?: boolean
 }
 
-export type Map3DPath = { d: string; level: RiskLevel }
+export type Map3DPath = { d: string; level: RiskLevel; district: string }
 export type Map3DLabel = {
   district: string
   value: number
@@ -36,6 +36,10 @@ export type Map3DModel = {
   faces: Map3DPath[]
   edges: { d: string }[]
   beams: { d: string }[]
+  /** 地平面网格线，与地图共用同一投影，因此自带透视关系。 */
+  floor: { d: string }[]
+  /** 地面同心雷达环，投影后呈椭圆。 */
+  radar: { d: string; radius: number; cx: number; cy: number }[]
   labels: Map3DLabel[]
   viewBox: string
   plan: { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number }
@@ -141,7 +145,7 @@ export function buildMap3D(
         return fmt(point)
       }).join('L') + 'Z'
     }))
-    ground.push({ d: path, level: item.level })
+    ground.push({ d: path, level: item.level, district: item.district })
   })
 
   // 第二层：抬起的立体板块，侧壁只画朝向相机的边。
@@ -164,7 +168,7 @@ export function buildMap3D(
           wall += `M${fmt(topA)}L${fmt(topB)}L${fmt(bottomB)}L${fmt(bottomA)}Z`
         }
       })
-      if (wall && height > 0) walls.push({ d: wall, level: item.level })
+      if (wall && height > 0) walls.push({ d: wall, level: item.level, district: item.district })
 
       let top = ''
       polygon.forEach(ring => {
@@ -174,7 +178,7 @@ export function buildMap3D(
           return fmt(point)
         }).join('L') + 'Z'
       })
-      if (height > 0) faces.push({ d: top, level: item.level })
+      if (height > 0) faces.push({ d: top, level: item.level, district: item.district })
       if (isSelected) {
         edges.push({ d: 'M' + outer.map(([x, y]) => fmt(project(x, y, 0))).join('L') + 'Z' })
         edges.push({ d: 'M' + outer.map(([x, y]) => fmt(project(x, y, height))).join('L') + 'Z' })
@@ -200,9 +204,39 @@ export function buildMap3D(
     }
   })
 
+  /* 地台网格：画在零高度平面上，经同一投影后自然呈透视收敛。 */
+  const floor: { d: string }[] = []
+  const step = 34
+  const left = plan.minX - 30, right = plan.maxX + 30
+  const topEdge = plan.minY - 30, bottomEdge = plan.maxY + 30
+  for (let x = Math.ceil(left / step) * step; x <= right; x += step) {
+    const a = project(x, topEdge, 0), b = project(x, bottomEdge, 0)
+    floor.push({ d: `M${fmt(a)}L${fmt(b)}` })
+  }
+  for (let y = Math.ceil(topEdge / step) * step; y <= bottomEdge; y += step) {
+    const a = project(left, y, 0), b = project(right, y, 0)
+    floor.push({ d: `M${fmt(a)}L${fmt(b)}` })
+  }
+
+  /* 雷达环：零高度平面上的同心圆，投影后为椭圆。 */
+  const radar: Map3DModel['radar'] = []
+  const radarCx = (plan.minX + plan.maxX) / 2, radarCy = (plan.minY + plan.maxY) / 2
+  const span = Math.max(plan.maxX - plan.minX, plan.maxY - plan.minY) / 2 + 40
+  for (const ratio of [0.42, 0.66, 0.92]) {
+    const radius = span * ratio
+    const points: string[] = []
+    for (let step = 0; step <= 48; step++) {
+      const angle = step / 48 * Math.PI * 2
+      const point = project(radarCx + Math.cos(angle) * radius, radarCy + Math.sin(angle) * radius, 0)
+      track(point)
+      points.push(fmt(point))
+    }
+    radar.push({ d: `M${points.join('L')}Z`, radius, cx: radarCx, cy: radarCy })
+  }
+
   const padding = 16
   return {
-    ground, walls, faces, edges, beams, labels, plan,
+    ground, walls, faces, edges, beams, labels, floor, radar, plan,
     viewBox: `${(minX - padding).toFixed(1)} ${(minY - padding).toFixed(1)} `
       + `${(maxX - minX + padding * 2).toFixed(1)} ${(maxY - minY + padding * 2).toFixed(1)}`,
   }
