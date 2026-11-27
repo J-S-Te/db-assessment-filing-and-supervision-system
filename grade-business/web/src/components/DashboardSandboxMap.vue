@@ -31,6 +31,7 @@ const props = defineProps<{
   locked?: boolean
   active?: boolean
   riskPresentation?: boolean
+  overviewPresentation?: boolean
 }>()
 const emit = defineEmits<{ select: [district: string]; unavailable: [] }>()
 
@@ -213,7 +214,9 @@ function computeOverview(w: number, h: number) {
     if (overviewFits(mid, w, h)) hi = mid
     else lo = mid
   }
-  overview = { dist: hi, height: hi * ELEVATION }
+  // 总览需要预留原型的地台边缘，同时保留按实际风险高度向外拟合。
+  const distance = props.overviewPresentation ? Math.max(hi, fit * .985) : hi
+  overview = { dist: distance, height: distance * ELEVATION }
   camera.position.copy(savedPos)
   camera.lookAt(controls!.target)
   camera.updateMatrixWorld()
@@ -394,6 +397,7 @@ function rebuild() {
     controls.minDistance = fit * (props.riskPresentation ? 0.45 : 0.4)
     controls.maxDistance = fit * (props.riskPresentation ? 1.3 : 1.5)
     computeOverview(w, h)
+    if (props.overviewPresentation) applySelection(props.selected)
   }
 }
 
@@ -704,8 +708,20 @@ onMounted(() => {
   scene.add(scanRing)
 
   rebuild()
-  applySelection(props.selected)
+  if (!props.overviewPresentation) applySelection(props.selected)
   resize()
+  if (import.meta.env.DEV) {
+    (window as unknown as { __sandboxDbg?: object }).__sandboxDbg = {
+      camera, controls, scene, blockGroup,
+      entries: () => entries.map(e => ({ district: e.district, center: e.worldCenter.toArray().map(v => Math.round(v * 10) / 10) })),
+      state: () => ({
+        fit: Math.round(fit), overview: { dist: Math.round(overview.dist), height: Math.round(overview.height) },
+        cam: camera?.position.toArray().map(v => Math.round(v)), target: controls?.target.toArray().map(v => Math.round(v)),
+        samples: ovSamples.length, running, blocks: blockGroup?.children.length ?? 0,
+      }),
+    }
+  }
+
   resizeObserver = new ResizeObserver(() => resize())
   resizeObserver.observe(host.value)
 

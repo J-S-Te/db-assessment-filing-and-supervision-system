@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import DashboardSandboxMap from './DashboardSandboxMap.vue'
 import { alertPath, alertTypes } from '../lib/alerts'
@@ -15,8 +15,9 @@ const props = defineProps<{
   summary?: ResponseSummary; detail?: DistrictResponse; selected: string | null; scope: string
   area?: DashboardArea; locked: boolean; startingRank: boolean
   summaryLoading: boolean; summaryFailed: boolean; loading: boolean; failed: boolean
-  openTotal?: number; activeAlerts?: number; scopedAlertsLocation: RouteLocationRaw
+  openTotal?: number; closedTotal?: number; activeAlerts?: number; scopedAlertsLocation: RouteLocationRaw
   canOpen: (to: RouteLocationRaw) => boolean
+  overview?: boolean
 }>()
 const emit = defineEmits<{ select: [district: string | null]; retrySummary: []; retryDetail: [] }>()
 
@@ -37,7 +38,8 @@ const ranking = computed(() => {
   const known = props.area?.districts.filter(name => props.locked || name !== props.area?.name)
     ?? outlines.value.map(outline => outline.district)
   const names = new Set([...districts.value.keys(), ...known])
-  return [...names].map(name => ({ name, record: districts.value.get(name) }))
+  const items = [...names].map(name => ({ name, record: districts.value.get(name) }))
+  return props.overview ? items.sort((a, b) => (b.record?.riskIndex ?? -1) - (a.record?.riskIndex ?? -1)) : items
 })
 const detailsOpen = computed(() => props.selected !== null && !props.locked && mode.value === 'heat')
 const detailCount = computed(() => props.detail?.counts)
@@ -90,8 +92,22 @@ function choose(name: string) {
  */
 function reset() {
   if (props.locked) return
+  if (props.overview) mode.value = 'heat'
   if (props.selected === null) map.value?.resetView()
   else emit('select', null)
+}
+
+/**
+ * 用途 在态势总览的地图或排名内用 Esc 返回完整可见范围。
+ * 参数 event 是当前页面的键盘事件。
+ * 返回值 无。
+ */
+function leaveSelection(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || event.defaultPrevented || props.locked ||
+    (mode.value !== 'rank' && props.selected === null)) return
+  event.preventDefault()
+  mode.value = 'heat'
+  reset()
 }
 
 /**
@@ -102,18 +118,22 @@ function reset() {
 function alertLocation(item: DashboardAlert) {
   return { path: alertPath, query: { alert: item.id } }
 }
-onMounted(() => void loadMap())
+onMounted(() => {
+  void loadMap()
+  if (props.overview) document.addEventListener('keydown', leaveSelection)
+})
+onScopeDispose(() => document.removeEventListener('keydown', leaveSelection))
 </script>
 
 <template>
-  <section class="map-card glass" aria-label="区县风险热力">
+  <section class="map-card glass" :aria-label="overview ? '区县处置态势' : '区县风险热力'">
     <header class="map-head">
-      <h3>区县风险热力</h3>
+      <h3>{{ overview ? '区县处置态势' : '区县风险热力' }}</h3>
       <div class="tabs" role="group" aria-label="区县展示方式">
         <button class="tab-btn" type="button" :class="{ active: mode === 'rank' }"
           :aria-pressed="mode === 'rank'" @click="mode = 'rank'">排名</button>
         <button class="tab-btn" type="button" :class="{ active: mode === 'heat' }"
-          :aria-pressed="mode === 'heat'" @click="mode = 'heat'">热力</button>
+          :aria-pressed="mode === 'heat'" @click="mode = 'heat'">{{ overview ? '地图' : '热力' }}</button>
       </div>
       <span class="cap grow">综合风险指数 · 逾期 40% / 高风险 40% / 待复测 20%</span>
       <button v-if="!locked && !area && (summary?.withoutDistrict.systems ?? 0) > 0"
@@ -121,10 +141,10 @@ onMounted(() => void loadMap())
       <button v-if="!locked" class="chip mini" type="button" @click="reset">{{ area ? '市域' : '全域' }}</button>
     </header>
 
-    <div class="map-wrap">
+    <div class="map-wrap" :class="{ 'map-stage': overview }">
       <DashboardSandboxMap v-if="rows.length && heatShown && !mapError" ref="map" v-show="mode === 'heat'"
         :rows="rows" :meters-per-unit="metersPerUnit" :selected="selected" :locked="locked"
-        :active="mode === 'heat'" risk-presentation @select="choose"
+        :active="mode === 'heat'" :overview-presentation="overview" risk-presentation @select="choose"
         @unavailable="mapError = '当前浏览器无法加载三维地图'" />
       <div v-if="mode === 'heat' && mapError" class="map-empty" role="status">
         {{ mapError }}
@@ -141,23 +161,24 @@ onMounted(() => void loadMap())
           </div>
         </div>
         <div class="map-stats">
-          <div class="stats-head">{{ selected === null ? scope + '概览' : scope }}</div>
-          <div v-if="selected === null" class="stats-row"><span>区县</span><b>{{ rows.length }}</b></div>
-          <div v-else class="stats-row"><span>风险指数</span>
+          <div class="stats-head">{{ selected === null && !overview ? scope + '概览' : scope }}</div>
+          <div v-if="selected === null" class="stats-row"><span>{{ overview ? '涉及区县' : '区县' }}</span><b>{{ rows.length }}</b></div>
+          <div v-else class="stats-row"><span>{{ overview ? '综合风险指数' : '风险指数' }}</span>
             <b>{{ dashboardNumber(detailCount?.systems ? detail?.risk.index : undefined) }}</b>
           </div>
-          <div class="stats-row"><span>未销项隐患</span><b class="red">{{ dashboardNumber(openTotal) }}</b></div>
-          <div v-if="selected === null" class="stats-row"><span>其中高风险</span>
+          <div class="stats-row"><span>未销项隐患</span><b :class="{ red: !overview }">{{ dashboardNumber(openTotal) }}</b></div>
+          <div v-if="overview" class="stats-row"><span>已办结</span><b class="red">{{ dashboardNumber(closedTotal) }}</b></div>
+          <div v-else-if="selected === null" class="stats-row"><span>其中高风险</span>
             <b class="red">{{ dashboardNumber(openTotal ? detailCount?.high : undefined) }}</b>
           </div>
-          <div class="stats-row"><span>活跃预警</span><b>{{ dashboardNumber(activeAlerts) }}</b></div>
+          <div class="stats-row"><span>活跃预警</span><b :class="{ red: overview }">{{ dashboardNumber(activeAlerts) }}</b></div>
           <div v-if="summaryFailed" class="panel-status" role="status">
             区县热力更新失败
             <button class="chip mini" type="button" @click="emit('retrySummary')">重试</button>
           </div>
         </div>
-        <div class="map-caption">风险指数 = 逾期 40% / 高风险 40% / 待复测 20%，满分 100。<br>区域隆起高度即该区县的综合风险指数，点击可下钻。</div>
-        <div class="rotate-hint">北向上 · 拖动旋转 · 滚轮缩放 · 点击区县查看详情</div>
+        <div class="map-caption">风险指数 = 逾期 40% / 高风险 40% / 待复测 20%，满分 100。<br>区域隆起高度即该区县的综合风险指数<template v-if="!overview">，点击可下钻</template>。</div>
+        <div class="rotate-hint">北向上 · 拖动旋转 · 滚轮缩放<template v-if="!overview"> · 点击区县查看详情</template></div>
       </template>
 
       <div v-if="mode === 'rank'" class="rank-overlay">
@@ -171,7 +192,7 @@ onMounted(() => void loadMap())
             <button class="rank-row" type="button" :disabled="locked"
               :aria-pressed="selected === row.name" @click="choose(row.name)">
               <span class="no">{{ row.record ? index + 1 : '—' }}</span>
-              <span class="nm">{{ row.name }}<span v-if="row.record" class="sys">
+              <span class="nm">{{ row.name }}<span v-if="row.record && !overview" class="sys">
                 · {{ row.record.systems }} 个系统 · 未销项 {{ row.record.high + row.record.medium + row.record.low }}
               </span></span>
               <span class="idx" :style="{ color: riskColor(row.record?.riskLevel) }">
@@ -242,3 +263,5 @@ onMounted(() => void loadMap())
     </div>
   </section>
 </template>
+
+<style src="./dashboardRiskAnalysis.css"></style>

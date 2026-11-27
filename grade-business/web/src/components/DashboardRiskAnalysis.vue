@@ -335,5 +335,3 @@ onScopeDispose(() => window.removeEventListener('keydown', escapeDistrict))
     </footer>
   </section>
 </template>
-
-<style src="./dashboardRiskAnalysis.css"></style>
