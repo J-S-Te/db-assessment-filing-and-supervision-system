@@ -189,6 +189,7 @@ function bandStyle(start: number, end: number) {
         <span v-for="segment in collarSegments" :key="segment" class="shield-reactor-side"
           :style="{ '--collar-angle': segment * 360 / collarSegments + 'deg' }"></span>
         <span class="shield-reactor-face">
+          <span class="shield-reactor-glow"></span>
           <span v-if="pulse" :key="pulse" class="security-pulse"></span>
         </span>
       </span>
@@ -287,6 +288,16 @@ function bandStyle(start: number, end: number) {
   filter: brightness(calc(var(--shield-brightness, 1) * .65)) saturate(.73);
 }
 
+.shield-reactor-glow {
+  position: absolute;
+  inset: -3%;
+  border-radius: 50%;
+  background: conic-gradient(
+    #8be6ff 0deg 31deg, #ff6b85 54deg 141deg, #61bfff 157deg 320deg, #8be6ff 360deg);
+  mask-image: radial-gradient(transparent 61%, #000 66%, #0006 70%, transparent 72%);
+  animation: shield-glow-breathe 3.4s ease-in-out infinite;
+}
+
 .security-pulse {
   position: absolute;
   inset: 12%;
@@ -295,7 +306,12 @@ function bandStyle(start: number, end: number) {
   opacity: 0;
   background: radial-gradient(circle, #ff3e5970, transparent 65%);
   box-shadow: 0 0 24px #ff3659, inset 0 0 15px #ff3659;
-  animation: security-pulse .86s ease-out;
+  animation: security-pulse var(--security-impact-duration) ease-out;
+}
+
+@keyframes shield-glow-breathe {
+  0%, 100% { opacity: .7; }
+  50% { opacity: 1; }
 }
 
 @keyframes security-pulse {
@@ -304,6 +320,6 @@ function bandStyle(start: number, end: number) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .security-pulse { animation: none; }
+  .shield-reactor-glow, .security-pulse { animation: none; }
 }
 </style>
