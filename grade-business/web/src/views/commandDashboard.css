@@ -252,3 +252,74 @@
 @media (prefers-reduced-motion:reduce){
   .title-ring:before,.screen-button.spinning svg,.marquee-track{animation:none!important}
 }
+
+/* 风险分析沿用驾驶舱路由和会话，版式按风险分析设计稿。 */
+.risk-screen {
+  color: #d9e6fb;
+  background: radial-gradient(1100px 460px at 50% 110%, #35d6ff14, transparent 60%),
+    radial-gradient(820px 380px at 85% -8%, #6ea8ff12, transparent 55%), #060d1c;
+  font-size: 13px;
+}
+.risk-screen .command-stage {
+  max-width: none;
+  height: 100dvh;
+  padding: 8px 10px 4px;
+  gap: 8px;
+}
+.risk-screen .screen-header { gap: 8px 12px; padding: 0; border: 0; }
+.risk-screen .screen-header::after { display: none; }
+.risk-screen .brand, .risk-screen .screen-title, .risk-screen .screen-meta { position: relative; z-index: 1; }
+.risk-screen .screen-header::before {
+  content: "";
+  grid-row: 1; grid-column: 1 / -1;
+  align-self: stretch;
+  border: 1px solid #488cdc38;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #0e1e3cd9, #091428a6);
+}
+.risk-screen .brand { grid-row: 1; grid-column: 1; padding: 8px 14px; gap: 10px; }
+.risk-screen .brand-mark {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: conic-gradient(from 220deg, #35d6ff, #2456c8, #35d6ff);
+  box-shadow: 0 0 14px #35d6ff80;
+}
+.risk-screen .brand-text strong { font-size: 14px; }
+.risk-screen .brand-text span { font-size: 9px; letter-spacing: .12em; }
+.risk-screen .screen-title { grid-row: 1; grid-column: 2; }
+.risk-screen .screen-title h1 { font-size: clamp(15px, 1.35vw, 19px); letter-spacing: .12em; }
+.risk-screen .title-ring { width: 1.3em; height: 1.3em; }
+.risk-screen .title-ring::before { display: none; }
+.risk-screen .screen-meta {
+  grid-row: 1; grid-column: 3;
+  gap: 10px; padding-inline: 12px;
+}
+.risk-screen .screen-tabs { gap: 10px; padding: 2px 0; }
+.risk-screen .screen-tabs a {
+  padding: 4px 18px; border-color: #488cdc38; border-radius: 999px;
+  background: #0e1e3c8c; font-size: 12.5px;
+}
+.risk-screen .screen-tabs a.selected {
+  color: #c9f2ff; border-color: #35d6ff99;
+  background: linear-gradient(180deg, #35d6ff33, #35d6ff12);
+  box-shadow: 0 0 12px #35d6ff40, inset 0 0 8px #35d6ff1f;
+}
+@media (max-width: 1000px) {
+  .risk-screen .brand-text span, .risk-screen .screen-status { display: none; }
+}
+@media (max-width: 700px) {
+  .risk-screen .brand-text { display: none; }
+  .risk-screen .brand { padding-inline: 6px; }
+  .risk-screen .screen-meta { padding-inline: 3px; }
+  .risk-screen .screen-tabs { grid-column: 1/-1; justify-content: center; gap: 6px; }
+  .risk-screen .screen-tabs a { padding: 4px 8px; font-size: 11.5px; }
+  .risk-screen .screen-title h1 { font-size: clamp(11px, 3.2vw, 16px); }
+  .risk-screen .title-ring { display: none; }
+}
+.risk-screen .screen-header { grid-template-rows: 61px auto; }
+.risk-screen :deep(.system-copyright) {
+  padding: 2px 0;
+  color: #54678a;
+  font-size: 11px;
+  line-height: 16px;
+}

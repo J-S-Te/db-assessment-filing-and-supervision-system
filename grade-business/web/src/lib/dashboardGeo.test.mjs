@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { districtHeatMap, projectDistrictBoundaries, readDistrictBoundaries } from './dashboardGeo.ts'
+import { districtHeatMap, projectDistrictBoundaries, projectRiskSandbox, readDistrictBoundaries } from './dashboardGeo.ts'
 
 const geometry = '{"type":"Polygon","coordinates":[[[1,2],[3,2],[3,3],[1,2]]]}'
 const multipolygon = '{"type":"MultiPolygon","coordinates":[[[[4,3],[5,3],[5,4],[4,3]]],[[[1,4],[2,4],[2,5],[1,4]]]]}'
@@ -71,4 +71,26 @@ test('拒绝重复区县、不闭合、多余坐标数和自带非 WGS84 坐标�
     boundaries.replace('"MultiPolygon"', '"Point"'),
     boundaries + ' '.repeat(2 * 1024 * 1024),
   ]) assert.throws(() => readDistrictBoundaries(input))
+})
+
+test('风险沙盘按原型的 34 个东西模型单位投影真实底图', () => {
+  const source = readFileSync(new URL('../assets/district-boundaries.geojson', import.meta.url), 'utf8')
+  const { outlines, metersPerUnit } = projectRiskSandbox(readDistrictBoundaries(source))
+  assert.equal(outlines.length, 6)
+  assert.ok(outlines.every(row => row.label.every(Number.isFinite)))
+  const x = outlines.flatMap(row => row.rings.flatMap(([outer]) => outer.map(([value]) => value)))
+  assert.ok(Math.abs(Math.max(...x) - 17) < 1e-9)
+  assert.ok(Math.abs(Math.min(...x) + 17) < 1e-9)
+  assert.ok(metersPerUnit > 0)
+})
+
+test('沙盘对会话辖区先筛选再归一，单区县和全域使用同一模型尺度', () => {
+  const source = readFileSync(new URL('../assets/district-boundaries.geojson', import.meta.url), 'utf8')
+  const boundaries = readDistrictBoundaries(source)
+  const visible = projectRiskSandbox(boundaries, ['衢州市', '龙游县'])
+  assert.deepEqual(visible.outlines.map(row => row.district), ['龙游县'])
+  const x = visible.outlines.flatMap(row => row.rings.flatMap(([outer]) => outer.map(point => point[0])))
+  assert.ok(Math.abs(Math.max(...x) - Math.min(...x) - 34) < 1e-9)
+  assert.ok(visible.metersPerUnit < projectRiskSandbox(boundaries).metersPerUnit)
+  assert.deepEqual(projectRiskSandbox(boundaries, []).outlines, [])
 })

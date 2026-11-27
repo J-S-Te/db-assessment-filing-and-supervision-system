@@ -12,6 +12,7 @@ type Ring = Position[]
 type Polygon = Ring[]
 type DistrictBoundary = {
   district: string
+  code?: string
   geometry: { type: 'MultiPolygon'; coordinates: Polygon[] }
 }
 type DistrictPath = { district: string; path: string; label: Position }
@@ -115,6 +116,48 @@ export function projectDistrictOutlines(
 }
 
 /**
+ * 用途 按驾驶舱原型的局部等距投影生成沙盘边界。
+ * 参数 boundaries 为已校验的边界，allowed 为当前会话可见区县。
+ * 返回值 以中心点为原点的立体块轮廓和每模型单位的实际米数。
+ */
+export function projectRiskSandbox(boundaries: readonly DistrictBoundary[], allowed?: readonly string[]) {
+  const visible = visibleBoundaries(boundaries, allowed)
+  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity
+  for (const boundary of visible) for (const polygon of boundary.geometry.coordinates) {
+    for (const [longitude, latitude] of polygon[0] ?? []) {
+      west = Math.min(west, longitude)
+      east = Math.max(east, longitude)
+      south = Math.min(south, latitude)
+      north = Math.max(north, latitude)
+    }
+  }
+  if (!(east > west && north > south)) return { outlines: [], metersPerUnit: undefined }
+  const midLongitude = (west + east) / 2
+  const midLatitude = (south + north) / 2
+  const longitudeFactor = Math.cos(midLatitude * Math.PI / 180)
+  const modelScale = 34 / ((east - west) * longitudeFactor)
+
+  /**
+   * 用途 将经纬度转换为原型沙盘的东西、南北坐标。
+   * 参数 point 为边界点的经纬度。
+   * 返回值 东向及南向为正的模型坐标。
+   */
+  function modelPoint([longitude, latitude]: DistrictPoint): DistrictPoint {
+    return [
+      (longitude - midLongitude) * longitudeFactor * modelScale,
+      (midLatitude - latitude) * modelScale,
+    ]
+  }
+  const outlines: DistrictOutline[] = visible.map(({ district, geometry }) => {
+    const rings = geometry.coordinates.map(polygon => polygon.map(ring => ring.map(modelPoint)))
+    const polygons = rings.map(coordinates => ({ type: 'Polygon' as const, coordinates }))
+    const largest = polygons.reduce((a, b) => planarPath.area(a) >= planarPath.area(b) ? a : b)
+    return { district, rings, label: planarPath.centroid(largest) }
+  })
+  return { outlines, metersPerUnit: 111_320 / modelScale }
+}
+
+/**
  * 用途 计算展示用区县等比适配到视口的投影器。
  * 参数 visible 为允许展示的区县边界。
  * 返回值 与平面视图一致的投影器。
@@ -187,7 +230,10 @@ function readFeature(value: unknown, limits: { remaining: number }): DistrictBou
     }
     return polygon.map((ring: unknown) => readRing(ring, limits))
   })
-  return { district, geometry: { type: 'MultiPolygon', coordinates: polygons } }
+  const rawCode = value.properties.code
+  const code = (typeof rawCode === 'string' || typeof rawCode === 'number') && /^\d{6}$/.test(String(rawCode))
+    ? String(rawCode) : undefined
+  return { district, ...(code ? { code } : {}), geometry: { type: 'MultiPolygon', coordinates: polygons } }
 }
 
 /**
