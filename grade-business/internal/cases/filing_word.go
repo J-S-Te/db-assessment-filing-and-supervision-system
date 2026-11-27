@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 	"grade-business/internal/wordtext"
 )
@@ -23,12 +24,15 @@ var filingSectionHeading = regexp.MustCompile(`^(表[一二三四五六七八九
 var errLegacyFilingWord = fmt.Errorf("%w: unreadable Word 97–2003 document", ErrFileType)
 
 type filingTextSection struct {
-	Title      string   `json:"title"`
-	Paragraphs []string `json:"paragraphs"`
+	Title            string   `json:"title"`
+	TitleParagraph   int      `json:"titleParagraph,omitempty"`
+	Paragraphs       []string `json:"paragraphs"`
+	ParagraphNumbers []int    `json:"paragraphNumbers"`
 }
 
 type filingTextDocument struct {
 	FileName  string              `json:"fileName"`
+	Member    string              `json:"member,omitempty"`
 	Category  string              `json:"category"`
 	Sections  []filingTextSection `json:"sections"`
 	Truncated bool                `json:"truncated,omitempty"`
@@ -63,6 +67,16 @@ func (h endpoint) filingMaterialText(w http.ResponseWriter, r *http.Request) {
 // 参数 w 和 r 为响应及请求，institution 为调用方选定的测评机构范围。
 // 返回值 无，成功返回中文文字分节，失败返回可展示的静态错误。
 func (h endpoint) filingMaterialTextFromScope(w http.ResponseWriter, r *http.Request, institution string) {
+	review := r.URL.Query().Get("review") == "1"
+	var member string
+	if review {
+		actor, ok := access.Current(r.Context())
+		if !ok || actor.Role != access.Regulator && actor.Role != access.SystemAdmin {
+			httpx.Error(w, http.StatusForbidden, "permission_denied", "当前账号无权审阅备案材料。")
+			return
+		}
+		member = r.URL.Query().Get("member")
+	}
 	item, err := h.service.readAttachment(r.Context(), filing, r.PathValue("id"), r.PathValue("attachmentId"), institution)
 	if err != nil {
 		respondError(w, err)
@@ -70,7 +84,8 @@ func (h endpoint) filingMaterialTextFromScope(w http.ResponseWriter, r *http.Req
 	}
 	extension := strings.ToLower(path.Ext(item.FileName))
 	isPackage := item.Kind == "filing_package" && extension == ".zip"
-	if !isPackage && (!isFilingWordKind(item.Kind) || (extension != ".doc" && extension != ".docx")) {
+	isWord := extension == ".doc" || extension == ".docx"
+	if !isPackage && (member != "" || !isWord || !review && !isFilingWordKind(item.Kind)) {
 		httpx.Error(w, 415, "unsupported_filing_word", "请选择备案表或定级报告的 DOC、DOCX 文件，或备案材料包。")
 		return
 	}
@@ -83,7 +98,11 @@ func (h endpoint) filingMaterialTextFromScope(w http.ResponseWriter, r *http.Req
 		return
 	}
 	defer file.Close()
-	documents, err := filingTextDocuments(file, item.Attachment, isPackage)
+	documents, err := filingTextDocuments(file, item.Attachment, isPackage, member)
+	if errors.Is(err, ErrNotFound) {
+		respondError(w, err)
+		return
+	}
 	if err != nil {
 		httpx.Error(w, 422, "filing_word_unreadable", "无法读取材料文字，请核对原件格式、加密状态或文件完整性。")
 		return
@@ -93,12 +112,15 @@ func (h endpoint) filingMaterialTextFromScope(w http.ResponseWriter, r *http.Req
 }
 
 // filingTextDocuments 解析单件 Word，或从已保存备案 ZIP 分别读取两类正式材料。
-// 参数 source 为受控附件，item 为外层附件元数据，isPackage 为备案 ZIP 标识。
+// 参数 source 为受控附件，item 为外层附件元数据，isPackage 为备案 ZIP 标识，member 为指定成员路径。
 // 返回值 与实际材料一一对应的解析结果，或文件解析错误。
-func filingTextDocuments(source io.ReaderAt, item Attachment, isPackage bool) ([]filingTextDocument, error) {
+func filingTextDocuments(source io.ReaderAt, item Attachment, isPackage bool, member string) ([]filingTextDocument, error) {
 	if !isPackage {
-		category := filingPackageForm
-		if item.Kind == "classification_report" {
+		category := "其他材料"
+		switch item.Kind {
+		case "filing_form":
+			category = filingPackageForm
+		case "classification_report":
 			category = filingPackageReport
 		}
 		file, err := parseFilingWord(source, item.Size, item.FileName, category)
@@ -115,6 +137,9 @@ func filingTextDocuments(source io.ReaderAt, item Attachment, isPackage bool) ([
 	if err != nil {
 		return nil, err
 	}
+	if member != "" {
+		return filingTextMember(members, member)
+	}
 	files, err := requiredFilingPackageFiles(members)
 	if err != nil {
 		return nil, err
@@ -126,15 +151,32 @@ func filingTextDocuments(source io.ReaderAt, item Attachment, isPackage bool) ([
 	return result, nil
 }
 
-// previewFilingMember 对备案包内一项正式材料解析文字，保留其他材料的结果。
-// 参数 member 为已定位的正式材料，category 为页面展示的业务类别。
+// filingTextMember 从受控归档成员中按完整路径选择预览目标。
+// 参数 members 是已校验的成员，name 是审核依据中的完整路径。
+// 返回值 单份文档的文字预览，或成员不存在错误。
+func filingTextMember(members []*zip.File, name string) ([]filingTextDocument, error) {
+	for _, entry := range members {
+		if entry.Name != name || filingPackageMetadata(entry.Name) {
+			continue
+		}
+		category := filingPackageCategory(entry.Name)
+		if category == "" {
+			category = "其他材料"
+		}
+		return []filingTextDocument{previewFilingMember(entry, category)}, nil
+	}
+	return nil, ErrNotFound
+}
+
+// previewFilingMember 解析备案包内单份材料并保留原始成员路径。
+// 参数 member 为已定位的备案包成员，category 为页面展示的业务类别。
 // 返回值 该成员的正文或简短提示。
 func previewFilingMember(member *zip.File, category string) filingTextDocument {
 	name := path.Base(member.Name)
-	result := filingTextDocument{FileName: name, Category: category, Sections: []filingTextSection{}}
+	result := filingTextDocument{FileName: name, Member: member.Name, Category: category, Sections: []filingTextSection{}}
 	extension := strings.ToLower(path.Ext(name))
 	if extension != ".doc" && extension != ".docx" {
-		result.Message = "当前材料为 PDF，请下载原件查看。"
+		result.Message = "当前材料不支持 Word 文字预览，请下载原件核对。"
 		return result
 	}
 	if member.UncompressedSize64 <= maxDocumentSize {
@@ -142,6 +184,7 @@ func previewFilingMember(member *zip.File, category string) filingTextDocument {
 		if err := readFilingPackageMember(member, &content); err == nil {
 			parsed, err := parseFilingWord(bytes.NewReader(content.Bytes()), int64(content.Len()), name, category)
 			if err == nil {
+				parsed.Member = member.Name
 				return parsed
 			}
 		}
@@ -163,9 +206,9 @@ func parseFilingWord(source io.ReaderAt, size int64, name, category string) (fil
 		return filingTextDocument{}, err
 	}
 	result := filingTextDocument{FileName: name, Category: category}
-	section := filingTextSection{Title: "正文"}
+	section := filingTextSection{Title: "正文", Paragraphs: []string{}, ParagraphNumbers: []int{}}
 	left := maxFilingPreviewChars
-	for _, text := range paragraphs {
+	for index, text := range paragraphs {
 		if text == "" {
 			continue
 		}
@@ -173,6 +216,7 @@ func parseFilingWord(source io.ReaderAt, size int64, name, category string) (fil
 		if count > left {
 			if left > 0 {
 				section.Paragraphs = append(section.Paragraphs, string([]rune(text)[:left]))
+				section.ParagraphNumbers = append(section.ParagraphNumbers, index+1)
 			}
 			result.Truncated = true
 			break
@@ -182,9 +226,11 @@ func parseFilingWord(source io.ReaderAt, size int64, name, category string) (fil
 			if len(section.Paragraphs) > 0 || section.Title != "正文" {
 				result.Sections = append(result.Sections, section)
 			}
-			section = filingTextSection{Title: text, Paragraphs: []string{}}
+			section = filingTextSection{Title: text, TitleParagraph: index + 1,
+				Paragraphs: []string{}, ParagraphNumbers: []int{}}
 		} else {
 			section.Paragraphs = append(section.Paragraphs, text)
+			section.ParagraphNumbers = append(section.ParagraphNumbers, index+1)
 		}
 	}
 	if len(section.Paragraphs) > 0 || section.Title != "正文" {

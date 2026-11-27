@@ -206,7 +206,7 @@ const lists = {
   knowledge: { component: defineAsyncComponent(() => import('./views/KnowledgeList.vue')) },
 }
 const overlay = computed(() => {
-  if (route.path === '/filings/history-import') return undefined
+  if (route.meta.standalone || route.path === '/filings/history-import') return undefined
   const [, item, name, action] = route.path.split('/')
   if (!section.value || !item || !name || !Object.hasOwn(lists, item)) return undefined
   const content = lists[item as keyof typeof lists]
@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
           当前账号无权访问该页面，已返回授权首页。
         </p>
         <div :key="'scan-' + activeGroup" class="regulator-navigation-scan" aria-hidden="true"></div>
-        <template v-if="module">
+        <template v-if="module && !route.meta.standalone">
           <header :key="module.key" class="v2-page-head regulator-module-head">
             <span class="regulator-module-icon" aria-hidden="true"><component :is="moduleIcon" :size="24" /></span>
             <div><h1>{{ module.title }}</h1><p>{{ module.subtitle }}</p></div>

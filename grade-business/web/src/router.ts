@@ -56,6 +56,8 @@ export const router = createRouter({
       meta: { section: 'institution-accounts', title: '机构用户' } },
     { path: '/', component: () => import('./views/Workbench.vue'), meta: { section: 'home', title: '工作台' } },
     ...caseRoutes('filings'),
+    { path: '/filings/:id/material-review', component: () => import('./views/FilingReview.vue'),
+      props: true, meta: { section: 'filings', title: '材料审阅', standalone: true } },
     { path: '/filing-material-policy', component: () => import('./views/FilingMaterialPolicy.vue'),
       meta: { section: 'filing-material-policy', title: '备案材料规则' } },
     { path: '/filings/history-import', component: () => import('./views/FilingHistoryImport.vue'),

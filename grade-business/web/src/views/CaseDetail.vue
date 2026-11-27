@@ -403,7 +403,7 @@ onBeforeUnmount(() => {
               :rules="record.policyMaterials" :files="attachments" />
             <template v-if="kind === 'filings'">
               <PrecheckPanel v-if="canEditCase || canReviewCase" id="filing-precheck" tabindex="-1"
-                :path="path" :revision="revision" />
+                :path="path" :revision="revision" :review-link="path + '/material-review'" />
               <section v-else id="filing-precheck" tabindex="-1" class="panel detail-panel"
                 aria-labelledby="precheck-title">
                 <header class="panel-heading panel-compact">
