@@ -257,6 +257,10 @@ onUnmounted(() => window.clearInterval(clockTimer))
 </template>
 
 <style scoped>
+/* 隐藏登录页的可视滚动条，保留矮屏访问表单所需的滚动。 */
+:global(html:has(.signin)) { scrollbar-width: none; }
+:global(html:has(.signin)::-webkit-scrollbar) { display: none; }
+
 .signin {
   --muted: #98acc5;
   --focus: #8edcff;

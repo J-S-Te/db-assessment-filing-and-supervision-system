@@ -39,8 +39,8 @@ function buildParticles(count: number, radius: number, depth: number) {
   }))
 }
 
-const particlesNear = buildParticles(40, 43, 7.3)
-const particlesFar = buildParticles(28, 31.5, -5.1)
+const particlesNear = buildParticles(40, 32.8, 4.6)
+const particlesFar = buildParticles(28, 24.4, -3.2)
 
 /**
  * 用途 生成可无缝横向滚动的信号波形路径，首尾两段波形完全一致。
@@ -524,14 +524,13 @@ onUnmounted(() => {
 .security-spotlight {
   position: absolute;
   left: 50%;
-  top: -16%;
-  width: 62%;
-  height: 96%;
-  margin-left: -31%;
-  background: radial-gradient(ellipse 42% 76% at 50% 0, rgba(150, 225, 255, .17), rgba(90, 180, 240, .04) 58%, transparent 80%);
-  filter: blur(46px);
-  clip-path: polygon(43% 0, 57% 0, 78% 100%, 22% 100%);
-  opacity: .85;
+  top: -12%;
+  width: 46%;
+  height: 62%;
+  margin-left: -23%;
+  background: radial-gradient(ellipse 30% 58% at 50% 0, rgba(150, 225, 255, .19), rgba(90, 180, 240, .05) 58%, transparent 80%);
+  filter: blur(28px);
+  opacity: .9;
 }
 
 /* ---------- 全息面板 ---------- */
@@ -682,7 +681,7 @@ onUnmounted(() => {
 }
 
 .security-stage {
-  --shield-unit: .561;
+  --shield-unit: .42;
   position: relative;
   /* 舞台同时受列宽与视口高度约束，保证基座不会溢出到底部标语。 */
   width: min(100%, 820px, calc((100dvh - 170px) * 820 / 790));
@@ -742,11 +741,11 @@ onUnmounted(() => {
 /* 悬浮光柱 */
 .security-beam {  position: absolute;
   left: 50%;
-  top: 58%;
+  top: 66%;
   z-index: 1;
-  width: 14.6%;
-  height: 30%;
-  margin-left: -7.3%;
+  width: 11%;
+  height: 23%;
+  margin-left: -5.5%;
   background: linear-gradient(180deg, rgba(160, 230, 255, .5), rgba(90, 185, 245, .16) 45%, transparent 88%);
   filter: blur(14px);
   animation: security-beam 4s ease-in-out infinite;
@@ -755,11 +754,11 @@ onUnmounted(() => {
 .security-beam-wide {
   position: absolute;
   left: 50%;
-  top: 55%;
+  top: 62%;
   z-index: 1;
-  width: 41%;
-  height: 34%;
-  margin-left: -20.5%;
+  width: 24%;
+  height: 28%;
+  margin-left: -12%;
   background: radial-gradient(60% 100% at 50% 0, rgba(90, 190, 250, .28), transparent 72%);
   filter: blur(26px);
   animation: security-beam-wide 8s ease-in-out infinite;
@@ -769,7 +768,7 @@ onUnmounted(() => {
 .security-particles {
   position: absolute;
   left: 50%;
-  top: 37%;
+  top: 43.2%;
   z-index: 4;
   width: 0;
   height: 0;
@@ -779,7 +778,7 @@ onUnmounted(() => {
 }
 
 .security-particles-near { transform: rotateX(70deg); animation: security-orbit-near 20s linear infinite; }
-.security-particles-far { top: 42%; z-index: 3; transform: rotateX(-62deg); animation: security-orbit-far 28s linear infinite; }
+.security-particles-far { top: 46%; z-index: 3; transform: rotateX(-62deg); animation: security-orbit-far 28s linear infinite; }
 
 .security-particle {
   position: absolute;
@@ -806,15 +805,41 @@ onUnmounted(() => {
   50% { opacity: .95; scale: 1.2; }
 }
 
+/* 盾牌外的两层光晕 */
+.security-halo,
+.security-halo-outer {
+  position: absolute;
+  left: 50%;
+  top: 43.2%;
+  z-index: 2;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.security-halo {
+  width: 52.5cqw;
+  height: 52.5cqw;
+  margin: -26.25cqw 0 0 -26.25cqw;
+  border: 1px solid rgba(120, 215, 255, .2);
+  box-shadow: 0 0 44px rgba(60, 170, 255, .13), inset 0 0 70px rgba(60, 170, 255, .07);
+}
+
+.security-halo-outer {
+  width: 66cqw;
+  height: 66cqw;
+  margin: -33cqw 0 0 -33cqw;
+  border: 1px dashed rgba(120, 215, 255, .12);
+}
+
 /* 前景棘轮轨道环 */
 .security-orbit-layer {
   position: absolute;
   left: 50%;
-  top: 37%;
+  top: 43.2%;
   z-index: 6;
-  width: 75.6%;
+  width: 56.7%;
   aspect-ratio: 1;
-  margin-left: -37.8%;
+  margin-left: -28.35%;
   perspective: 1200px;
   pointer-events: none;
   transform: translateY(-50%) rotateX(72deg) rotateZ(-12deg);
@@ -982,7 +1007,7 @@ onUnmounted(() => {
 .security-core {
   position: absolute;
   left: 50%;
-  top: .8%;
+  top: 16%;
   z-index: 5;
   width: calc(var(--shield-unit) * 100%);
   aspect-ratio: 1122 / 1402;
@@ -1041,18 +1066,18 @@ onUnmounted(() => {
 .security-reticle {
   position: absolute;
   left: 50%;
-  top: 3.3%;
+  top: 7.2%;
   z-index: 8;
-  width: 65.9%;
-  height: 77.2%;
-  margin-left: -32.95%;
+  width: 54.6%;
+  height: 71.9%;
+  margin-left: -27.3%;
   pointer-events: none;
 }
 
 .security-reticle-corner {
   position: absolute;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: 1px solid rgba(127, 224, 255, .55);
 }
 
