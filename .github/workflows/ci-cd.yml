@@ -1,0 +1,124 @@
+name: grade-business-ci-cd
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grade-business-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: grade_business_test
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 15444:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d grade_business_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: grade-business/go.mod
+          cache-dependency-path: grade-business/go.sum
+      - name: Install PDF and OCR tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            poppler-utils poppler-data tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng
+      - name: Test Go with isolated PostgreSQL
+        working-directory: grade-business
+        env:
+          GRADE_BUSINESS_TEST_DSN: postgres://ci:ci@127.0.0.1:15444/grade_business_test?sslmode=disable
+          FILING_WORD_TEST_DOC: ${{ github.workspace }}/定级材料模版/附件2 网络安全等级保护备案表（2025版）.doc
+        run: go test -race -count=1 ./...
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.18.0'
+          package-manager-cache: false
+      - name: Test and build Vue
+        working-directory: grade-business/web
+        run: |
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm test
+          corepack pnpm typecheck
+          corepack pnpm build
+
+  image:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      image_ref: ${{ steps.result.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Resolve ACR image references
+        id: refs
+        shell: bash
+        env:
+          ACR_PUSH_REGISTRY: ${{ vars.ACR_PUSH_REGISTRY }}
+          ACR_PULL_REGISTRY: ${{ vars.ACR_PULL_REGISTRY }}
+          ACR_NAMESPACE: ${{ vars.ACR_NAMESPACE }}
+          ACR_REPOSITORY: ${{ vars.ACR_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          : "${ACR_PUSH_REGISTRY:?missing ACR_PUSH_REGISTRY}"
+          : "${ACR_PULL_REGISTRY:?missing ACR_PULL_REGISTRY}"
+          : "${ACR_NAMESPACE:?missing ACR_NAMESPACE}"
+          : "${ACR_REPOSITORY:?missing ACR_REPOSITORY}"
+          path="$ACR_NAMESPACE/$ACR_REPOSITORY"
+          tag="$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "push_tag=$ACR_PUSH_REGISTRY/$path:$tag" >> "$GITHUB_OUTPUT"
+          echo "pull_image=$ACR_PULL_REGISTRY/$path" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ vars.ACR_PUSH_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: grade-business
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.refs.outputs.push_tag }}
+          cache-from: type=gha,scope=grade-business
+          cache-to: type=gha,scope=grade-business,mode=max
+          provenance: true
+          sbom: true
+      - name: Record published image
+        id: result
+        shell: bash
+        env:
+          PUSH_TAG: ${{ steps.refs.outputs.push_tag }}
+          PULL_IMAGE: ${{ steps.refs.outputs.pull_image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "image_ref=$PULL_IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
+          printf '### ACR 镜像\n\n- 标签：`%s`\n- 拉取地址：`%s@%s`\n' \
+            "$PUSH_TAG" "$PULL_IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"

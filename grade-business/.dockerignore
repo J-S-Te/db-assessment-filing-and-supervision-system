@@ -1,0 +1,11 @@
+.git
+.gitea
+**/.DS_Store
+**/.env
+**/.env.*
+data
+deploy
+coverage.out
+web/node_modules
+web/dist
+web/test-results
