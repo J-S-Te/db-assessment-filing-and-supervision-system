@@ -170,7 +170,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <figure class="security-scene" aria-labelledby="security-title"
+  <figure class="security-scene" aria-label="安防盾牌"
     :style="{ '--security-impact-duration': impactDuration + 'ms' }">
     <div class="security-stage" :data-login-state="loginState">
       <img class="security-base" :src="baseArt" alt="" width="1122" height="1402">
@@ -203,7 +203,6 @@ onUnmounted(() => {
         <Activity :size="17" aria-hidden="true" />
       </span>
       <span>
-        <strong id="security-title">智能安防中枢</strong>
         <span id="security-controls" class="sr-only">方向键旋转，Home 键复位，回车键激活。</span>
         <span class="security-caption-status" role="status">
           {{ pulse ? '核心已激活 · 拖动旋转' : '拖动旋转 · 点击激活' }}
@@ -478,8 +477,7 @@ onUnmounted(() => {
 }
 
 .security-caption-active { color: #ff8998; border-color: #ff637282; }
-.security-caption strong { display: block; font-size: .93rem; letter-spacing: .12em; }
-.security-caption-status { display: block; margin-top: 2px; color: #9cb1cc; font-size: .8rem; }
+.security-caption-status { display: block; color: #9cb1cc; font-size: .8rem; }
 
 .sr-only {
   position: absolute;
