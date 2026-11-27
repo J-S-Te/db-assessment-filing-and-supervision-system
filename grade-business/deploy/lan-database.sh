@@ -23,24 +23,58 @@ pending_migrations() {
   done
 }
 
-# 用途 确认原有外置数据库已应用全部迁移，以保留无需迁移的发布方式。
-# 参数 $1、$2 为运行中的 systemd 单元和二进制，$3 为本次迁移目录。
-# 返回值 无待执行迁移时返回 0，无法核对或仍需外置库独立备份时中止。
-verify_external_schema() {
-  local dsn applied pending uri
+# 用途 核对外置 PostgreSQL 的版本和待执行迁移，并在应用切换前作备份和隔离演练。
+# 参数 $1 为发布目录，$2、$3 为运行中的 systemd 单元和二进制，$4 为迁移目录。
+# 返回值 无待执行迁移或备份与演练通过时返回 0。
+verify_external_schema() (
+  local dsn applied pending uri server_version server_major image client_version dump
   command -v psql >/dev/null || fail '外置数据库缺少可用的迁移记录核对工具'
-  dsn=$(running_database_dsn "$1" "$2") || fail '无法确认外置数据库的运行配置'
+  dsn=$(running_database_dsn "$2" "$3") || fail '无法确认外置数据库的运行配置'
   # 仅核对可无损映射到 libpq 环境变量的地址，避免口令进入进程参数。
   uri='^postgres(ql)?://([[:alnum:]_]+):([[:alnum:]_.~-]+)@([[:alnum:].-]+):([1-9][0-9]{0,4})'
   uri+='/([[:alnum:]_]+)(\?sslmode=(disable|allow|prefer|require|verify-ca|verify-full))?$'
   [[ "$dsn" =~ $uri && "${BASH_REMATCH[5]}" -le 65535 ]] || fail '无法安全识别外置数据库地址'
-  applied=$(PGUSER="${BASH_REMATCH[2]}" PGPASSWORD="${BASH_REMATCH[3]}" PGHOST="${BASH_REMATCH[4]}" \
-    PGPORT="${BASH_REMATCH[5]}" PGDATABASE="${BASH_REMATCH[6]}" PGSSLMODE="${BASH_REMATCH[8]:-prefer}" \
-    PGCONNECT_TIMEOUT=5 PGOPTIONS='-c default_transaction_read_only=on' \
-    psql -X -w -At -v ON_ERROR_STOP=1 -c 'SELECT name FROM schema_migrations' 2>/dev/null) ||
+  export PGUSER="${BASH_REMATCH[2]}" PGPASSWORD="${BASH_REMATCH[3]}" PGHOST="${BASH_REMATCH[4]}"
+  export PGPORT="${BASH_REMATCH[5]}" PGDATABASE="${BASH_REMATCH[6]}" PGSSLMODE="${BASH_REMATCH[8]:-prefer}"
+  export PGCONNECT_TIMEOUT=5 PGOPTIONS='-c default_transaction_read_only=on'
+  unset dsn
+  applied=$(psql -X -w -At -v ON_ERROR_STOP=1 -c 'SELECT name FROM schema_migrations ORDER BY name' 2>/dev/null) ||
     fail '无法读取外置数据库迁移记录'
-  pending=$(pending_migrations "$3" "$applied") || fail '发布目录中的迁移文件无效'
-  [[ -z "$pending" ]] || fail '外置数据库有待执行迁移，须先独立备份并完成迁移'
+  pending=$(pending_migrations "$4" "$applied") || fail '发布目录中的迁移文件无效'
+  [[ -n "$pending" ]] || return 0
+
+  server_version=$(psql -X -w -At -v ON_ERROR_STOP=1 -c 'SHOW server_version_num' 2>/dev/null) ||
+    fail '无法核对外置数据库的 PostgreSQL 版本'
+  [[ "$server_version" =~ ^[1-9][0-9]{5}$ ]] || fail '外置数据库主版本不受隔离演练支持'
+  server_major=$((server_version / 10000))
+  image=$(external_rehearsal_image "$server_major") || fail '无法准备同主版本的外置数据库演练镜像'
+
+  dump="/usr/lib/postgresql/$server_major/bin/pg_dump"
+  if [[ ! -x "$dump" ]]; then
+    dump=pg_dump
+  fi
+  client_version=$("$dump" --version 2>/dev/null) || client_version=''
+  if [[ "$client_version" =~ \(PostgreSQL\)[[:space:]]+$server_major([.]|[[:space:]]|$) ]]; then
+    backup_and_rehearse "$1" "$4" "$applied" "$pending" "$image" "$dump" -w -Fc
+  else
+    backup_and_rehearse "$1" "$4" "$applied" "$pending" "$image" \
+      docker run --rm --pull never --network host \
+      -e PGUSER -e PGPASSWORD -e PGHOST -e PGPORT -e PGDATABASE -e PGSSLMODE \
+      -e PGCONNECT_TIMEOUT -e PGOPTIONS "$image" pg_dump -w -Fc
+  fi
+)
+
+# 用途 优先使用已缓存的官方 PostgreSQL 镜像，缺少时只拉取匹配的主版本。
+# 参数 $1 为已从运行数据库确认的 PostgreSQL 主版本。
+# 返回值 演练容器使用的本地不可变镜像 ID，准备失败时返回非零。
+external_rehearsal_image() {
+  local tag="docker.io/library/postgres:$1-alpine" image
+  if ! image=$(docker image inspect --format '{{.Id}}' "$tag" 2>/dev/null); then
+    docker pull "$tag" >/dev/null || return 1
+    image=$(docker image inspect --format '{{.Id}}' "$tag") || return 1
+  fi
+  [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]] || return 1
+  printf '%s\n' "$image"
 }
 
 # 用途 先确认托管库与发布配置一致，再为待执行迁移做可恢复备份。
@@ -49,7 +83,7 @@ verify_external_schema() {
 verify_managed_schema() {
   local release_root=$1 bootstrap_file=$2 migration_dir=$3
   local service_name=$4 executable=$5 was_active=$6
-  local port configured_password configured_dsn active_dsn database applied pending
+  local port configured_password configured_dsn active_dsn database applied pending image
   [[ -f "$bootstrap_file" && ! -L "$bootstrap_file" ]] || fail '无法确认托管库配置文件'
   port=$(sed -n 's/^GRADE_RELEASE_DB_PORT=//p' "$bootstrap_file")
   configured_password=$(sed -n 's/^GRADE_RELEASE_DB_PASSWORD=//p' "$bootstrap_file")
@@ -68,7 +102,10 @@ verify_managed_schema() {
   applied=$(read_managed_schema "$database") || fail '无法核对托管数据库迁移记录'
   pending=$(pending_migrations "$migration_dir" "$applied") || fail '发布目录中的迁移文件无效'
   if [[ -n "$pending" ]]; then
-    backup_and_rehearse "$release_root" "$database" "$migration_dir" "$applied" "$pending"
+    image=$(docker inspect --format '{{.Image}}' "$database") || fail '无法核对托管 PostgreSQL 镜像'
+    [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]] || fail '托管 PostgreSQL 镜像标识无效'
+    backup_and_rehearse "$release_root" "$migration_dir" "$applied" "$pending" "$image" \
+      docker exec "$database" pg_dump -U grade_business -d grade_business -Fc
   fi
 }
 
@@ -102,41 +139,37 @@ rehearse_migrations() {
 }
 
 # 用途 持久化待迁移库的备份，在不联网的临时数据库中校验完整恢复和迁移。
-# 参数 $1、$2、$3 为发布目录、业务库容器、迁移目录，$4、$5 为已执行与待执行文件名。
+# 参数 $1、$2 为发布与迁移目录，$3、$4 为已执行与待执行文件名，$5 为镜像，其余为备份命令。
 # 返回值 只有备份已落盘且备份恢复及全部候选迁移通过时返回 0。
 backup_and_rehearse() (
-  local release_root=$1 database=$2 migration_dir=$3 applied=$4 pending=$5
-  local backup image scratch='' result
+  local release_root=$1 migration_dir=$2 applied=$3 pending=$4 image=$5
+  shift 5
+  local backup scratch='' attempt restored
   umask 077
   [[ ! -L "$release_root/backups" ]] || fail '备份目录不能是符号链接'
   mkdir -p -- "$release_root/backups" || fail '无法创建备份根目录'
   backup=$(mktemp -d "$release_root/backups/pre-migration.XXXXXXXX") || fail '无法创建迁移备份目录'
   trap 'if [[ -n "$scratch" ]]; then docker rm -f "$scratch" >/dev/null || exit 1; fi; rm -f -- "$backup/database.dump.partial"' EXIT
-  docker exec "$database" pg_dump -U grade_business -d grade_business -Fc \
-    > "$backup/database.dump.partial" 2>"$backup/pg_dump.log" || fail "托管数据库备份失败，见受限目录：$backup"
-  [[ -s "$backup/database.dump.partial" ]] || fail '托管数据库备份为空'
-  docker exec -i "$database" pg_restore --list < "$backup/database.dump.partial" >/dev/null ||
-    fail '托管数据库备份无法读取'
+  "$@" > "$backup/database.dump.partial" 2>"$backup/pg_dump.log" || fail "数据库备份失败，见受限目录：$backup"
+  [[ -s "$backup/database.dump.partial" ]] || fail '数据库备份为空'
   mv -- "$backup/database.dump.partial" "$backup/database.dump" || fail '无法保存备份'
   (cd -- "$backup" && sha256sum database.dump > SHA256SUMS) || fail '无法记录备份校验和'
 
-  image=$(docker inspect --format '{{.Image}}' "$database") || fail '无法核对 PostgreSQL 镜像'
-  [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'PostgreSQL 镜像标识无效'
   scratch=$(docker run --rm --detach --pull never --network none \
     -e POSTGRES_USER=grade_business -e POSTGRES_DB=grade_business \
     -e POSTGRES_HOST_AUTH_METHOD=trust "$image") || fail '无法启动独立 PostgreSQL 演练容器'
-  for (( result=0; result<60; result++ )); do
+  for (( attempt=0; attempt<60; attempt++ )); do
     if docker exec "$scratch" pg_isready -h 127.0.0.1 -U grade_business -d grade_business >/dev/null 2>&1; then
       break
     fi
     sleep 1
   done
-  (( result < 60 )) || fail '独立 PostgreSQL 演练容器未就绪'
+  (( attempt < 60 )) || fail '独立 PostgreSQL 演练容器未就绪'
   docker exec -i "$scratch" pg_restore -U grade_business -d grade_business --exit-on-error \
     --no-owner --no-privileges < "$backup/database.dump" 2>"$backup/pg_restore.log" ||
     fail "备份无法在独立 PostgreSQL 中恢复，见受限目录：$backup"
-  result=$(read_managed_schema "$scratch") || fail '无法核对已恢复的迁移状态'
-  [[ "$result" == "$applied" ]] || fail '备份内容与开始时核对的迁移状态不一致'
+  restored=$(read_managed_schema "$scratch") || fail '无法核对已恢复的迁移状态'
+  [[ "$restored" == "$applied" ]] || fail '备份内容与开始时核对的迁移状态不一致'
   rehearse_migrations "$scratch" "$migration_dir" "$pending" 2>"$backup/rehearsal.log" ||
     fail "隔离迁移演练失败，见受限目录：$backup"
   printf '数据库备份及隔离迁移演练通过：%s\n' "$backup"

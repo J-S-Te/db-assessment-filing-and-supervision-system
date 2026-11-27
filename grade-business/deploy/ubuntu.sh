@@ -233,7 +233,7 @@ if (( previously_active == 1 )); then
   if (( had_managed_database == 1 )); then
     verify_managed_schema "$root" "$bootstrap" "$source_dir/../migrations" "$service" "$binary" 1
   else
-    verify_external_schema "$service" "$binary" "$source_dir/../migrations"
+    verify_external_schema "$root" "$service" "$binary" "$source_dir/../migrations"
   fi
 fi
 if [[ "$unit_state" == not-found || -f "$bootstrap" ]] || unit_missing_database; then
