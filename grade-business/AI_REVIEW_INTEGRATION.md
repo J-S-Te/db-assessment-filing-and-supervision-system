@@ -19,9 +19,11 @@ node ./DBReportReview-web/tools/package-platform-review.mjs \
 
 ## 测试服发布
 
-现有 GitHub Actions 的镜像 job 增加前端检出及打包步骤。平台仓库变量 `AI_REVIEW_WEB_REF` 必须是 `J-S-Te/DBReportReview-web` 中包含本次集成文件的完整 40 位提交 SHA。流水线拒绝空值或分支名，不使用漂移的 main 作为页面依赖。先提交前端，再固定该变量，最后提交平台代码触发原测试镜像发布；回滚使用原流水线的上一镜像。没有数据库迁移或线上用户授权批量修改。
+现有 GitHub Actions 的镜像 job 从本平台仓库的 Release 下载最小静态发布包，不跨仓库检出私有源码。平台仓库变量 `AI_REVIEW_WEB_REF` 必须是 `J-S-Te/DBReportReview-web` 中已验证的完整 40 位提交 SHA，`AI_REVIEW_WEB_BUNDLE_SHA256` 必须是对应归档的完整 SHA-256。发布标签为 `ai-review-web-<前端提交 SHA>`，附件为 `ai-review-web.tar.gz`。流水线拒绝缺失或格式错误的变量，下载后先核验归档摘要，再解压到 `web/public/review` 并构建原镜像。回滚使用原流水线的上一镜像；没有数据库迁移或线上用户授权批量修改。
 
-本次已验证的前端提交为 `af46ab2ffcc5a7b79879f9b24ab7ef8355b68982`。用户已授权提交推送及通过既有流水线发布测试服；远端是否运行本版以对应 GitHub Actions 发布回执与在线入口为准，本机浏览器验收不等于远端已更新。
+私有前端提交的六个静态资源和 `.review-bundle.json` 由打包工具生成，归档不包含账号、运行配置、测试、原型或私有仓库其余源码。公开平台的 Release 附件可公开下载，用户已明确授权公开本次最小静态包。前端升级时先在私有仓库测试并提交，再打包、核对文件范围和摘要、发布对应附件，更新两项平台变量后触发原流水线。原前端测试在发布归档前执行；CI 负责平台完整测试、发布摘要验证及镜像部署。
+
+本次前端提交为 `af46ab2ffcc5a7b79879f9b24ab7ef8355b68982`，对应归档 SHA-256 为 `c938b409daceb554808e0b4fa64ce89cabcb052893f0c470580cefadc97efac3`。首轮 `45989386593` 的全部测试通过，但默认 Actions 令牌无权读取私有前端，未部署；GitHub 随后明确拒绝添加部署密钥，未持久化新凭据。改用上述静态附件方案，远端是否运行本版以对应 GitHub Actions 发布回执与在线入口为准，本机浏览器验收不等于远端已更新。
 
 ## 实际验证
 

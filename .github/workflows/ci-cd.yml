@@ -74,27 +74,24 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Require pinned review frontend
+      - name: Install pinned review frontend bundle
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           REVIEW_WEB_REF: ${{ vars.AI_REVIEW_WEB_REF }}
+          REVIEW_WEB_BUNDLE_SHA256: ${{ vars.AI_REVIEW_WEB_BUNDLE_SHA256 }}
         run: |
           set -euo pipefail
-          [[ "$REVIEW_WEB_REF" =~ ^[a-f0-9]{40}$ ]] || { echo 'Set AI_REVIEW_WEB_REF to the verified DBReportReview-web commit SHA before release.' >&2; exit 1; }
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: J-S-Te/DBReportReview-web
-          ref: ${{ vars.AI_REVIEW_WEB_REF }}
-          path: .ai-review-web
-          persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.18.0'
-          package-manager-cache: false
-      - name: Package pinned review frontend
-        run: |
-          node --test .ai-review-web/review-platform.test.mjs .ai-review-web/tools/package-platform-review.test.mjs
-          node .ai-review-web/tools/package-platform-review.mjs "$GITHUB_WORKSPACE/grade-business/web/public/review"
+          [[ "$REVIEW_WEB_REF" =~ ^[a-f0-9]{40}$ ]] || { echo 'Set AI_REVIEW_WEB_REF to the verified DBReportReview-web commit SHA.' >&2; exit 1; }
+          [[ "$REVIEW_WEB_BUNDLE_SHA256" =~ ^[a-f0-9]{64}$ ]] || { echo 'Set AI_REVIEW_WEB_BUNDLE_SHA256 to the verified static archive digest.' >&2; exit 1; }
+          bundle_dir="$RUNNER_TEMP/ai-review-web"
+          mkdir -p "$bundle_dir"
+          gh release download "ai-review-web-$REVIEW_WEB_REF" \
+            --repo "$GITHUB_REPOSITORY" --pattern ai-review-web.tar.gz --dir "$bundle_dir"
+          printf '%s  %s\n' "$REVIEW_WEB_BUNDLE_SHA256" "$bundle_dir/ai-review-web.tar.gz" | sha256sum --check --strict
+          mkdir -p grade-business/web/public/review
+          tar --extract --gzip --no-same-owner --no-same-permissions \
+            --file "$bundle_dir/ai-review-web.tar.gz" --directory grade-business/web/public/review
       - name: Resolve ACR image references
         id: refs
         shell: bash
