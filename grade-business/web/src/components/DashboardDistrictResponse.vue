@@ -29,6 +29,8 @@ const outlines = shallowRef<DistrictOutline[]>([])
 const mapFailed = ref(false)
 const showMap = ref(true)
 const heightScale = 34
+/** 基础厚度：没有风险数据时也让区县保持可见的立体台面，避免退化成平面图。 */
+const baseHeight = 15
 
 const riskRows = computed(() => {
   const rows = new globalThis.Map<string, ResponseSummary['items'][number]>(
@@ -42,13 +44,30 @@ const riskRows = computed(() => {
       label: outline.label,
       value: index,
       level: row?.riskLevel ?? riskLevelOf(index),
-      height: riskHeightOf(index, heightScale),
+      height: Math.max(baseHeight, riskHeightOf(index, heightScale)),
       beam: index >= 66,
     } satisfies District3DItem
   })
 })
 
 const model = computed(() => buildMap3D(riskRows.value, defaultMapCamera, props.selected))
+/** 当前悬停的区县，用于边界高亮与跟随提示。 */
+const hovered = ref<string | null>(null)
+const hoveredRow = computed(() => (props.summary?.items ?? [])
+  .find(item => item.district === hovered.value))
+const hoveredPoint = ref<{ x: number; y: number } | null>(null)
+/**
+ * 用途 记录鼠标在地图上的位置，供跟随提示定位。
+ * 参数 event 为鼠标事件，district 为所在区县。
+ * 返回值 无。
+ */
+function trackHover(event: MouseEvent, district: string) {
+  const box = (event.currentTarget as SVGGraphicsElement).ownerSVGElement?.getBoundingClientRect()
+  hovered.value = district
+  if (box) {
+    hoveredPoint.value = { x: event.clientX - box.left, y: event.clientY - box.top }
+  }
+}
 const currentScope = computed(() => {
   const detail = props.detail
   if (!detail) return { name: '全域', systems: 0, hazards: 0, overdue: 0, review: 0 }
@@ -65,7 +84,7 @@ const legendRows = computed(() => {
     { key: 'high', label: '高', range: '66-100', color: '#e0685a' },
     { key: 'mid', label: '中', range: '34-65', color: '#d99b3a' },
     { key: 'low', label: '低', range: '1-33', color: '#3b8fc0' },
-    { key: 'none', label: '无', range: '0', color: '#22455f' },
+    { key: 'none', label: '无', range: '0', color: '#3d7ba6' },
   ]
   return levels
 })
@@ -130,6 +149,17 @@ onMounted(() => { if (districtAsset) void showMapData() })
               <feComposite in="tint" in2="blur" operator="in" result="glow" />
               <feMerge><feMergeNode in="glow" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
+            <filter id="dashboard-hover-glow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="hb" />
+              <feFlood flood-color="#8de5ff" flood-opacity=".95" result="hc" />
+              <feComposite in="hc" in2="hb" operator="in" result="hg" />
+              <feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="hb2" />
+              <feFlood flood-color="#ffffff" flood-opacity=".95" result="hc2" />
+              <feComposite in="hc2" in2="hb2" operator="in" result="hg2" />
+              <feMerge>
+                <feMergeNode in="hg" /><feMergeNode in="hg2" /><feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
             <filter id="dashboard-edge-glow" x="-60%" y="-60%" width="220%" height="220%">
               <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur1" />
               <feFlood flood-color="#8de5ff" flood-opacity=".95" result="tint1" />
@@ -154,8 +184,8 @@ onMounted(() => { if (districtAsset) void showMapData() })
               <stop offset="1" stop-color="#1b4c6d" />
             </linearGradient>
             <linearGradient id="dashboard-top-none" x1="0.08" y1="0" x2="0.72" y2="1">
-              <stop offset="0" stop-color="#6d8da8" /><stop offset="0.46" stop-color="#22455f" />
-              <stop offset="1" stop-color="#132838" />
+              <stop offset="0" stop-color="#8ec6e8" /><stop offset="0.46" stop-color="#3d7ba6" />
+              <stop offset="1" stop-color="#1b3f5c" />
             </linearGradient>
             <linearGradient id="dashboard-wall-high" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#8d3b33" /><stop offset="1" stop-color="#2c1310" />
@@ -167,7 +197,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
               <stop offset="0" stop-color="#255b7c" /><stop offset="1" stop-color="#0f2432" />
             </linearGradient>
             <linearGradient id="dashboard-wall-none" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#1a3448" /><stop offset="1" stop-color="#0b1a26" />
+              <stop offset="0" stop-color="#4b8fbb" /><stop offset="0.45" stop-color="#25597c" /><stop offset="1" stop-color="#0c2032" />
             </linearGradient>
             <linearGradient id="dashboard-beam" x1="0" y1="1" x2="0" y2="0">
               <stop offset="0" stop-color="#ff7a4d" stop-opacity=".45" />
@@ -176,13 +206,25 @@ onMounted(() => { if (districtAsset) void showMapData() })
             </linearGradient>
           </defs>
 
+          <g class="map-floor">
+            <path v-for="(item, index) in model.floor" :key="`fl-${index}`" :d="item.d" />
+          </g>
+          <g class="map-radar">
+            <path v-for="(item, index) in model.radar" :key="`rd-${index}`" :d="item.d"
+              :style="{ animationDelay: `${-index * 6}s` }" />
+          </g>
           <g class="map-ground">
             <path v-for="(item, index) in groundPaths" :key="`g-${index}`" :d="item.d"
+              :class="['district', { 'is-hover': hovered === item.district }]"
               :fill="`url(#dashboard-top-${item.level})`" fill-rule="evenodd"
-              stroke="rgba(223,242,255,.45)" stroke-width="1" />
+              :stroke="hovered === item.district ? '#dff2ff' : 'rgba(223,242,255,.45)'"
+              :stroke-width="hovered === item.district ? 2.2 : 1"
+              @mouseenter="trackHover($event, item.district)" @mousemove="trackHover($event, item.district)"
+              @mouseleave="hovered = null" />
           </g>
           <g class="map-walls">
             <path v-for="(item, index) in wallPaths" :key="`w-${index}`" :d="item.d"
+              :class="{ 'is-hover': hovered === item.district }"
               :fill="`url(#dashboard-wall-${item.level})`" />
           </g>
           <g class="map-beams" style="mix-blend-mode:screen">
@@ -190,15 +232,31 @@ onMounted(() => { if (districtAsset) void showMapData() })
           </g>
           <g class="map-faces">
             <path v-for="(item, index) in facePaths" :key="`f-${index}`" :d="item.d"
+              :class="['district', 'face', { 'is-hover': hovered === item.district }]"
               :fill="`url(#dashboard-top-${item.level})`" fill-rule="evenodd"
-              stroke="#dff2ff" stroke-width="1" stroke-opacity=".7" />
+              :stroke="hovered === item.district ? '#ffffff' : '#dff2ff'"
+              :stroke-width="hovered === item.district ? 2.4 : 1"
+              stroke-opacity=".85"
+              @mouseenter="trackHover($event, item.district)" @mousemove="trackHover($event, item.district)"
+              @mouseleave="hovered = null" />
+          </g>
+          <g class="map-hover-tip" v-if="hovered && hoveredPoint && hoveredRow">
+            <g :transform="`translate(${Math.min(hoveredPoint.x + 14, 196)}, ${Math.max(hoveredPoint.y - 16, 8)})`">
+              <rect x="0" y="0" width="176" height="74" rx="7" />
+              <text x="12" y="21" class="tip-title">{{ hoveredRow.district }}</text>
+              <text x="164" y="21" text-anchor="end" class="tip-index"
+                :class="hoveredRow.riskLevel">{{ hoveredRow.riskIndex }}</text>
+              <text x="12" y="41" class="tip-line">未销项隐患 {{ hoveredRow.high }} 高 / {{ hoveredRow.medium }} 中 / {{ hoveredRow.low }} 低</text>
+              <text x="12" y="58" class="tip-line">已逾期 {{ hoveredRow.overdue }} · 涉及系统 {{ hoveredRow.systems }}</text>
+            </g>
           </g>
           <g class="map-edges">
             <path v-for="(d, index) in edgePaths" :key="`e-${index}`" :d="d" fill="none"
               stroke="#eaf8ff" stroke-width="2.2" stroke-linejoin="round" filter="url(#dashboard-edge-glow)" />
           </g>
           <g class="map-labels">
-            <g v-for="label in model.labels" :key="label.district" class="map-label">
+            <g v-for="label in model.labels" :key="label.district"
+              :class="['map-label', { 'is-hover': hovered === label.district }]">
               <rect :x="label.x - 14" :y="label.y - 8" width="28" height="17" rx="4" fill="rgba(2,8,14,.92)" />
               <rect :x="label.x - 14" :y="label.y - 11" width="28" height="17" rx="4" fill="url(#dashboard-badge)"
                 :stroke="label.selected ? '#eaf8ff' : 'rgba(141,229,255,.7)'" stroke-width="1" />
@@ -303,7 +361,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
 </template>
 
 <style scoped>
-.district-layout{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:10px;flex:1;min-height:0}
+.district-layout{display:grid;grid-template-columns:minmax(0,1fr) 296px;grid-template-rows:minmax(0,1fr);gap:10px;flex:1;min-height:0}
 .district-board{display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}
 .district-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .response-switch{display:flex;gap:6px}
@@ -315,10 +373,29 @@ onMounted(() => { if (districtAsset) void showMapData() })
 .response-note,.response-status{margin:0;font-size:11px;color:var(--dashboard-muted)}
 .response-status{color:#f6c681}
 
-.map-stage{position:relative;flex:1;min-height:0;border-radius:8px;overflow:hidden;
+.map-stage{position:relative;flex:1;min-height:16em;border-radius:8px;overflow:hidden;
   border:1px solid rgba(111,198,255,.26);background:radial-gradient(70% 85% at 50% 58%,rgba(14,48,82,.5),rgba(4,13,24,.86) 74%);
   box-shadow:inset 0 0 46px rgba(0,0,0,.7)}
 .map-canvas{position:absolute;inset:0;width:100%;height:100%}
+.district{cursor:pointer;transition:stroke .16s,stroke-width .16s,filter .16s}
+.district.is-hover{filter:url(#dashboard-hover-glow)}
+.face.is-hover{filter:url(#dashboard-hover-glow)}
+.map-label{pointer-events:none}
+.map-label.is-hover rect:first-of-type{stroke:#eaf8ff;stroke-width:1.6}
+.map-label.is-hover .dnum-badge{fill:#ffffff}
+.map-hover-tip{pointer-events:none}
+.map-hover-tip rect{fill:rgba(6,20,34,.94);stroke:rgba(141,229,255,.55);stroke-width:1}
+.tip-title{font-family:inherit;font-size:13px;font-weight:600;fill:#eaf7ff}
+.tip-index{font-family:var(--mono,ui-monospace,monospace);font-size:15px;font-weight:600;fill:#8fc4ea}
+.tip-index.high{fill:#ff9aa5}
+.tip-index.mid{fill:#f3c88c}
+.tip-line{font-family:inherit;font-size:10.5px;fill:#9fbdd4}
+.map-floor path{fill:none;stroke:rgba(95,216,255,.16);stroke-width:.9}
+.map-radar path{fill:none;stroke:rgba(95,216,255,.22);stroke-width:1;stroke-dasharray:6 9;
+  transform-box:fill-box;transform-origin:center;animation:map-radar-spin 26s linear infinite}
+.map-radar path:nth-child(2){stroke:rgba(95,216,255,.16);animation-duration:38s;animation-direction:reverse}
+.map-radar path:nth-child(3){stroke:rgba(95,216,255,.11);stroke-dasharray:none;animation-duration:50s}
+@keyframes map-radar-spin{to{transform:rotate(360deg)}}
 .map-empty{display:grid;justify-items:center;align-content:center;gap:8px;height:100%;text-align:center;color:var(--dashboard-muted)}
 .map-empty svg{width:22px;height:22px}
 .map-overlay{position:absolute;z-index:2;background:rgba(7,22,38,.74);border:1px solid rgba(111,198,255,.3);
