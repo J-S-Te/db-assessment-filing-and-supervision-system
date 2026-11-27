@@ -42,20 +42,50 @@ prepare_database_config() {
   mv -T -- "$temporary" "$config"
 }
 
-# 用途 将现有 PostgreSQL 数据备份到发布目录并检查归档能被读取。
+# 用途 在断网的临时 PostgreSQL 恢复数据库归档。
+# 参数 image 为当前数据库镜像 ID，backup 为受限备份目录。
+# 返回值 实际恢复且迁移表可读时成功。
+verify_database_backup() (
+  local image=$1 backup=$2 name deadline=$((SECONDS + 60))
+  name="grade-business-test-restore-$(basename -- "$backup")"
+  docker create --name "$name" --network none --pull never \
+    --tmpfs /var/lib/postgresql/data:rw -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -e POSTGRES_USER=grade_business -e POSTGRES_DB=grade_business "$image" > /dev/null || return 1
+  trap 'docker rm --force "$name" >/dev/null' EXIT
+  docker start "$name" > /dev/null || return 1
+  until docker exec "$name" pg_isready -q -h 127.0.0.1 -U grade_business -d grade_business; do
+    ((SECONDS < deadline)) || return 1
+    sleep 1
+  done
+  {
+    docker exec -i "$name" pg_restore --username=grade_business --dbname=grade_business \
+      --no-owner --exit-on-error < "$backup/database.dump" &&
+    docker exec "$name" psql -XAtw -v ON_ERROR_STOP=1 -U grade_business -d grade_business \
+      -c 'SELECT 1 FROM schema_migrations LIMIT 1'
+  } > "$backup/restore.log" 2>&1 || return 1
+  grep -qx '1' "$backup/restore.log"
+)
+
+# 用途 保存 PostgreSQL 备份并验证归档能在隔离数据库恢复。
 # 参数 release 为当前发布目录。
-# 返回值 完成备份及归档检查时成功，任何一步失败时终止切换。
+# 返回值 校验和、隔离恢复均通过时成功。
 backup_database() {
-  local release=$1 backup
+  local release=$1 backup database image
   backup=$(mktemp -d "$deploy_dir/backups/$(date -u +%Y%m%dT%H%M%SZ).XXXXXXXX") || return 1
+  database=$(compose_release "$release" ps -q postgres) || return 1
+  image=$(docker inspect --format '{{.Image}}' "$database") || return 1
   compose_release "$release" exec -T postgres \
     pg_dump --username=grade_business --dbname=grade_business --format=custom \
     > "$backup/database.dump.partial" || return 1
   test -s "$backup/database.dump.partial" || return 1
-  compose_release "$release" exec -T postgres pg_restore --list \
-    < "$backup/database.dump.partial" > /dev/null || return 1
   mv -- "$backup/database.dump.partial" "$backup/database.dump" || return 1
-  printf '数据库备份已核对：%s\n' "$backup/database.dump"
+  (cd "$backup" && sha256sum database.dump > SHA256SUMS && sha256sum -c --status SHA256SUMS) ||
+    return 1
+  if ! verify_database_backup "$image" "$backup"; then
+    printf '数据库备份恢复演练失败：%s\n' "$backup" >&2
+    return 1
+  fi
+  printf '数据库备份已校验并完成隔离恢复：%s\n' "$backup/database.dump"
 }
 
 # 用途 核对预期镜像的容器和应用本地健康响应。
@@ -77,6 +107,16 @@ wait_for_application() {
     sleep 2
   done
   return 1
+}
+
+# 用途 核对候选应用已收到流水线注入的 DeepSeek 密钥。
+# 参数 release 为候选发布目录。
+# 返回值 候选容器已收到密钥时成功，且仅记录核验结果。
+verify_deepseek_key() {
+  local release=$1
+  [[ -n "${DEEPSEEK_API_KEY:-}" ]] || return 0
+  compose_release "$release" exec -T app sh -c 'test -n "${DEEPSEEK_API_KEY:-}"' || return 1
+  echo '已核对候选应用收到 DeepSeek 运行密钥。'
 }
 
 # 用途 应用发布失败时重新启动上一版，首发失败时停止候选应用。
@@ -132,6 +172,7 @@ deploy_test() {
   fi
   compose_release "$candidate" up --detach --wait --wait-timeout 90 postgres
   if compose_release "$candidate" up --detach --no-deps --pull never app &&
+    verify_deepseek_key "$candidate" &&
     wait_for_application "$candidate" "$image" &&
     ln -s -- "$candidate" "$candidate/.current" &&
     mv -Tf -- "$candidate/.current" "$deploy_dir/current"; then

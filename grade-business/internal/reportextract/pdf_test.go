@@ -34,6 +34,26 @@ func TestPDFToolOutputLimit(t *testing.T) {
 	}
 }
 
+// TestFilingPDFEvidence 验证 PDF 文字层和用于视觉预审的实际页面图片。
+// 参数 t 为本地 PDF 工具和合成 PDF 的检查上下文。
+// 返回值 无。
+func TestFilingPDFEvidence(t *testing.T) {
+	requireTestPDFTools(t, "pdfinfo", "pdftotext", "pdftoppm")
+	raw, err := os.ReadFile(filepath.Join("testdata", "text.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := bytes.NewReader(raw)
+	pages, err := FilingPDFText(t.Context(), reader)
+	if err != nil || len(pages) != 1 || !strings.Contains(pages[0], "中风险") {
+		t.Fatalf("未读取真实 PDF 文字层: %v", err)
+	}
+	images := FilingPDFImages(t.Context(), reader)
+	if len(images) != 1 || images[0].MIME != "image/jpeg" || images[0].Location != "第 1 页" {
+		t.Fatal("未渲染可定位的真实 PDF JPEG")
+	}
+}
+
 type pdfEvidence struct {
 	Key       string `json:"key"`
 	Original  string `json:"original"`

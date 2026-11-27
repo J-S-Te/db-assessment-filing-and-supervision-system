@@ -22,6 +22,7 @@ services:
     restart: unless-stopped
     environment:
       GRADE_BUSINESS_ADDR: 127.0.0.1:18444
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       GRADE_BUSINESS_DSN: postgres://grade_business:${GRADE_TEST_DB_PASSWORD}@127.0.0.1:15446/grade_business?sslmode=disable
     cap_drop:
       - ALL

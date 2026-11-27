@@ -71,7 +71,56 @@ export interface Precheck {
   status: 'queued' | 'running' | 'succeeded' | 'failed'
   stale: boolean
   findings?: RuleFinding[]
+  checks?: FilingRuleCheck[]
+  checkSource?: 'deepseek' | 'local_rules'
+  fallbackReason?: string
   failure?: string
+  progressStage?: 'materials' | 'deepseek' | 'local_rules' | 'fallback'
+  recommendation?: {
+    action: 'correct' | 'manual_review' | 'pass'
+    missingMaterials?: string[]
+    failedChecks?: string[]
+    manualChecks?: string[]
+    incomplete?: boolean
+  }
+}
+
+export interface FilingRuleEvidence {
+  attachmentId: string
+  fileName: string
+  location: string
+  quote: string
+  kind?: 'image'
+}
+
+export interface FilingRuleCheck {
+  ruleId: string
+  status: 'pass' | 'fail' | 'manual' | 'not_applicable'
+  message: string
+  evidence?: FilingRuleEvidence[]
+}
+
+export type FilingReviewStatus = 'pending' | 'pass' | 'fail'
+
+export interface FilingRuleReview {
+  ruleId: string
+  status: FilingReviewStatus
+  remark: string
+  version: number
+  reviewer: string
+  reviewedAt: string
+}
+
+export interface FilingReviewItem {
+  ruleId: string
+  title: string
+  method: string
+  review?: FilingRuleReview
+}
+
+export interface FilingMaterialReview {
+  materialRevision: number
+  items: FilingReviewItem[]
 }
 
 export interface KnowledgeSummary {

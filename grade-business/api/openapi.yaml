@@ -2777,6 +2777,51 @@ paths:
                 "$ref": "#/components/schemas/Precheck"
         default:
           "$ref": "#/components/responses/Error"
+  "/filings/{id}/prechecks/review":
+    parameters:
+    - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listFilingMaterialReviews
+      responses:
+        '200':
+          description: 当前材料版本的规则目录与各项最新人工审核
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [materialRevision, items]
+                properties:
+                  materialRevision: {type: integer, format: int64, minimum: 0}
+                  items:
+                    type: array
+                    minItems: 11
+                    maxItems: 11
+                    items: {$ref: "#/components/schemas/FilingMaterialReviewItem"}
+        default: {$ref: "#/components/responses/Error"}
+  "/filings/{id}/prechecks/review/{ruleId}":
+    parameters:
+    - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    - {name: ruleId, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: saveFilingMaterialReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, materialRevision, expectedVersion]
+              properties:
+                status: {type: string, enum: [pending, pass, fail]}
+                remark: {type: string, maxLength: 2000}
+                materialRevision: {type: integer, format: int64, minimum: 0}
+                expectedVersion: {type: integer, format: int64, minimum: 0}
+      responses:
+        '200':
+          description: 当前规则已保存的人工审核
+          content: {application/json: {schema: {$ref: "#/components/schemas/FilingMaterialReview"}}}
+        default: {$ref: "#/components/responses/Error"}
   "/knowledge":
     get:
       operationId: listKnowledgeEntries
@@ -17581,8 +17626,69 @@ components:
               attachmentId:
                 type: string
                 format: uuid
+        checks:
+          type: array
+          minItems: 11
+          maxItems: 11
+          items: {$ref: "#/components/schemas/FilingMaterialCheck"}
+        checkSource:
+          type: string
+          enum: [deepseek, local_rules]
+        fallbackReason:
+          type: string
+          description: DeepSeek 未能使用时，本次已完成本地规则审核的原因
+        progressStage:
+          type: string
+          description: 预审执行中的当前阶段
+          enum: [materials, deepseek, local_rules, fallback]
+        recommendation:
+          type: object
+          description: 当前材料版本的预审审核建议
+          required: [action]
+          properties:
+            action: {type: string, enum: [correct, manual_review, pass]}
+            missingMaterials: {type: array, items: {type: string}}
+            failedChecks: {type: array, items: {type: string}}
+            manualChecks: {type: array, items: {type: string}}
+            incomplete: {type: boolean}
         failure:
           type: string
+    FilingMaterialCheck:
+      type: object
+      required: [ruleId, status, message]
+      properties:
+        ruleId: {type: string}
+        status: {type: string, enum: [pass, fail, manual, not_applicable]}
+        message: {type: string}
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [attachmentId, fileName, location, quote]
+            properties:
+              attachmentId: {type: string, format: uuid}
+              fileName: {type: string}
+              location: {type: string}
+              quote: {type: string}
+              kind: {type: string, enum: [image]}
+    FilingMaterialReviewItem:
+      type: object
+      required: [ruleId, title, method]
+      properties:
+        ruleId: {type: string}
+        title: {type: string}
+        method: {type: string}
+        review: {$ref: "#/components/schemas/FilingMaterialReview"}
+    FilingMaterialReview:
+      type: object
+      required: [ruleId, status, remark, version, reviewer, reviewedAt]
+      properties:
+        ruleId: {type: string}
+        status: {type: string, enum: [pending, pass, fail]}
+        remark: {type: string, maxLength: 2000}
+        version: {type: integer, format: int64, minimum: 1}
+        reviewer: {type: string}
+        reviewedAt: {type: string, format: date-time}
     KnowledgeRow:
       type: object
       additionalProperties: false

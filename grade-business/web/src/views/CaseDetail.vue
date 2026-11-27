@@ -402,7 +402,7 @@ onBeforeUnmount(() => {
             <FilingPolicyMaterials v-if="kind === 'filings' && record.policyMaterials?.length"
               :rules="record.policyMaterials" :files="attachments" />
             <template v-if="kind === 'filings'">
-              <PrecheckPanel v-if="canEditCase" id="filing-precheck" tabindex="-1"
+              <PrecheckPanel v-if="canEditCase || canReviewCase" id="filing-precheck" tabindex="-1"
                 :path="path" :revision="revision" />
               <section v-else id="filing-precheck" tabindex="-1" class="panel detail-panel"
                 aria-labelledby="precheck-title">
