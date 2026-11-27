@@ -81,23 +81,30 @@ func allowed(role Role, pattern string) bool {
 	case role == SystemAdmin:
 		return true
 	case role == Regulator:
-		return regulatorRead(method, path)
+		return regulatorAllowed(method, path)
 	default:
 		return false
 	}
 }
 
-// regulatorRead 只开放已经接通辖区筛选的业务读取和共享知识条目。
+// regulatorAllowed 只开放已经接通辖区筛选的业务接口和共享知识条目。
 // 参数 method、path 为实际匹配的接口方法和路径。
 // 返回值 确认具备辖区校验或属于共享知识数据时为真。
-func regulatorRead(method, path string) bool {
+func regulatorAllowed(method, path string) bool {
+	if method == "POST" {
+		return path == "/api/v1/filings/{id}/review-actions" || path == "/api/v1/reports/{id}/review-actions"
+	}
 	if method != "GET" {
 		return false
 	}
 	switch path {
 	case "/api/v1/filings", "/api/v1/filings/{id}", "/api/v1/filings/{id}/review-history",
 		"/api/v1/reports", "/api/v1/reports/{id}", "/api/v1/reports/{id}/review-history",
-		"/api/v1/knowledge", "/api/v1/knowledge/{id}":
+		"/api/v1/filings/{id}/attachments", "/api/v1/filings/{id}/attachments/{attachmentId}",
+		"/api/v1/filings/{id}/attachments/{attachmentId}/text",
+		"/api/v1/reports/{id}/attachments", "/api/v1/reports/{id}/attachments/{attachmentId}",
+		"/api/v1/knowledge", "/api/v1/knowledge/{id}",
+		"/api/v1/knowledge/{id}/versions", "/api/v1/knowledge/{id}/versions/{version}":
 		return true
 	}
 	return false
@@ -157,11 +164,12 @@ func view(actor Principal) sessionView {
 			"/supervisions", "/material-expiries", "/assessment-dues", "/monitor/publications",
 			"/knowledge", "/dashboard", "/audit", "/workday-calendar", "/tag-catalog"}
 		data.Permissions = []string{"admin.agent.kb.edit", "admin.monitor.rule.config",
-			"admin.grade.filing.audit", "admin.grade.report.audit"}
+			"admin.grade.case.edit", "admin.grade.filing.audit", "admin.grade.report.audit"}
 	case Regulator:
 		data.DataScope, data.Home = "AREA", "/filings"
 		data.Menu = []string{"grade", "agent"}
 		data.Pages = []string{"/filings", "/reports", "/knowledge", "/flow"}
+		data.Permissions = []string{"admin.grade.filing.audit", "admin.grade.report.audit"}
 	case OrgAdmin:
 		return scopedView(data, "institution", "ORG", []string{"workbench", "filings", "implementations",
 			"reports", "hazards", "directory", "publications", "alerts", "feedback"},

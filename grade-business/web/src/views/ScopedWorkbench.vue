@@ -2,9 +2,9 @@
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import {
   ArrowUpRight, BellRing, Building2, CalendarClock, ClipboardList, ClipboardPenLine, Clock3, FileChartColumn,
-  FileClock, FilePlus2, FileSearch, FileUp, ListTodo, MessageSquareText, RefreshCw, ScanSearch, Wrench,
+  FileClock, FilePlus2, FileUp, ListTodo, MessageSquareText, RefreshCw, ScanSearch, Wrench,
 } from '@lucide/vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import AsyncState from '../components/AsyncState.vue'
 import V2RouteDialog from '../components/V2RouteDialog.vue'
 import { api, ApiError, errorText, isAbort, params } from '../lib/api'
@@ -22,11 +22,9 @@ interface ScopedWorkbenchData {
 
 const props = defineProps<{ audience: BusinessAudience }>()
 const route = useRoute()
-const router = useRouter()
 const operator = computed(() => props.audience === 'operator')
 const scopeSettings = computed(() => businessScopes[props.audience])
 const scope = computed(() => queryValue(route.query[scopeSettings.value.key]).trim())
-const scopeDraft = ref('')
 const basePath = computed(() => '/' + props.audience)
 const workbenchPath = computed(() => basePath.value + '/workbench')
 const query = computed(() => ({ [scopeSettings.value.key]: scope.value }))
@@ -84,7 +82,6 @@ const shortcuts = computed(() => operator.value ? [
   { label: '审核意见', path: '/feedback', icon: MessageSquareText },
   { label: '预警处置', path: '/alerts', icon: BellRing },
 ] : [
-  { label: '机构初审', path: '/filings', icon: FileSearch, filters: { review: 'assigned' } },
   { label: '实施管理', path: '/implementations', icon: ClipboardPenLine },
   { label: '测评报告台账', path: '/reports', icon: FileChartColumn },
   { label: '审核意见', path: '/feedback', icon: MessageSquareText },
@@ -114,18 +111,6 @@ async function load() {
       loading.value = false
     }
   }
-}
-
-/**
- * 用途 在当前端选择登记的机构或运营单位并刷新工作台。
- * 参数 无，机构或运营单位名称来自表单输入。
- * 返回值 导航或刷新任务，空白名称直接返回。
- */
-function chooseScope() {
-  const name = scopeDraft.value.trim()
-  if (!name) return
-  if (name === scope.value) return load()
-  return router.push({ path: workbenchPath.value, query: { [scopeSettings.value.key]: name } })
 }
 
 /**
@@ -185,7 +170,6 @@ watch([workbenchPath, scope], () => {
   loading.value = reminderBusy.value = false
   failure.value = reminderFailure.value = ''
   notice.value = undefined
-  scopeDraft.value = scope.value
   void load()
 }, { immediate: true })
 refreshBusinessOnFocus(() => { if (!reminderRequest) void load() }, 10_000)
@@ -211,15 +195,6 @@ onScopeDispose(() => {
       </button>
     </header>
 
-    <form class="panel scope-form" @submit.prevent="chooseScope">
-      <label class="field scope-input">
-        <span>{{ scopeSettings.label }}</span>
-        <input id="workbench-scope" v-model="scopeDraft" maxlength="200" required pattern=".*\S.*"
-          :placeholder="'输入登记的' + scopeSettings.label">
-      </label>
-      <button class="button primary" type="submit">查看工作台</button>
-    </form>
-
     <section class="panel workbench-panel business-actions" aria-labelledby="business-action-title">
       <header class="section-heading">
         <h2 id="business-action-title">{{ operator ? '常用办理' : '测评交付' }}</h2>
@@ -237,7 +212,7 @@ onScopeDispose(() => {
       </nav>
       <nav class="business-shortcuts" aria-label="更多业务入口">
         <component :is="scope ? RouterLink : 'a'" v-for="item in shortcuts" :key="item.path" class="business-shortcut"
-          v-bind="scope ? { to: { path: basePath + item.path, query: { ...query, ...('filters' in item ? item.filters : {}) } } }
+          v-bind="scope ? { to: { path: basePath + item.path, query } }
             : { href: '#workbench-scope' }">
           <component :is="item.icon" :size="16" aria-hidden="true" />{{ item.label }}
         </component>

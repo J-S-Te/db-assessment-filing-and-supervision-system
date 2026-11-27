@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"grade-business/internal/access"
 	"grade-business/internal/filingpolicy"
 	"grade-business/internal/reviewinbox"
 )
@@ -334,6 +335,9 @@ func (s *Service) changeApplicationStatus(ctx context.Context, id string, input 
 	if err != nil {
 		return mutation{}, err
 	}
+	if err := requireSeparateReviewer(ctx, tx, id, app.status, true); err != nil {
+		return mutation{}, err
+	}
 	if err := guardWithdrawalReview(ctx, tx, withdrawalApplications, id); err != nil {
 		return mutation{}, err
 	}
@@ -350,7 +354,7 @@ func (s *Service) changeApplicationStatus(ctx context.Context, id string, input 
 			return mutation{}, err
 		}
 	}
-	operator := input.reviewActor(s.operator, applicationOrganization(ctx))
+	operator := input.reviewActor(ctx, s.operator, applicationOrganization(ctx))
 	result, err := s.persistApplicationDecision(ctx, tx, id, app, next, input.Decision, comment, operator)
 	if err != nil {
 		return mutation{}, err
@@ -375,7 +379,7 @@ func lockApplicationStatus(ctx context.Context, tx pgx.Tx, id string, input revi
 	if err != nil {
 		return applicationState{}, err
 	}
-	return app, input.checkReviewRole(app.status, app.operatorOrigin)
+	return app, input.checkReviewRole(ctx, app.status, app.operatorOrigin)
 }
 
 // deliverApplicationReview 按原备案快照向机构和运营者原子送达办理通知。
@@ -434,8 +438,9 @@ func (s *Service) persistApplicationDecision(ctx context.Context, tx pgx.Tx,
 		}
 		return mutation{}, err
 	}
+	actor, _ := access.Current(ctx)
 	_, err = tx.Exec(ctx, `INSERT INTO filing_application_review_events
-		(application_id,action,from_status,to_status,operator,comment,version,implementation_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, action, app.status, next, operator, comment, result.Version, app.implementationID)
+		(application_id,action,from_status,to_status,operator,comment,version,implementation_id,operator_id,operator_role)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,'')::uuid,NULLIF($10,''))`, id, action, app.status, next, operator, comment, result.Version, app.implementationID, actor.ID, actor.Role)
 	return result, err
 }

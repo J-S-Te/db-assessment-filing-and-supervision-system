@@ -2,16 +2,17 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   Bell, BellRing, BookOpenText, Building2, ClipboardCheck, ClipboardList, ClipboardPenLine,
-  FileChartColumn, FileSearch, FileUp, Files, FolderArchive, History, LayoutDashboard, ListChecks,
+  FileChartColumn, FileUp, Files, FolderArchive, History, LayoutDashboard, ListChecks,
   Megaphone, MessageSquareText, Radar, ScanSearch, Settings, ShieldCheck, Users, Workflow, Wrench,
 } from '@lucide/vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import CopyrightFooter from './components/CopyrightFooter.vue'
 import V2RouteDialog from './components/V2RouteDialog.vue'
-import { api, params } from './lib/api'
+import { api, errorText, params } from './lib/api'
 import { dashboardPath, dashboardTabLocation } from './lib/dashboard'
 import { queryValue } from './lib/paging'
 import { publicationUnread, refreshPublicationUnread } from './lib/publications'
+import { canVisit, session } from './lib/session'
 import { businessScopes, refreshBusinessOnFocus } from './lib/scopedBusiness'
 import { cancelWorkbenchRefresh, refreshWorkbench, workbench } from './lib/workbench'
 
@@ -124,11 +125,12 @@ const scopedAudience = computed(() => section.value === 'institution' || section
   ? section.value : undefined)
 const noticeScopeKey = computed(() => scopedAudience.value ? businessScopes[scopedAudience.value].key : '')
 const noticeScope = computed(() => scopedAudience.value ? queryValue(route.query[noticeScopeKey.value]).trim() : '')
-const selectedScopes = { institution: ref(''), operator: ref('') }
+const authFailure = ref('')
+const authLayout = computed(() => route.meta.authLayout === true)
 const scopedUnread = ref(0)
 let scopedUnreadRequest: AbortController | undefined
 const fullscreenLayout = computed(() => route.meta.fullscreenLayout === true)
-const regulatoryShell = computed(() => !scopedAudience.value && !fullscreenLayout.value)
+const regulatoryShell = computed(() => session.value?.roleCode === 'ROLE_SYS_ADMIN' && !fullscreenLayout.value && !authLayout.value)
 const scopedNavigation = {
   institution: {
     name: '测评机构端', role: '测评机构', avatar: '测', groups: [
@@ -137,8 +139,7 @@ const scopedNavigation = {
         { key: 'filings', label: 'I2 备案材料', icon: FileUp, path: 'filings' },
         { key: 'implementations', label: 'I3 实施管理', icon: ClipboardPenLine, path: 'implementations' },
         { key: 'reports', label: 'I4 测评报告', icon: FileChartColumn, path: 'reports' },
-        { key: 'review', label: '机构初审', icon: FileSearch, path: 'filings', filters: { review: 'assigned' } },
-        { key: 'hazards', label: '隐患复测', icon: ScanSearch, path: 'hazards', filters: { status: 'pending_retest' } },
+        { key: 'hazards', label: '隐患复测', icon: ScanSearch, path: 'hazards' },
         { key: 'directory', label: 'I6 基础数据', icon: Users, path: 'directory' },
       ] },
       { label: '站内消息', items: [
@@ -167,18 +168,25 @@ const scopedNavigation = {
     ],
   },
 }
+const visibleNavigation = computed(() => navigation.map(group => ({
+  ...group, items: group.items.filter(item => session.value?.menu.includes(item.key)),
+})).filter(group => group.items.length))
 const activeScopedNavigation = computed(() => scopedAudience.value && scopedNavigation[scopedAudience.value])
 const activeScopedGroup = computed(() => {
   const resource = route.path.split('/')[2]
-  if (resource === 'report-feedback') return 'feedback'
   if (resource === 'material-expiries' || resource === 'assessment-dues') return 'alerts'
   if (resource === 'filings' || resource === 'filing-applications') {
-    return scopedAudience.value === 'institution' && route.query.review === 'assigned' ? 'review' : 'filings'
+    return 'filings'
   }
   return resource
 })
 const currentScopeQuery = computed(() => ({ [noticeScopeKey.value]: noticeScope.value || undefined }))
 const module = computed(() => modules.find(item => item.selected.includes(section.value)))
+const visibleTabs = computed(() => {
+  const actor = session.value
+  return actor && module.value
+    ? module.value.tabs.filter(tab => tab.path && canVisit(actor, tab.path.split('?')[0] ?? '')) : []
+})
 const activeGroup = computed(() => module.value?.key ?? section.value)
 const moduleIcon = computed(() => navigation.flatMap(group => group.items)
   .find(item => item.key === module.value?.key)?.icon)
@@ -204,13 +212,28 @@ const overlay = computed(() => {
 const backdropRef = ref<HTMLElement>()
 
 /**
- * 用途 从监管端切换至已访问过的机构或运营者工作台。
- * 参数 audience 为目标的业务办理端。
- * 返回值 带本次会话已选范围的工作台地址。
+ * 用途 返回当前账号所属的工作台地址。
+ * 参数 audience 为会话允许使用的办理端。
+ * 返回值 带可信主体名称的工作台路径及查询条件。
  */
-function scopedHome(audience: keyof typeof selectedScopes) {
+function scopedHome(audience: keyof typeof businessScopes) {
   return { path: '/' + audience + '/workbench',
-    query: { [businessScopes[audience].key]: selectedScopes[audience].value || undefined } }
+    query: { [businessScopes[audience].key]: session.value?.subjectName } }
+}
+
+/**
+ * 用途 撤销会话并清除页面载入过的数据。
+ * 参数 无，使用浏览器当前登录会话。
+ * 返回值 退出任务，失败时在顶栏显示原因。
+ */
+async function logout() {
+  authFailure.value = ''
+  try {
+    await api('/auth/logout', { method: 'POST' })
+    window.location.replace('/login')
+  } catch (error) {
+    authFailure.value = errorText(error)
+  }
 }
 
 /**
@@ -278,7 +301,6 @@ watch(() => route.fullPath, () => {
   closeReminders()
 })
 watch([scopedAudience, noticeScope], ([audience, scope]) => {
-  if (audience && scope) selectedScopes[audience].value = scope
   scopedUnreadRequest?.abort()
   scopedUnreadRequest = undefined
   scopedUnread.value = 0
@@ -310,7 +332,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <RouterView v-if="fullscreenLayout" />
+  <RouterView v-if="authLayout || fullscreenLayout" />
   <div v-else-if="scopedAudience && activeScopedNavigation" class="workspace v2-shell role-shell"
     :class="scopedAudience === 'institution' ? 'assessment-shell' : 'operator-shell'">
     <a class="skip-link" href="#scoped-content">跳至主要内容</a>
@@ -324,11 +346,12 @@ onBeforeUnmount(() => {
       <nav class="v2-navigation" :aria-label="activeScopedNavigation.name + '导航'">
         <template v-for="group in activeScopedNavigation.groups" :key="group.label">
           <div class="v2-nav-group">{{ group.label }}</div>
-          <RouterLink v-for="item in group.items" :key="item.key" class="v2-nav-item"
+          <RouterLink v-for="item in group.items.filter(item => session?.menu.includes(item.key))" :key="item.key" class="v2-nav-item"
             :class="{ active: activeScopedGroup === item.key }"
             :aria-current="activeScopedGroup === item.key ? 'page' : undefined"
             :to="{ path: '/' + scopedAudience + '/' + item.path, query: {
-              ...currentScopeQuery, ...('filters' in item ? item.filters : {}),
+              ...currentScopeQuery, ...(item.key === 'hazards' && scopedAudience === 'institution'
+                ? { status: 'pending_retest' } : {}),
             } }">
             <span class="v2-nav-icon" aria-hidden="true"><component :is="item.icon" :size="15" /></span>{{ item.label }}
             <span v-if="item.key === 'feedback' && scopedUnread" class="scoped-unread"
@@ -350,7 +373,9 @@ onBeforeUnmount(() => {
         <RouterLink class="v2-crumb scoped-home" :to="scopedHome(scopedAudience)">{{ activeScopedNavigation.name }}</RouterLink>
         <span class="v2-crumb scoped-crumb">{{ route.meta.title }}</span>
         <span class="v2-topbar-spacer"></span>
-        <RouterLink class="button neutral small" to="/">返回监管端</RouterLink>
+        <RouterLink class="button neutral small" to="/account/password">修改密码</RouterLink>
+        <button class="button neutral small" type="button" @click="logout">退出登录</button>
+        <span v-if="authFailure" role="alert">{{ authFailure }}</span>
         <span class="v2-avatar scoped-avatar" aria-hidden="true">{{ activeScopedNavigation.avatar }}</span>
         <span class="v2-operator scoped-role" :title="noticeScope">
           <strong>{{ noticeScope || activeScopedNavigation.name }}</strong>
@@ -363,7 +388,7 @@ onBeforeUnmount(() => {
       <CopyrightFooter />
     </div>
   </div>
-  <div v-else class="workspace v2-shell regulator-shell">
+  <div v-else-if="session" class="workspace v2-shell regulator-shell">
     <a class="skip-link" href="#workspace-content">跳至主要内容</a>
     <aside id="v2-sidebar" class="v2-sidebar" :class="{ 'v2-sidebar-open': sidebarOpen }">
       <RouterLink class="v2-brand" to="/" aria-label="等级保护智能体工作台">
@@ -371,7 +396,7 @@ onBeforeUnmount(() => {
         <span>等级保护智能体<small>网络安全监管</small></span>
       </RouterLink>
       <nav aria-label="业务导航" class="v2-navigation">
-        <template v-for="group in navigation" :key="group.label">
+        <template v-for="group in visibleNavigation" :key="group.label">
           <div class="v2-nav-group">{{ group.label }}</div>
           <template v-for="item in group.items" :key="item.key">
             <RouterLink v-if="item.path" class="v2-nav-item" :class="{ active: activeGroup === item.key }"
@@ -398,9 +423,10 @@ onBeforeUnmount(() => {
         <nav aria-label="当前位置" class="v2-crumb">{{ module?.title ?? route.meta.title }}</nav>
         <span class="v2-topbar-spacer"></span>
         <RouterLink class="v2-flow-link" to="/flow"><Workflow :size="15" aria-hidden="true" />流程示意</RouterLink>
-        <RouterLink class="button neutral small" :to="scopedHome('institution')">机构端</RouterLink>
-        <RouterLink class="button neutral small" :to="scopedHome('operator')">运营端</RouterLink>
-        <details ref="reminderPanel" class="v2-reminder" @keydown.escape="closeReminders">
+        <RouterLink class="button neutral small" to="/account/password">修改密码</RouterLink>
+        <button class="button neutral small" type="button" @click="logout">退出登录</button>
+        <span v-if="authFailure" role="alert">{{ authFailure }}</span>
+        <details v-if="regulatoryShell" ref="reminderPanel" class="v2-reminder" @keydown.escape="closeReminders">
           <summary class="v2-bell" :aria-label="'待办提醒，' + reminders.length + ' 类事项'">
             <Bell :size="18" aria-hidden="true" />
             <span v-if="reminders.length" class="v2-reminder-badge" aria-hidden="true">{{ reminders.length }}</span>
@@ -425,7 +451,8 @@ onBeforeUnmount(() => {
           </div>
         </details>
         <span class="v2-avatar" aria-hidden="true">监</span>
-        <span class="v2-operator"><strong>监管工作台</strong><small>本地业务测试</small></span>
+        <span class="v2-operator"><strong>{{ session.name }}</strong>
+          <small>{{ session.roleCode === 'ROLE_SYS_ADMIN' ? '系统管理员' : '监管员' }}</small></span>
       </header>
       <main id="workspace-content" ref="backdropRef" class="content v2-content" tabindex="-1">
         <div :key="'scan-' + activeGroup" class="regulator-navigation-scan" aria-hidden="true"></div>
@@ -435,7 +462,7 @@ onBeforeUnmount(() => {
             <div><h1>{{ module.title }}</h1><p>{{ module.subtitle }}</p></div>
           </header>
           <nav class="v2-tabs" :aria-label="module.title + '页签'">
-            <template v-for="tab in module.tabs" :key="tab.key">
+            <template v-for="tab in visibleTabs" :key="tab.key">
               <RouterLink v-if="tab.path" class="v2-tab" :class="{ active: section === tab.key }" :to="tab.path"
                 :aria-current="section === tab.key ? 'page' : undefined">{{ tab.name }}</RouterLink>
               <span v-else class="v2-tab v2-unavailable" aria-disabled="true" title="本地版本尚未接入">{{ tab.name }}</span>

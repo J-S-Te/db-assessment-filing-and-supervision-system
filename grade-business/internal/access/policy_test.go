@@ -11,9 +11,9 @@ import (
 // 返回值 无。
 func TestPolicy(t *testing.T) {
 	for _, item := range []struct {
-		role Role
+		role    Role
 		pattern string
-		want bool
+		want    bool
 	}{
 		{SystemAdmin, "POST /api/v1/alerts/rules", true},
 		{Regulator, "POST /api/v1/alerts/rules", false},

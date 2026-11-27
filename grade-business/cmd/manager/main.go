@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"grade-business/internal/access"
 	"grade-business/internal/alerts"
 	"grade-business/internal/app"
 	"grade-business/internal/archives"
@@ -294,7 +295,7 @@ func routes(cfg settings, pool *pgxpool.Pool, records *cases.Service,
 	app.RegisterWorkdayCalendar(mux, pool, cfg.operator)
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { ready(w, r, pool) })
 	mux.Handle("/", pages)
-	return app.LocalBoundary(cfg.address, cfg.lan, mux)
+	return app.LocalBoundary(cfg.address, cfg.lan, access.New(pool).Protect(mux))
 }
 
 // ready 提供仅含业务服务就绪状态的探针。

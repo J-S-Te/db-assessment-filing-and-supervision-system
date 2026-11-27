@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/filingpolicy"
 )
 
@@ -34,6 +35,16 @@ const recordFilters = `
 	      OR ($4='cancelled' AND c.cancelled_at IS NOT NULL))
 	   AND ($5='' OR c.risk=$5)
 `
+
+// caseDistrictScope 为备案与测评查询接入名录中的现行辖区。
+// 参数 parameter 为查询中绑定标准区县列表的 SQL 参数位置。
+// 返回值 匹配可信单位标识及当前区县的 SQL 条件。
+func caseDistrictScope(parameter string) string {
+	return ` AND (` + parameter + `::text[] IS NULL OR EXISTS (
+	    SELECT 1 FROM directory_parties u
+	    WHERE u.id=COALESCE(f.directory_unit_id,c.directory_unit_id)
+	      AND u.kind='unit' AND u.district=ANY(` + parameter + `::text[])))`
+}
 
 // parseListQuery 解析受限分页参数并验证允许的筛选条件。
 // 参数 query 为请求 URL 查询参数，validFilterStatus 校验当前集合的状态。
@@ -129,11 +140,12 @@ func (s *Service) list(ctx context.Context, kind string, input listQuery) (listR
 	   AND ($10='' OR (c.kind='filing' AND c.organization_name=$10))
 	   AND (NOT $11::bool OR (c.operator_origin AND c.status='pending_initial' AND NOT EXISTS(
 	       SELECT 1 FROM filing_withdrawal_requests w
-	       WHERE w.resource='filings' AND w.resource_id=c.id AND w.status='pending')))
+	       WHERE w.resource='filings' AND w.resource_id=c.id AND w.status='pending')))` +
+		caseDistrictScope("$12") + `
 	 ORDER BY c.created_at DESC,c.id DESC
 	 LIMIT $8`
 	rows, err := s.db.Query(ctx, query, kind, input.status, input.keyword, input.lifecycle, input.risk,
-		created, id, input.limit+1, input.institution, operatorFilingScope(ctx), input.assignedReview)
+		created, id, input.limit+1, input.institution, operatorFilingScope(ctx), input.assignedReview, access.Districts(ctx))
 	if err != nil {
 		return listResponse{}, err
 	}
@@ -190,8 +202,8 @@ func (s *Service) detailInScope(ctx context.Context, kind, id, institution strin
 		      WHERE w.resource='filings' AND w.resource_id=c.id AND w.status='pending'))`+recordJoin+`
 		 WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
 		   AND ($3='' OR c.assessment_org=$3)
-		   AND ($4='' OR (c.kind='filing' AND c.organization_name=$4))`,
-		kind, id, institution, operatorFilingScope(ctx))
+		   AND ($4='' OR (c.kind='filing' AND c.organization_name=$4))`+caseDistrictScope("$5"),
+		kind, id, institution, operatorFilingScope(ctx), access.Districts(ctx))
 	err := row.Scan(append(scanFields(&item.recordRow),
 		&item.FilingID, &item.Version, &profile, &item.operatorOrigin, &filingSubmittedAt, &item.ReceiptAvailable,
 		&item.AssessmentPersonID, &item.DirectorySnapshot, &item.Classification, &item.withdrawalPending)...)
@@ -202,7 +214,9 @@ func (s *Service) detailInScope(ctx context.Context, kind, id, institution strin
 		return recordDetail{}, err
 	}
 	item.AllowedActions = allowedActions(item.Status)
-	if item.withdrawalPending || (item.operatorOrigin && item.Status == pendingInitial) {
+	actor, authenticated := access.Current(ctx)
+	if item.withdrawalPending ||
+		(item.operatorOrigin && item.Status == pendingInitial && (!authenticated || (actor.Role != access.SystemAdmin && actor.Role != access.Regulator))) {
 		item.AllowedActions = []string{}
 	}
 	if profile == institutionSubmissionProfile {
@@ -250,12 +264,13 @@ func (s *Service) history(ctx context.Context, kind, id, institution string) ([]
 		SELECT COALESCE(e.action,''),COALESCE(e.from_status,''),COALESCE(e.to_status,''),
 		       COALESCE(e.operator,''),COALESCE(e.comment,''),COALESCE(e.occurred_at,c.created_at),
 		       e.directory_snapshot
-		FROM business_cases c LEFT JOIN case_review_events e ON c.id=e.case_id
+		FROM business_cases c LEFT JOIN business_cases f ON f.id=c.filing_id
+		LEFT JOIN case_review_events e ON c.id=e.case_id
 		  AND ($3='' OR COALESCE(e.merge_history_scope,c.organization_name)=$3)
 		WHERE c.id=$1 AND c.kind=$2 AND c.discarded_at IS NULL
 		  AND ($3='' OR (c.kind='filing' AND (c.organization_name=$3 OR e.id IS NOT NULL)))
-		  AND ($4='' OR c.assessment_org=$4)
-		ORDER BY e.id DESC`, id, kind, operatorFilingScope(ctx), institution)
+		  AND ($4='' OR c.assessment_org=$4)`+caseDistrictScope("$5")+`
+		ORDER BY e.id DESC`, id, kind, operatorFilingScope(ctx), institution, access.Districts(ctx))
 	return collectReviewHistory(rows, err)
 }
 

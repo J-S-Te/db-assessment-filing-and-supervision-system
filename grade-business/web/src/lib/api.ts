@@ -47,7 +47,13 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     signal: options.signal,
     redirect: 'error',
   })
-  if (!response.ok) throw await responseError(response)
+  if (!response.ok) {
+    const error = await responseError(response)
+    if (error.code === 'authentication_required' && !path.startsWith('/auth/')) {
+      window.dispatchEvent(new Event('grade-business-session-expired'))
+    }
+    throw error
+  }
   return response.status === 204 ? undefined as T : await response.json() as T
 }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { ArrowLeft, BookOpen } from '@lucide/vue'
 import { useRoute } from 'vue-router'
@@ -103,11 +104,12 @@ onBeforeUnmount(() => {
             <span class="level-tag">{{ categories[item.category] ?? item.category }}</span>
             <button class="button neutral small" type="button" aria-controls="knowledge-versions"
               :aria-expanded="showingHistory" @click="showingHistory = !showingHistory">版本历史</button>
-            <RouterLink class="button neutral small"
+            <RouterLink v-if="hasPermission('admin.agent.kb.edit')" class="button neutral small"
               :to="{ path: path + '/tags', query: route.query }">标签</RouterLink>
-            <RouterLink class="button neutral small"
+            <RouterLink v-if="hasPermission('admin.agent.kb.edit')" class="button neutral small"
               :to="{ path: path + '/edit', query: route.query }">编辑</RouterLink>
-            <button class="button neutral small" type="button" :disabled="changing"
+            <button v-if="hasPermission('admin.agent.kb.edit')" class="button neutral small"
+              type="button" :disabled="changing"
               @click="statusDialog?.showModal()">{{ statusAction }}</button>
           </div>
         </header>

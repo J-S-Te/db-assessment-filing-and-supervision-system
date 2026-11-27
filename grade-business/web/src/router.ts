@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { canVisit, refreshSession, session } from './lib/session'
 import { caseLabels, type CaseKind } from './lib/domain'
 
 /**
@@ -45,6 +46,8 @@ const scopedWorkbench = () => import('./views/ScopedWorkbench.vue')
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/login', component: () => import('./views/SignIn.vue'), meta: { authLayout: true } },
+    { path: '/account/password', component: () => import('./views/SignIn.vue'), meta: { authLayout: true } },
     { path: '/', component: () => import('./views/Workbench.vue'), meta: { section: 'home', title: '工作台' } },
     ...caseRoutes('filings'),
     { path: '/filing-material-policy', component: () => import('./views/FilingMaterialPolicy.vue'),
@@ -102,8 +105,6 @@ export const router = createRouter({
       meta: { section: 'institution', title: '隐患复测' } },
     { path: '/institution/hazards/:id', component: () => import('./views/InstitutionRetest.vue'),
       meta: { section: 'institution', title: '隐患复测详情' } },
-    { path: '/institution/report-feedback', component: () => import('./views/InstitutionFeedback.vue'),
-      meta: { section: 'institution', title: '审核意见查收' } },
     { path: '/institution/reports/:id', component: () => import('./views/InstitutionReport.vue'),
       meta: institutionMeta },
     { path: '/institution/filings', component: institutionList, props: { resource: 'filings' }, meta: institutionMeta },
@@ -183,4 +184,39 @@ export const router = createRouter({
     { path: '/:pathMatch(.*)*', component: () => import('./views/NotFound.vue'), meta: { title: '页面不存在' } },
   ],
   scrollBehavior: (to, from, saved) => saved ?? (to.path === from.path ? false : { top: 0 }),
+})
+
+router.beforeEach(async to => {
+  let actor
+  try {
+    actor = await refreshSession()
+  } catch {
+    session.value = null
+    return to.path === '/login' ? true : { path: '/login', query: { redirect: to.fullPath } }
+  }
+  if (!actor) {
+    return to.path === '/login' ? true : { path: '/login', query: { redirect: to.fullPath } }
+  }
+  if (actor.mustChangePassword) return to.path === '/account/password' ? true : '/account/password'
+  if (to.path === '/account/password') return true
+  if (!canVisit(actor, to.path)) return actor.home
+  if (actor.subjectName) {
+    const key = actor.portal === 'institution' ? 'institution' : 'organization'
+    const other = actor.portal === 'institution' ? 'organization' : 'institution'
+    if (to.query[key] !== actor.subjectName || to.query[other] !== undefined ||
+      (actor.portal === 'institution' && to.query.review === 'assigned')) {
+      const query = { ...to.query, [key]: actor.subjectName }
+      delete query[other]
+      if (actor.portal === 'institution') delete query.review
+      return { path: to.path, query, hash: to.hash }
+    }
+  }
+  return true
+})
+
+window.addEventListener('grade-business-session-expired', () => {
+  const current = router.currentRoute.value
+  if (current.path !== '/login') {
+    void router.replace({ path: '/login', query: { redirect: current.fullPath } })
+  }
 })
