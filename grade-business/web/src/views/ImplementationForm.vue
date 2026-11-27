@@ -313,15 +313,17 @@ onBeforeUnmount(() => {
             </div>
             <small v-if="searchError" role="alert">{{ searchError }}</small>
           </div>
-          <label class="field">
-            <span>关联备案</span>
-            <select v-model="fields.filingId" required :disabled="lockFiling || saving" @change="chooseFiling">
+          <div class="field">
+            <label for="implementation-filing"><span>关联备案</span></label>
+            <select id="implementation-filing" v-model="fields.filingId" name="filingId"
+              :aria-describedby="selected ? 'implementation-filing-unit' : undefined"
+              required :disabled="lockFiling || saving" @change="chooseFiling">
               <option value="" disabled>{{ searching ? '加载候选…' : '选择已通过的有效备案' }}</option>
               <option v-for="option in filingOptions" :key="option.id" :value="option.id">{{ option.number }} · {{ option.systemName }}</option>
             </select>
-            <small v-if="selected">{{ selected.organizationName }}</small>
+            <small v-if="selected" id="implementation-filing-unit">{{ selected.organizationName }}</small>
             <small v-else-if="!searching && !searchError && !filingOptions.length">当前没有匹配的有效备案。</small>
-          </label>
+          </div>
           <label class="field">
             <span>报备类型</span>
             <select v-model="fields.type" :disabled="retestHandoff || lockFiling || saving">
@@ -338,11 +340,14 @@ onBeforeUnmount(() => {
           </p>
           <p v-if="quotaError" class="form-message error-message wide" role="alert">{{ quotaError }}</p>
           <DirectoryPicker v-if="useReporterPicker" v-model="fields.reporterId" kind="person"
-            label="报备人员" :institution="effectiveInstitution" :initial-label="fields.reporter"
+            select-id="implementation-reporter" label="报备人员" :institution="effectiveInstitution"
+            :initial-label="fields.reporter"
             required :disabled="isAmendment || saving" @picked="chooseReporter" />
           <p v-else-if="checkingReporter" class="field" role="status"><span>报备人员</span><small>正在核对机构名录…</small></p>
           <label v-else class="field">
-            <span>报备人员</span><input v-model="fields.reporter" type="text" required maxlength="120" :disabled="isAmendment || saving" />
+            <span>报备人员</span>
+            <input id="implementation-reporter" v-model="fields.reporter" name="reporter"
+              type="text" required maxlength="120" :disabled="isAmendment || saving" />
           </label>
           <label class="field">
             <span>联系电话（选填）</span><input v-model="fields.contact" type="tel" maxlength="60" :disabled="isAmendment || saving" />
