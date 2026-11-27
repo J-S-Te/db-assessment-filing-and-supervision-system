@@ -147,17 +147,21 @@ onScopeDispose(() => {
             </label>
             <button class="button neutral" type="button" :disabled="finding" @click="findFilings">查找备案</button>
           </div>
-          <label class="field wide">
-            <span>系统备案</span>
-            <select v-model="form.filingId" required :disabled="finding && !filings.length">
+          <div class="field wide">
+            <label for="hazard-registration-filing"><span>系统备案</span></label>
+            <select id="hazard-registration-filing" v-model="form.filingId" name="filingId"
+              :aria-describedby="selected ? 'hazard-registration-filing-institution' : undefined"
+              required :disabled="finding && !filings.length">
               <option value="" disabled>请选择已生效的系统备案</option>
               <option v-for="item in filings" :key="item.id" :value="item.id">
                 {{ item.systemName }} · {{ item.number }} · {{ item.organizationName }}
               </option>
             </select>
-            <small v-if="selected" class="muted">测评机构 {{ selected.assessmentOrg }}</small>
+            <small v-if="selected" id="hazard-registration-filing-institution" class="muted">
+              测评机构 {{ selected.assessmentOrg }}
+            </small>
             <small v-else-if="!finding && !filingError && !filings.length" class="muted">未找到符合条件的备案。</small>
-          </label>
+          </div>
           <p v-if="filingError" class="wide form-message error-message" role="alert">{{ filingError }}</p>
           <label class="field">
             <span>{{ major ? '风险名称' : '漏洞名称' }}</span>

@@ -8,6 +8,7 @@ import {
 const props = defineProps<{
   kind: DirectoryKind
   label: string
+  selectId?: string
   institution?: string
   initialLabel?: string
   disabled?: boolean
@@ -89,7 +90,7 @@ onScopeDispose(() => active?.abort())
   <div class="field directory-picker">
     <label>
       <span>{{ label }}</span>
-      <select :value="selection" :required="required" :disabled="disabled" @change="choose">
+      <select :id="selectId" :value="selection" :required="required" :disabled="disabled" @change="choose">
         <option value="">{{ loading ? '正在读取名录…' : '请选择' + label }}</option>
         <option v-if="selection && !hasSelection" :value="selection" disabled>{{ initialLabel || '原选项' }} · 原记录</option>
         <option v-for="item in displayed" :key="optionValue(item)" :value="optionValue(item)">
