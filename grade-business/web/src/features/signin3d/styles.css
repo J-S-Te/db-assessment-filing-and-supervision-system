@@ -1,0 +1,969 @@
+/* ===========================================================
+   网络安全等级保护平台 · 登录页设计稿
+   视觉基调：深空蓝 + 冰青主色 + 绯红警戒色 + 玻璃拟态面板
+   =========================================================== */
+
+.signin-3d {
+  --bg-deep: #04070f;
+  --bg-mid: #071228;
+  --cyan: #4fd6ff;
+  --cyan-soft: #9ae9ff;
+  --cyan-dim: rgba(79, 214, 255, 0.14);
+  --red: #ff4f66;
+  --red-dim: rgba(255, 79, 102, 0.14);
+  --ink: #eaf4ff;
+  --ink-2: #a9bed6;
+  --ink-3: #6d8299;
+  --line: rgba(120, 190, 235, 0.16);
+  --line-strong: rgba(120, 205, 255, 0.32);
+  --glass: rgba(9, 20, 40, 0.62);
+  --glass-2: rgba(13, 28, 54, 0.78);
+  --font-cn: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC",
+    "Noto Sans CJK SC", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --radius: clamp(12px, 1.05vw, 16px);
+
+  /* ---- 自适应间距令牌 ----
+     布局结构（宽屏左右 / 窄屏上下）由断点决定，不随尺寸变化；
+     这里只让「间距」随屏幕连续缩放，避免大屏空、小屏挤。 */
+  --sp-xs: clamp(5px, 0.42vw, 9px);
+  --sp-sm: clamp(9px, 0.78vw, 15px);
+  --sp-md: clamp(13px, 1.15vw, 22px);
+  --sp-lg: clamp(18px, 1.6vw, 30px);
+  --sp-xl: clamp(24px, 2.2vw, 42px);
+  --card-pad: clamp(18px, 1.85vw, 32px);
+  --col-w: clamp(340px, 34vw, 540px);
+  /* 右侧留白：卡片不贴屏幕边缘，顶栏时钟与倍率条也和它对齐 */
+  --col-pad-x: clamp(18px, 2.6vw, 56px);
+  --top-pad: clamp(12px, 1.5vw, 26px);
+  --font-card-title: clamp(21px, 1.55vw, 29px);
+  --font-card-desc: clamp(12px, 0.82vw, 14px);
+  --font-body: clamp(12.5px, 0.88vw, 15px);
+}
+
+.signin-3d * {
+  box-sizing: border-box;
+}
+
+.signin-3d {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100dvh;
+  min-height: 570px;
+  overflow: clip;
+  background: var(--bg-deep) url('../../assets/signin-space.webp') center / cover no-repeat;
+  color: var(--ink);
+  color-scheme: dark;
+  font: 16px / normal var(--font-cn);
+  font-synthesis: initial;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  --focus: var(--cyan);
+  /* 移动端安全区 */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+/* ---------- 三维画布 ---------- */
+.signin-3d .signin-stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.signin-3d .signin-stage.is-grabbing {
+  cursor: grabbing;
+}
+/* 右侧遮罩渐变，让登录区文字更清晰 */
+.signin-3d::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    rgba(4, 7, 15, 0) 38%,
+    rgba(4, 8, 18, 0.45) 56%,
+    rgba(4, 8, 18, 0.86) 74%,
+    rgba(3, 6, 13, 0.95) 100%
+  );
+  z-index: 1;
+}
+
+/* ---------- 顶部品牌栏 ---------- */
+.signin-3d .signin-topbar-3d {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  padding: var(--top-pad) var(--col-pad-x) var(--top-pad) var(--sp-xl);
+  pointer-events: none;
+}
+
+.signin-3d .topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.signin-3d .topbar__mark {
+  display: grid;
+  place-items: center;
+  width: clamp(36px, 3vw, 48px);
+  height: clamp(36px, 3vw, 48px);
+  color: var(--cyan);
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(9px, 0.8vw, 13px);
+  background: rgba(10, 26, 48, 0.5);
+  box-shadow: 0 0 22px rgba(79, 214, 255, 0.14) inset;
+}
+
+.signin-3d .topbar__titles {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.signin-3d .topbar__titles strong {
+  font-size: clamp(14px, 1.15vw, 19px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.signin-3d .topbar__titles small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+
+.signin-3d .topbar__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  pointer-events: auto;
+}
+
+.signin-3d .status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  font-size: var(--font-body);
+  color: var(--ink-2);
+  padding: var(--sp-xs) var(--sp-sm);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(8, 18, 36, 0.55);
+  backdrop-filter: blur(8px);
+}
+.signin-3d .status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #35e08a;
+  box-shadow: 0 0 0 0 rgba(53, 224, 138, 0.7);
+  animation: pulse-dot 2.4s infinite;
+}
+@keyframes pulse-dot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(53, 224, 138, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(53, 224, 138, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(53, 224, 138, 0);
+  }
+}
+
+.signin-3d .topbar__clock {
+  font-family: var(--font-mono);
+  font-size: clamp(11.5px, 0.85vw, 14px);
+  letter-spacing: 0.08em;
+  color: var(--cyan-soft);
+  text-shadow: 0 0 14px rgba(79, 214, 255, 0.45);
+}
+
+/* ---------- 右侧登录列 ---------- */
+.signin-3d .login-column {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: var(--col-w);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(60px, 7vh, 96px) var(--col-pad-x) clamp(40px, 5vh, 68px);
+  pointer-events: none;
+}
+
+.signin-3d .login-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: min(100%, 460px);
+  padding: var(--card-pad);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, rgba(17, 36, 66, 0.78), rgba(7, 16, 32, 0.86));
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 0 60px rgba(30, 120, 190, 0.09);
+}
+
+.signin-3d .login-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    rgba(79, 214, 255, 0.14),
+    transparent 38%,
+    transparent 62%,
+    rgba(255, 79, 102, 0.1)
+  );
+}
+
+.signin-3d .login-card__head {
+  margin-bottom: var(--sp-lg);
+}
+
+.signin-3d .login-card__eyebrow {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.26em;
+  color: var(--cyan);
+  opacity: 0.85;
+}
+
+.signin-3d .login-card__title {
+  margin: 0 0 10px;
+  font-size: var(--font-card-title);
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0.05em;
+  background: linear-gradient(100deg, #ffffff, #a9e6ff 60%, #7fc9ee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.signin-3d .login-card__desc {
+  margin: 0;
+  font-size: var(--font-card-desc);
+  line-height: 1.75;
+  color: var(--ink-2);
+}
+
+/* ---------- 表单 ---------- */
+.signin-3d .login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+}
+
+.signin-3d .signin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.signin-3d .field__label {
+  color: #a9c0d7;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.signin-3d .field__control {
+  --field-fill: #0b182a;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: clamp(46px, 2.75vw, 52px);
+  padding-inline: 14px 10px;
+  border: 1px solid #2b425d;
+  border-radius: 12px;
+  background: var(--field-fill);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.signin-3d .field__control:hover {
+  border-color: #3e617f;
+}
+.signin-3d .field__control:focus-within {
+  --field-fill: #102138;
+  border-color: #64bded;
+  box-shadow: 0 0 0 3px rgba(79, 214, 255, 0.14);
+}
+
+.signin-3d .field__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #829eb9;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  transition: stroke 0.2s;
+}
+.signin-3d .field__control:focus-within .field__icon {
+  stroke: var(--cyan);
+}
+
+.signin-3d .signin-field input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink);
+  caret-color: var(--cyan-soft);
+  font: inherit;
+  font-size: 14px;
+}
+.signin-3d .signin-field input::placeholder {
+  color: #7891ac;
+}
+
+/* 浏览器自动填充单独绘制底色，用与外框相同的底色覆盖。 */
+.signin-3d .signin-field input:is(:autofill, :-webkit-autofill) {
+  box-shadow: 0 0 0 100px var(--field-fill) inset;
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--cyan-soft);
+}
+
+.signin-3d .field__toggle {
+  flex: none;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9bc4df;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.signin-3d .field__toggle:hover {
+  color: var(--cyan-soft);
+  background: rgba(79, 214, 255, 0.09);
+}
+
+.signin-3d .login-form__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.signin-3d .checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.signin-3d .checkbox input {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: rgba(4, 12, 26, 0.6);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s, border-color 0.2s;
+}
+.signin-3d .checkbox input:checked {
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+.signin-3d .checkbox input:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #04203a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(43deg);
+}
+
+.signin-3d .link-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--cyan-soft);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.signin-3d .link-btn:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.signin-3d .btn-primary {
+  position: relative;
+  margin-top: 4px;
+  padding: 13px 16px;
+  border: 1px solid rgba(154, 233, 255, 0.5);
+  border-radius: 10px;
+  background: linear-gradient(100deg, #1d78b4, #38b6e8 55%, #6fe0ff);
+  color: #032033;
+  font-family: inherit;
+  font-size: clamp(13.5px, 1.05vw, 16px);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(41, 160, 220, 0.3);
+  transition: transform 0.16s, box-shadow 0.2s, filter 0.2s;
+}
+.signin-3d .btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 14px 34px rgba(41, 175, 230, 0.42);
+}
+.signin-3d .btn-primary:active {
+  transform: translateY(1px);
+}
+.signin-3d .btn-primary.is-loading {
+  pointer-events: none;
+  filter: saturate(0.5);
+}
+.signin-3d .btn-primary.is-loading .btn-primary__label {
+  opacity: 0;
+}
+.signin-3d .btn-primary__spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid rgba(3, 32, 51, 0.35);
+  border-top-color: #032033;
+  border-radius: 50%;
+  opacity: 0;
+  animation: spin 0.8s linear infinite;
+}
+.signin-3d .btn-primary.is-loading .btn-primary__spinner {
+  opacity: 1;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.signin-3d .login-form__alt {
+  margin-top: 4px;
+}
+
+.signin-3d .login-form__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.1em;
+}
+.signin-3d .login-form__divider i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
+.signin-3d .login-form__methods {
+  display: flex;
+  gap: var(--sp-sm);
+  margin-top: var(--sp-md);
+}
+
+.signin-3d .method {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-xs);
+  padding: clamp(9px, 0.9vw, 13px) var(--sp-xs);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(6, 16, 34, 0.5);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.16s;
+}
+.signin-3d .method svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.signin-3d .method:hover {
+  color: var(--cyan);
+  border-color: rgba(79, 214, 255, 0.5);
+  background: rgba(79, 214, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.signin-3d .login-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: var(--sp-lg) 0 0;
+  font-size: clamp(10.5px, 0.75vw, 12px);
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.signin-3d .lock {
+  display: inline-grid;
+  place-items: center;
+}
+.signin-3d .lock svg {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.6;
+}
+
+/* ---------- 场景 HUD ---------- */
+.signin-3d .hud-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.signin-3d .hud-tag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: rgba(154, 233, 255, 0.72);
+  text-shadow: 0 0 12px rgba(79, 214, 255, 0.55);
+  white-space: nowrap;
+  padding-left: 12px;
+}
+.signin-3d .hud-tag::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border: 1px solid rgba(154, 233, 255, 0.8);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(79, 214, 255, 0.7);
+}
+.signin-3d .hud-tag--warn {
+  color: rgba(255, 138, 154, 0.8);
+  text-shadow: 0 0 12px rgba(255, 79, 102, 0.5);
+}
+.signin-3d .hud-tag--warn::before {
+  border-color: rgba(255, 138, 154, 0.85);
+  box-shadow: 0 0 8px rgba(255, 79, 102, 0.7);
+}
+
+/* ---------- 操作提示条 ---------- */
+.signin-3d .scene-hint {
+  position: absolute;
+  left: var(--sp-xl);
+  bottom: var(--sp-lg);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: var(--sp-sm) var(--sp-md);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(6, 15, 32, 0.55);
+  backdrop-filter: blur(8px);
+  font-size: clamp(11px, 0.8vw, 13px);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.signin-3d .scene-hint b {
+  color: var(--ink-2);
+  font-weight: 500;
+  margin-right: 5px;
+}
+.signin-3d .scene-hint__sep {
+  width: 1px;
+  height: 11px;
+  background: var(--line);
+}
+
+/* ---------- Toast ---------- */
+.signin-3d .toast {
+  position: absolute;
+  left: 50%;
+  bottom: 46px;
+  transform: translateX(-50%);
+  z-index: 9;
+  padding: 11px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(9, 22, 44, 0.94);
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+  font-size: 13px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  animation: toast-in 0.28s ease both;
+}
+.signin-3d .toast[hidden] {
+  display: none;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---------- FUI 文字叠层 ---------- */
+.signin-3d .fui-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.signin-3d .fui-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  transition: opacity 0.25s ease;
+  text-shadow: 0 0 10px rgba(90, 210, 255, 0.55);
+}
+
+/* 英文小标题 */
+.signin-3d .fui-text--title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.15em;
+  color: rgba(150, 232, 255, 0.92);
+}
+
+/* 中文副标题 */
+.signin-3d .fui-text--sub {
+  font-weight: 400;
+  font-size: 11.5px;
+  letter-spacing: 0.22em;
+  color: rgba(126, 200, 240, 0.72);
+}
+
+/* 条形指标名 */
+.signin-3d .fui-text--label {
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgba(150, 205, 235, 0.78);
+}
+
+/* 读数 */
+.signin-3d .fui-text--value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(186, 242, 255, 0.95);
+}
+
+/* ---------- 渲染倍率切换 ---------- */
+.signin-3d .quality {
+  position: absolute;
+  right: var(--col-pad-x);
+  bottom: var(--sp-lg);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: var(--sp-sm) var(--sp-md);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(6, 15, 32, 0.6);
+  backdrop-filter: blur(10px);
+  font-size: clamp(10.5px, 0.78vw, 12px);
+  color: var(--ink-3);
+  pointer-events: auto;
+}
+.signin-3d .quality__label {
+  letter-spacing: 0.08em;
+}
+.signin-3d .quality__opts {
+  display: flex;
+  gap: 3px;
+}
+.signin-3d .quality__opts button {
+  min-width: 34px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.signin-3d .quality__opts button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.signin-3d .quality__opts button.is-active {
+  background: rgba(79, 214, 255, 0.18);
+  border-color: rgba(79, 214, 255, 0.5);
+  color: var(--cyan-soft);
+}
+.signin-3d .quality__out {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  min-width: 116px;
+  text-align: right;
+}
+
+/* ---------- 加载遮罩 ---------- */
+.signin-3d .boot {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: none;
+}
+.signin-3d .boot__ring {
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(79, 214, 255, 0.16);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+.signin-3d .boot__text {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+.signin-3d .status--busy .status__dot,
+.signin-3d .status--error .status__dot {
+  background: var(--cyan);
+  animation: none;
+}
+.signin-3d .status--error .status__dot { background: var(--red); }
+.signin-3d .login-error {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 79, 102, .42);
+  border-radius: 8px;
+  color: #ffd3db;
+  background: var(--red-dim);
+  font-size: var(--font-body);
+}
+.signin-3d .login-card__register {
+  font-size: inherit;
+}
+.signin-3d .login-card__foot > span:not(.lock) { white-space: nowrap; }
+.signin-3d .login-copyright {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: max(4px, env(safe-area-inset-bottom));
+  left: 0;
+  padding: 0 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+  pointer-events: none;
+}
+.signin-3d--changing .login-column {
+  inset: 0;
+  width: 100%;
+  align-items: center;
+  padding: 76px 16px 28px;
+}
+
+/* ===========================================================
+   响应式
+   =========================================================== */
+
+/* 中等屏：收窄登录列 */
+@media (max-width: 1180px) {
+  .signin-3d .login-column {
+    width: min(440px, 46vw);
+    padding: 84px var(--col-pad-x) 48px;
+  }
+}
+
+/* 平板 / 竖屏：上下布局，3D 在上，表单在下 */
+@media (max-width: 900px), (max-height: 620px) {
+  .signin-3d .signin-topbar-3d {
+    padding: 14px 18px;
+  }
+  .signin-3d .topbar__titles small {
+    display: none;
+  }
+  .signin-3d .topbar__titles strong {
+    font-size: 15px;
+  }
+  .signin-3d .topbar__mark {
+    width: 36px;
+    height: 36px;
+  }
+  .signin-3d .topbar__mark svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .signin-3d .login-column {
+    position: absolute;
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: auto;
+    padding: 0 16px calc(30px + env(safe-area-inset-bottom));
+    align-items: flex-end;
+  }
+  .signin-3d .login-card {
+    max-width: 520px;
+    padding: 22px 22px 18px;
+    border-radius: 16px;
+    background: linear-gradient(160deg, rgba(15, 33, 60, 0.92), rgba(6, 14, 29, 0.96));
+  }
+  .signin-3d .login-card__title {
+    font-size: 22px;
+  }
+  .signin-3d .login-card__desc {
+    font-size: 12.5px;
+  }
+  .signin-3d .login-form {
+    gap: 12px;
+  }
+  .signin-3d .login-form__alt {
+    display: none;
+  }
+  .signin-3d .scene-hint {
+    left: 16px;
+    bottom: auto;
+    top: 70px;
+    font-size: 11px;
+    padding: 7px 12px;
+    gap: 8px;
+  }
+  /* 倍率切换器是桌面端调优工具，窄屏会压到登录卡上，直接隐藏 */
+  .signin-3d .quality {
+    display: none;
+  }
+}
+
+/* 手机 */
+@media (max-width: 560px) {
+  .signin-3d .signin-topbar-3d {
+    padding: 12px 14px;
+  }
+  .signin-3d .topbar__clock {
+    display: none;
+  }
+  .signin-3d .login-column {
+    padding: 0 12px calc(26px + env(safe-area-inset-bottom));
+  }
+  .signin-3d .login-card {
+    padding: 18px 18px 16px;
+  }
+  .signin-3d .login-card__head {
+    margin-bottom: 14px;
+  }
+  .signin-3d .login-card__title {
+    font-size: 20px;
+  }
+  .signin-3d .btn-primary {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  .signin-3d .scene-hint {
+    display: none;
+  }
+  .signin-3d .toast {
+    bottom: 34px;
+    width: max-content;
+    max-width: calc(100% - 28px);
+    font-size: 12px;
+  }
+}
+
+/* 矮屏：压缩竖向间距 */
+@media (max-height: 760px) and (min-width: 901px) {
+  .signin-3d .login-card {
+    padding: 22px 24px 18px;
+  }
+  .signin-3d .login-card__title {
+    font-size: 23px;
+  }
+  .signin-3d .login-card__head {
+    margin-bottom: 16px;
+  }
+  .signin-3d .login-form {
+    gap: 13px;
+  }
+  .signin-3d .login-form__alt {
+    margin-top: 0;
+  }
+  .signin-3d .login-card__foot {
+    margin-top: 14px;
+  }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .signin-3d * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
