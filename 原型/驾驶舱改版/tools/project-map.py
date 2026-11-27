@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """把项目里的区县 GeoJSON 离线投影成 SVG path，供驾驶舱设计稿内联使用。
 
-用法：
-    python3 tools/project-map.py \
-        ../../grade-business/web/src/assets/district-boundaries.geojson \
+用法（在仓库根目录运行）：
+    python3 原型/驾驶舱改版/tools/project-map.py \
+        grade-business/web/src/assets/district-boundaries.geojson \
         /tmp/qz_paths.json
 
 投影方式与前端 `web/src/lib/dashboardGeo.ts` 的
@@ -17,9 +17,19 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
 
 VIEW_W, VIEW_H, PAD = 560.0, 430.0, 20.0
 POINT = re.compile(r"[ML]\s*(-?\d+\.?\d*)\s+(-?\d+\.?\d*)")
+
+
+def check_path(path: str, suffixes: tuple[str, ...]) -> Path:
+    parts = re.split(r"[\\/]+", path)
+    if ".." in parts:
+        raise SystemExit(f"路径不允许包含 .. 目录分量：{path}")
+    if not path.lower().endswith(suffixes):
+        raise SystemExit(f"路径须以 {' / '.join(suffixes)} 结尾：{path}")
+    return Path(path)
 
 
 def project(geojson: dict) -> dict:
@@ -105,11 +115,11 @@ def main() -> None:
     if len(sys.argv) != 3:
         print(__doc__)
         raise SystemExit(2)
-    with open(sys.argv[1], encoding="utf-8") as handle:
-        geojson = json.load(handle)
+    source = check_path(sys.argv[1], (".geojson", ".json"))
+    target = check_path(sys.argv[2], (".json",))
+    geojson = json.loads(source.read_text(encoding="utf-8"))
     result = project(geojson)
-    with open(sys.argv[2], "w", encoding="utf-8") as handle:
-        json.dump(result, handle, ensure_ascii=False, indent=1)
+    target.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     print("viewBox =", result["viewBox"])
     for district in result["districts"]:
         print(f"  {district['name']}: label=({district['lx']},{district['ly']})")

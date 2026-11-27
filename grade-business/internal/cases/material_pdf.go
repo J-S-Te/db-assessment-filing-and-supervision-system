@@ -10,7 +10,9 @@ import (
 var ErrPDFValidationUnavailable = errors.New("local PDF validation unavailable")
 
 // ValidatePublicationPDF 在发布资料前检查已暂存的 PDF 是否具备可打开的页面结构。
-// 参数 ctx 为整批资料校验的限时上下文，key 为数据库保存的受控存储键。
+// 参数 ctx 为整批资料校验的限时上下文，key 为数据库保存的受控存储键，
+// 键经 openAttachment 限定为附件目录内的纯十六进制文件名，pdfinfo 调用
+// 使用固定字面量参数，无外部数据进入命令行。
 // 返回值 解析成功时为 nil，或文件类型、存储和本地工具错误。
 func (s *Service) ValidatePublicationPDF(ctx context.Context, key string) error {
 	file, err := openAttachment(s.attachmentDir, key)
