@@ -34,11 +34,13 @@ func (s *Service) materialsInScope(ctx context.Context, kind, id, institution st
 		SELECT c.material_revision,a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at
 		FROM business_cases c LEFT JOIN business_cases f ON f.id=c.filing_id
 		LEFT JOIN case_attachments a ON c.id=a.case_id
-		  AND ($4='' OR COALESCE(a.merge_history_scope,c.organization_name)=$4)
+		  AND ($4='' OR a.merge_history_scope=$4 OR (a.merge_history_scope IS NULL
+		    AND c.organization_name=$4 AND`+operatorFilingBinding("$6")+`))
 		WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
 		  AND ($3='' OR c.assessment_org=$3)
-		  AND ($4='' OR (c.kind='filing' AND (c.organization_name=$4 OR a.id IS NOT NULL)))`+caseDistrictScope("$5")+`
-		ORDER BY a.uploaded_at,a.id`, kind, id, institution, operatorFilingScope(ctx), access.Districts(ctx))
+		  AND ($4='' OR (c.kind='filing' AND (a.id IS NOT NULL OR
+		    (c.organization_name=$4 AND`+operatorFilingBinding("$6")+`))))`+caseDistrictScope("$5")+`
+		ORDER BY a.uploaded_at,a.id`, kind, id, institution, operatorFilingScope(ctx), access.Districts(ctx), operatorUnitID(ctx))
 	if err != nil {
 		return MaterialSnapshot{}, err
 	}
@@ -192,8 +194,9 @@ func (s *Service) readAttachment(ctx context.Context, kind, id, materialID, inst
 		LEFT JOIN business_cases f ON f.id=c.filing_id
 		WHERE c.kind=$1 AND c.id=$2 AND a.id=$3 AND c.discarded_at IS NULL
 		  AND ($4='' OR c.assessment_org=$4)
-		  AND ($5='' OR (c.kind='filing' AND COALESCE(a.merge_history_scope,c.organization_name)=$5))`+caseDistrictScope("$6"),
-		kind, id, materialID, institution, operatorFilingScope(ctx), access.Districts(ctx)).
+		  AND ($5='' OR (c.kind='filing' AND (a.merge_history_scope=$5 OR
+		    (a.merge_history_scope IS NULL AND c.organization_name=$5 AND`+operatorFilingBinding("$7")+`))))`+caseDistrictScope("$6"),
+		kind, id, materialID, institution, operatorFilingScope(ctx), access.Districts(ctx), operatorUnitID(ctx)).
 		Scan(&a.ID, &a.Kind, &a.FileName, &a.Size, &a.UploadedAt, &a.fileKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return attachmentRow{}, ErrNotFound

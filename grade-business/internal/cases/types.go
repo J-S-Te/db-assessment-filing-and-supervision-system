@@ -42,17 +42,18 @@ type recordRow struct {
 
 type recordDetail struct {
 	recordRow
-	FilingID           string                     `json:"filingId,omitempty"`
-	Version            int64                      `json:"version"`
-	AllowedActions     []string                   `json:"allowedActions"`
-	RequiredMaterials  []string                   `json:"requiredMaterials,omitempty"`
-	ReceiptAvailable   *bool                      `json:"receiptAvailable,omitempty"`
-	AssessmentPersonID *string                    `json:"assessmentPersonId,omitempty"`
-	DirectorySnapshot  *directoryref.Snapshot     `json:"directorySnapshot,omitempty"`
-	Classification     *classification.Assessment `json:"classificationAssessment,omitempty"`
-	PolicyMaterials    []filingpolicy.Rule        `json:"policyMaterials,omitempty"`
-	operatorOrigin     bool
-	withdrawalPending  bool
+	FilingID                string                     `json:"filingId,omitempty"`
+	Version                 int64                      `json:"version"`
+	AllowedActions          []string                   `json:"allowedActions"`
+	RequiredMaterials       []string                   `json:"requiredMaterials,omitempty"`
+	ReceiptAvailable        *bool                      `json:"receiptAvailable,omitempty"`
+	AssessmentPersonID      *string                    `json:"assessmentPersonId,omitempty"`
+	DirectorySnapshot       *directoryref.Snapshot     `json:"directorySnapshot,omitempty"`
+	Classification          *classification.Assessment `json:"classificationAssessment,omitempty"`
+	PolicyMaterials         []filingpolicy.Rule        `json:"policyMaterials,omitempty"`
+	FilingNumberProvisional bool                       `json:"filingNumberProvisional,omitempty"`
+	operatorOrigin          bool
+	withdrawalPending       bool
 }
 
 type listResponse struct {

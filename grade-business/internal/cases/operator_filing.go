@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/classification"
 	"grade-business/internal/httpx"
 	"grade-business/internal/reviewinbox"
@@ -68,6 +69,16 @@ func withOperatorFiling(handle http.HandlerFunc) http.HandlerFunc {
 func operatorFilingScope(ctx context.Context) string {
 	organization, _ := ctx.Value(operatorFilingScopeKey{}).(string)
 	return organization
+}
+
+// operatorUnitID 提取已认证会话中的运营单位，供备案核心查询验证实际归属。
+// 参数 ctx 为当前请求及权限网关写入的上下文。
+// 返回值 运营单位 UUID，非运营者或旧内部测试入口为空。
+func operatorUnitID(ctx context.Context) string {
+	if actor, ok := access.Current(ctx); ok && actor.Role == access.Operator {
+		return actor.SubjectID
+	}
+	return ""
 }
 
 // operatorFilingList 查询指定运营单位的备案及真实办理状态。
@@ -190,12 +201,14 @@ func (s *Service) operatorFilingReceipt(ctx context.Context, id string) (string,
 		FROM business_cases c LEFT JOIN LATERAL (
 		    SELECT e.to_status,e.occurred_at,e.merge_history_number,e.merge_history_system_name
 		    FROM case_review_events e
-		    WHERE e.case_id=c.id AND COALESCE(e.merge_history_scope,c.organization_name)=$2
+		    WHERE e.case_id=c.id AND (e.merge_history_scope=$2 OR (e.merge_history_scope IS NULL
+		      AND c.organization_name=$2 AND`+operatorFilingBinding("$3")+`))
 		      AND `+filingReceiptEvent+`
 		    ORDER BY e.id DESC LIMIT 1
 		) receipt ON true
-		WHERE c.kind='filing' AND c.id=$1 AND (c.organization_name=$2 OR receipt.occurred_at IS NOT NULL)
-		  AND c.discarded_at IS NULL`, id, organization).
+		WHERE c.kind='filing' AND c.id=$1 AND (receipt.occurred_at IS NOT NULL OR
+		  (c.organization_name=$2 AND`+operatorFilingBinding("$3")+`))
+		  AND c.discarded_at IS NULL`, id, organization, operatorUnitID(ctx)).
 		Scan(&number, &systemName, &state, &occurred)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

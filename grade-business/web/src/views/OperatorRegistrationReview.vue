@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 import AsyncState from '../components/AsyncState.vue'
 import { api, ApiError, errorText } from '../lib/api'
@@ -10,8 +10,9 @@ import { queryValue, usePagedList } from '../lib/paging'
 import { hasPermission } from '../lib/session'
 
 const route = useRoute()
+const creditCode = computed(() => queryValue(route.query.creditCode))
 const { keyword, filter, page, loading, failure, load, search, nextPage, previousPage } =
-  usePagedList<RegistrationItem>(() => reviewRegistrationPath, 'status')
+  usePagedList<RegistrationItem>(() => reviewRegistrationPath, 'status', () => 'creditCode')
 const dialog = ref<HTMLDialogElement>()
 const item = shallowRef<RegistrationItem>()
 const decision = ref<'approve' | 'reject'>('approve')
@@ -63,6 +64,7 @@ async function saveReview() {
   <section class="v2-list" aria-labelledby="registration-review-heading">
     <header class="page-header">
       <div><h2 id="registration-review-heading">注册审核</h2></div>
+      <RouterLink v-if="creditCode" class="button neutral" :to="{ query: {} }">返回待审单位列表</RouterLink>
     </header>
     <form class="v2-list-toolbar" @submit.prevent="search">
       <div class="v2-toolbar-row">
@@ -75,6 +77,7 @@ async function saveReview() {
           <input v-model="keyword" type="search" maxlength="120" placeholder="单位名称、信用代码或账号">
         </label>
         <button type="submit" class="button primary" :disabled="loading">查询</button>
+        <span v-if="creditCode" class="muted">信用代码 {{ creditCode }}</span>
       </div>
     </form>
     <p v-if="notice" class="form-message success-message" role="status">{{ notice }}</p>
@@ -94,7 +97,12 @@ async function saveReview() {
                 <span class="muted">{{ formatTime(row.createdAt) }}</span>
               </td>
               <td>
-                <div v-if="row.status === 'pending' && hasPermission('admin.sys.user.audit')" class="registration-actions">
+                <RouterLink v-if="(row.pendingCount ?? 0) > 1" class="text-action"
+                  :to="{ query: { creditCode: row.creditCode } }">
+                  查看 {{ row.pendingCount }} 份申请
+                </RouterLink>
+                <div v-else-if="row.status === 'pending' && hasPermission('admin.sys.user.audit')"
+                  class="registration-actions">
                   <button type="button" class="text-action" @click="openReview(row, 'approve')">通过</button>
                   <button type="button" class="text-action" @click="openReview(row, 'reject')">驳回</button>
                 </div>
@@ -126,7 +134,7 @@ async function saveReview() {
           <input v-model="verified" type="checkbox" required :disabled="saving">
           <span>已核实单位资料及联系人身份和授权。确认通过后将立即开通该单位账号。</span>
         </label>
-        <label class="field"><span>{{ decision === 'approve' ? '审核意见（选填）' : '驳回原因（申请人可查阅）' }}</span>
+        <label class="field"><span>{{ decision === 'approve' ? '审核意见（选填）' : '驳回原因（仅审核端可见）' }}</span>
           <textarea v-model.trim="reason" rows="3" maxlength="500" :required="decision === 'reject'" :disabled="saving" />
         </label>
         <p v-if="actionError" class="form-message error-message" role="alert">{{ actionError }}</p>

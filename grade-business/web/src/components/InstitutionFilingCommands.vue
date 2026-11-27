@@ -158,8 +158,8 @@ defineExpose({ openCopy })
       <h2 id="institution-batch-title">{{ title }}</h2>
       <template v-if="'copy' in operation">
         <p>源备案 {{ operation.copy.number }}。新草稿复制系统、单位和定级，材料需重新上传。</p>
-        <label class="field"><span>新备案编号</span>
-          <input v-model="copyNumber" maxlength="80" required :disabled="loading">
+        <label class="field"><span>预填备案编号（选填）</span>
+          <input v-model="copyNumber" maxlength="80" placeholder="终审通过后生效" :disabled="loading">
         </label>
       </template>
       <template v-else>

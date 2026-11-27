@@ -46,6 +46,14 @@ func caseDistrictScope(parameter string) string {
 	      AND u.kind='unit' AND btrim(u.district)=ANY(` + parameter + `::text[])))`
 }
 
+// operatorFilingBinding 在运营者入口核对可信单位外键，并兼容已审或自主提交的历史记录。
+// 参数 parameter 为已认证运营者的单位 UUID 的 SQL 参数。
+// 返回值 仅凭自填单位名称创建的未审机构代报无法通过的 SQL 条件。
+func operatorFilingBinding(parameter string) string {
+	return ` (` + parameter + `='' OR c.directory_unit_id=NULLIF(` + parameter + `,'')::uuid
+	    OR (c.directory_unit_id IS NULL AND (c.operator_origin OR c.status IN ('approved','withdrawn'))))`
+}
+
 // parseListQuery 解析受限分页参数并验证允许的筛选条件。
 // 参数 query 为请求 URL 查询参数，validFilterStatus 校验当前集合的状态。
 // 返回值 解码后的列表查询或参数错误。
@@ -142,7 +150,7 @@ func (s *Service) list(ctx context.Context, kind string, input listQuery) (listR
 	         AND c.cancelled_at IS NULL AND c.status<>'withdrawn' THEN c.version END` + recordJoin + recordFilters + `
 	   AND ($6::timestamptz IS NULL OR (c.created_at,c.id)<($6,$7::uuid))
 	   AND ($9='' OR c.assessment_org=$9)
-	   AND ($10='' OR (c.kind='filing' AND c.organization_name=$10))
+	   AND ($10='' OR (c.kind='filing' AND c.organization_name=$10 AND` + operatorFilingBinding("$14") + `))
 	   AND (NOT $11::bool OR (c.operator_origin AND c.status='pending_initial' AND NOT EXISTS(
 	       SELECT 1 FROM filing_withdrawal_requests w
 	       WHERE w.resource='filings' AND w.resource_id=c.id AND w.status='pending')))` +
@@ -151,7 +159,7 @@ func (s *Service) list(ctx context.Context, kind string, input listQuery) (listR
 	 LIMIT $8`
 	rows, err := s.db.Query(ctx, query, kind, input.status, input.keyword, input.lifecycle, input.risk,
 		created, id, input.limit+1, input.institution, operatorFilingScope(ctx), input.assignedReview,
-		access.Districts(ctx), input.includePrecheckStatus)
+		access.Districts(ctx), input.includePrecheckStatus, operatorUnitID(ctx))
 	if err != nil {
 		return listResponse{}, err
 	}
@@ -188,7 +196,7 @@ func (s *Service) detail(ctx context.Context, kind, id string) (recordDetail, er
 	return s.detailInScope(ctx, kind, id, "")
 }
 
-// detailInScope 按本地办理范围查询记录、材料要求和回执状态。
+// detailInScope 用途为按办理范围查询记录、编号状态、材料要求和回执状态。
 // 参数 ctx 携带可选运营单位，kind、id 指定记录，institution 为可选机构名称。
 // 返回值 匹配的详情或业务归属及数据库错误。
 func (s *Service) detailInScope(ctx context.Context, kind, id, institution string) (recordDetail, error) {
@@ -206,14 +214,16 @@ func (s *Service) detailInScope(ctx context.Context, kind, id, institution strin
 		         AND COALESCE(e.merge_history_scope,c.organization_name)=$4 AND `+filingReceiptEvent+`
 		   ) END,c.directory_person_id::text,c.directory_snapshot,
 		   c.classification_assessment,(c.operator_origin AND EXISTS(SELECT 1 FROM filing_withdrawal_requests w
-		      WHERE w.resource='filings' AND w.resource_id=c.id AND w.status='pending'))`+recordJoin+`
+		      WHERE w.resource='filings' AND w.resource_id=c.id AND w.status='pending')),
+		   c.filing_number_provisional`+recordJoin+`
 		 WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
 		   AND ($3='' OR c.assessment_org=$3)
-		   AND ($4='' OR (c.kind='filing' AND c.organization_name=$4))`+caseDistrictScope("$5"),
-		kind, id, institution, operatorFilingScope(ctx), access.Districts(ctx))
+		   AND ($4='' OR (c.kind='filing' AND c.organization_name=$4 AND`+operatorFilingBinding("$6")+`))`+
+		caseDistrictScope("$5"), kind, id, institution, operatorFilingScope(ctx), access.Districts(ctx), operatorUnitID(ctx))
 	err := row.Scan(append(scanFields(&item.recordRow),
 		&item.FilingID, &item.Version, &profile, &item.operatorOrigin, &filingSubmittedAt, &item.ReceiptAvailable,
-		&item.AssessmentPersonID, &item.DirectorySnapshot, &item.Classification, &item.withdrawalPending)...)
+		&item.AssessmentPersonID, &item.DirectorySnapshot, &item.Classification, &item.withdrawalPending,
+		&item.FilingNumberProvisional)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordDetail{}, ErrNotFound
 	}
@@ -251,9 +261,9 @@ func (s *Service) ensureRecord(ctx context.Context, kind, id string) error {
 	}
 	var exists bool
 	err := s.db.QueryRow(ctx, `SELECT EXISTS(
-		SELECT 1 FROM business_cases WHERE kind=$1 AND id=$2
-		  AND ($3='' OR (kind='filing' AND organization_name=$3))
-	)`, kind, id, operatorFilingScope(ctx)).Scan(&exists)
+		SELECT 1 FROM business_cases c WHERE c.kind=$1 AND c.id=$2
+		  AND ($3='' OR (c.kind='filing' AND c.organization_name=$3 AND`+operatorFilingBinding("$4")+`))
+	)`, kind, id, operatorFilingScope(ctx), operatorUnitID(ctx)).Scan(&exists)
 	if err == nil && !exists {
 		return ErrNotFound
 	}
@@ -273,11 +283,13 @@ func (s *Service) history(ctx context.Context, kind, id, institution string) ([]
 		       e.directory_snapshot
 		FROM business_cases c LEFT JOIN business_cases f ON f.id=c.filing_id
 		LEFT JOIN case_review_events e ON c.id=e.case_id
-		  AND ($3='' OR COALESCE(e.merge_history_scope,c.organization_name)=$3)
+		  AND ($3='' OR e.merge_history_scope=$3 OR (e.merge_history_scope IS NULL
+		    AND c.organization_name=$3 AND`+operatorFilingBinding("$6")+`))
 		WHERE c.id=$1 AND c.kind=$2 AND c.discarded_at IS NULL
-		  AND ($3='' OR (c.kind='filing' AND (c.organization_name=$3 OR e.id IS NOT NULL)))
+		  AND ($3='' OR (c.kind='filing' AND (e.id IS NOT NULL OR
+		    (c.organization_name=$3 AND`+operatorFilingBinding("$6")+`))))
 		  AND ($4='' OR c.assessment_org=$4)`+caseDistrictScope("$5")+`
-		ORDER BY e.id DESC`, id, kind, operatorFilingScope(ctx), institution, access.Districts(ctx))
+		ORDER BY e.id DESC`, id, kind, operatorFilingScope(ctx), institution, access.Districts(ctx), operatorUnitID(ctx))
 	return collectReviewHistory(rows, err)
 }
 

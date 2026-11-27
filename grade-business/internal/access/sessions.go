@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -18,20 +19,35 @@ import (
 )
 
 const (
-	sessionCookie = "grade_business_session"
-	sessionHours  = 8
+	sessionCookie  = "grade_business_session"
+	sessionHours   = 8
+	maxRateSources = 4096
+	rateDuration   = 5 * time.Minute
 )
 
 type Service struct {
 	db                *pgxpool.Pool
+	options           Options
 	mu                sync.Mutex
-	rates             map[string]loginWindow
+	loginRates        map[string]loginSourceWindow
+	nextLoginCleanup  time.Time
 	registrationRates map[string]loginWindow
+}
+
+// Options 指定部署端明确启用的会话传输与代理信任设置。
+type Options struct {
+	SecureCookies bool
+	TrustedProxy  netip.Addr
 }
 
 type loginWindow struct {
 	until time.Time
 	count int
+}
+
+type loginSourceWindow struct {
+	loginWindow
+	accounts map[string]int
 }
 
 const principalFields = `a.id::text,a.display_name,a.role_code,COALESCE(a.area_code,''),
@@ -42,10 +58,15 @@ const loginEligible = `a.enabled AND (a.subject_id IS NULL OR
       AND (p.kind='unit' OR p.valid_until >= (statement_timestamp() AT TIME ZONE 'Asia/Shanghai')::date)))`
 
 // New 创建基于数据库会话的权限服务。
-// 参数 pool 为包含账号及业务主体名录的连接池。
+// 参数 pool 为账号及名录连接池，options 为 Cookie 与可信反代配置。
 // 返回值 可注册登录接口与权限网关的服务。
-func New(pool *pgxpool.Pool) *Service {
-	return &Service{db: pool, rates: make(map[string]loginWindow), registrationRates: make(map[string]loginWindow)}
+func New(pool *pgxpool.Pool, options ...Options) *Service {
+	var cfg Options
+	if len(options) > 0 {
+		cfg = options[0]
+	}
+	return &Service{db: pool, options: cfg,
+		loginRates: make(map[string]loginSourceWindow), registrationRates: make(map[string]loginWindow)}
 }
 
 // fields 提供当前会话身份查询的扫描目标。
@@ -97,7 +118,7 @@ func (s *Service) issue(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return errCredential
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: base64.RawURLEncoding.EncodeToString(raw),
-		Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode,
+		Path: "/", HttpOnly: true, Secure: s.options.SecureCookies || r.TLS != nil, SameSite: http.SameSiteStrictMode,
 		MaxAge: sessionHours * 3600})
 	return nil
 }
@@ -135,17 +156,59 @@ func (s *Service) session(r *http.Request) (Principal, error) {
 
 // limitLogin 限制账号口令校验的频率及计数器存量。
 // 参数 remote 和 username 为连接来源与标准化用户名。
-// 返回值 当前尝试在来源和账户的频率额度内时为真。
+// 返回值 当前尝试在来源及来源内账号的频率额度内时为真。
 func (s *Service) limitLogin(remote, username string) bool {
-	return s.allowAttempts(s.rates, attemptLimit{"ip:" + peerIP(remote), 60},
-		attemptLimit{"user:" + username, 12})
+	now, source := time.Now(), peerIP(remote)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !now.Before(s.nextLoginCleanup) {
+		for key, window := range s.loginRates {
+			if !now.Before(window.until) {
+				delete(s.loginRates, key)
+			}
+		}
+		s.nextLoginCleanup = now.Add(time.Minute)
+	}
+	window, exists := s.loginRates[source]
+	if !exists && len(s.loginRates) >= maxRateSources {
+		return false
+	}
+	if !now.Before(window.until) {
+		window = loginSourceWindow{
+			loginWindow: loginWindow{until: now.Add(rateDuration)}, accounts: make(map[string]int),
+		}
+	}
+	if window.count >= 60 || window.accounts[username] >= 12 {
+		return false
+	}
+	window.count++
+	window.accounts[username]++
+	s.loginRates[source] = window
+	return true
 }
 
 // limitRegistration 限制匿名入口访问频率，避免影响正常登录的独立额度。
 // 参数 remote 为连接来源，operation 为注册操作，threshold 为短时请求阈值。
 // 返回值 本次匿名请求可继续时为真。
 func (s *Service) limitRegistration(remote, operation string, threshold int) bool {
-	return s.allowAttempts(s.registrationRates, attemptLimit{operation + ":" + peerIP(remote), threshold})
+	key, now := operation+":"+peerIP(remote), time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for source, window := range s.registrationRates {
+		if !now.Before(window.until) {
+			delete(s.registrationRates, source)
+		}
+	}
+	window, exists := s.registrationRates[key]
+	if window.count >= threshold || (!exists && len(s.registrationRates) >= maxRateSources) {
+		return false
+	}
+	if !exists {
+		window.until = now.Add(rateDuration)
+	}
+	window.count++
+	s.registrationRates[key] = window
+	return true
 }
 
 // peerIP 获取 TCP 来源地址，避免以可伪造的请求头作限流依据。
@@ -159,40 +222,27 @@ func peerIP(remote string) string {
 	return ip
 }
 
-type attemptLimit struct {
-	key       string
-	threshold int
-}
-
-// allowAttempts 在五分钟窗口内原子检查并扣减每个来源的频率额度。
-// 参数 rates 为对应入口的计数表，limits 为本次请求共同适用的限额。
-// 返回值 所有限额可扣减时为真。
-func (s *Service) allowAttempts(rates map[string]loginWindow, limits ...attemptLimit) bool {
-	now := time.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for key, item := range rates {
-		if !now.Before(item.until) {
-			delete(rates, key)
-		}
+// authSource 为限流提取可信客户端地址。
+// 参数 r 为身份入口请求，可信反代必须覆盖 X-Real-IP。
+// 返回值 受信的代理来源地址，或实际 TCP 连接地址。
+func (s *Service) authSource(r *http.Request) string {
+	direct := peerIP(r.RemoteAddr)
+	if !s.options.TrustedProxy.IsValid() {
+		return direct
 	}
-	if len(rates) > 4096-len(limits) {
-		return false
+	peer, err := netip.ParseAddr(direct)
+	if err != nil || peer.Unmap() != s.options.TrustedProxy.Unmap() {
+		return direct
 	}
-	for _, limit := range limits {
-		if rates[limit.key].count >= limit.threshold {
-			return false
-		}
+	values := r.Header.Values("X-Real-IP")
+	if len(values) != 1 {
+		return direct
 	}
-	for _, limit := range limits {
-		item := rates[limit.key]
-		if item.count == 0 {
-			item.until = now.Add(5 * time.Minute)
-		}
-		item.count++
-		rates[limit.key] = item
+	client, err := netip.ParseAddr(values[0])
+	if err != nil || client.Zone() != "" || client.IsUnspecified() {
+		return direct
 	}
-	return true
+	return client.Unmap().String()
 }
 
 // record 将身份认证和权限拒绝写入独立安全审计表。

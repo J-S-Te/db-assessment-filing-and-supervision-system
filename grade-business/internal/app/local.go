@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 
 	"grade-business/internal/httpx"
@@ -38,7 +39,7 @@ func LocalBoundary(address string, lan netip.Prefix, next http.Handler) http.Han
 				return
 			}
 		}
-		if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host {
+		if origin := r.Header.Get("Origin"); origin != "" && !sameOrigin(origin, r.Host) {
 			httpx.Error(w, 403, "invalid_origin", "请求来源与业务页面不一致")
 			return
 		}
@@ -49,6 +50,17 @@ func LocalBoundary(address string, lan netip.Prefix, next http.Handler) http.Han
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// sameOrigin 判断浏览器来源是否指向本业务主机，同时兼容 HTTP 内网与 HTTPS 部署。
+// 参数 origin 为请求的 Origin 头，host 为当前请求的 Host 头。
+// 返回值 来源主机端口与本机一致且方案为 http 或 https 时为真。
+func sameOrigin(origin, host string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" || parsed.Host != host {
+		return false
+	}
+	return parsed.Scheme == "http" || parsed.Scheme == "https"
 }
 
 // Frontend 提供应用页面与缓存友好的构建资源。

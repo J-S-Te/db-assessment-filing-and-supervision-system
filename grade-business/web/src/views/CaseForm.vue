@@ -30,8 +30,14 @@ const blank = {
 }
 const fields = reactive({ ...blank })
 const awaitingNumber = ref(false)
-const requireNumber = computed(() => props.kind !== 'filings'
-  || (!props.operator && !awaitingNumber.value))
+const provisionalNumber = ref(false)
+const showNumber = computed(() => props.kind !== 'filings'
+  || (!props.operator && (props.institutional || provisionalNumber.value || !awaitingNumber.value)))
+const lockedNumber = computed(() => props.kind === 'filings'
+  && props.institutional && Boolean(id.value) && !provisionalNumber.value)
+const optionalNumber = computed(() => props.kind === 'filings' && !lockedNumber.value
+  && (props.institutional || provisionalNumber.value))
+const requireNumber = computed(() => showNumber.value && !optionalNumber.value && !lockedNumber.value)
 const version = ref<number>()
 const classificationInitial = ref<ClassificationAssessment>()
 const classificationInput = ref<ClassificationInput>()
@@ -72,6 +78,7 @@ async function load() {
   classificationInput.value = undefined
   Object.assign(fields, blank)
   awaitingNumber.value = false
+  provisionalNumber.value = false
   institutionPicker.value = false
   unitPicker.value = false
   savedPersonName.value = ''
@@ -119,6 +126,7 @@ function populate(result: CaseDetail) {
   }
   fields.number = result.number
   awaitingNumber.value = !result.number
+  provisionalNumber.value = result.filingNumberProvisional === true
   fields.systemName = result.systemName
   fields.organizationName = result.organizationName
   fields.assessmentOrg = result.assessmentOrg
@@ -189,7 +197,7 @@ async function save() {
     return
   }
   const body = {
-    ...(requireNumber.value ? { number: fields.number.trim() } : {}),
+    ...(showNumber.value ? { number: fields.number.trim() } : {}),
     ...(!props.institutional ? { assessmentOrg: fields.assessmentOrg.trim() } : {}),
     ...(kind === 'filings'
       ? { systemName: fields.systemName.trim(), level: fields.level,
@@ -241,9 +249,10 @@ onBeforeUnmount(() => {
         <form @submit.prevent="save">
           <h2>基本信息</h2>
           <fieldset class="form-grid" :disabled="saving">
-            <label v-if="requireNumber" class="field">
-              <span>{{ label.number }}</span>
-              <input v-model="fields.number" required maxlength="80" :placeholder="'请输入' + label.number">
+            <label v-if="showNumber" class="field">
+              <span>{{ optionalNumber ? '预填备案编号（选填）' : label.number }}</span>
+              <input v-model="fields.number" :required="requireNumber" :readonly="lockedNumber"
+                maxlength="80" :placeholder="optionalNumber ? '终审通过后生效' : '请输入' + label.number">
             </label>
             <div v-if="!institutional" class="field directory-field">
               <DirectoryPicker v-if="institutionPicker" v-model="fields.assessmentOrg" kind="institution"

@@ -77,7 +77,7 @@ func consumeInstitution(query url.Values) (string, error) {
 	return institution, nil
 }
 
-// institutionCreate 由当前机构建立备案或测评草稿，归属只来自 URL。
+// institutionCreate 用途为创建本机构的备案或测评草稿，备案可选填预填编号。
 // 参数 w 和 r 为响应及草稿请求，institution 为当前机构。
 // 返回值 无，成功返回持久化的草稿标识及版本。
 func (h endpoint) institutionCreate(w http.ResponseWriter, r *http.Request, institution string) {
@@ -89,10 +89,10 @@ func (h endpoint) institutionCreate(w http.ResponseWriter, r *http.Request, inst
 			respondError(w, ErrInvalid)
 			return
 		}
-		fields, err = filingFields(filingInput{
+		fields, err = parseFilingFields(filingInput{
 			Number: input.Number, SystemName: input.SystemName, OrganizationName: input.OrganizationName,
 			AssessmentOrg: institution, Level: input.Level, Classification: input.Classification,
-		})
+		}, false)
 	} else {
 		var input institutionReportInput
 		if httpx.Decode(w, r, &input) != nil {

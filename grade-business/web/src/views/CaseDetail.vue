@@ -63,7 +63,9 @@ let historyRequest: AbortController | undefined
 let reportRefresh: ReturnType<typeof setInterval> | undefined
 const decisionText = computed(() => record.value?.status === 'pending_final' ? '终审通过' : '初审通过')
 const assignsFilingNumber = computed(() => props.kind === 'filings' && command.value === 'approve'
-  && record.value?.status === 'pending_final' && !record.value.number)
+  && record.value?.status === 'pending_final' && (!record.value.number || record.value.filingNumberProvisional))
+const numberLabel = computed(() => record.value?.filingNumberProvisional ? '预填备案编号' : label.value.number)
+const numberPlaceholder = computed(() => record.value?.filingNumberProvisional ? '未填写' : '待分配')
 const returnedCase = computed(() => record.value?.status === 'returned')
 const submitText = computed(() => returnedCase.value ? '重新提交' : '提交审核')
 const returnReason = computed(() => returnedCase.value
@@ -177,7 +179,7 @@ function confirm(value: ReviewAction | 'submit') {
   if (changing.value || loading.value || !record.value?.allowedActions.includes(value)) return
   command.value = value
   comment.value = ''
-  assignedFilingNumber.value = ''
+  assignedFilingNumber.value = assignsFilingNumber.value ? record.value.number : ''
   actionError.value = ''
   stale.value = false
   dialog.value?.showModal()
@@ -292,7 +294,7 @@ onBeforeUnmount(() => {
               <span v-if="record.cancelledAt" class="level-tag">已注销</span>
               <StatusBadge v-else :status="record.status" :label="filingReviewLabel(record.status, record.initialReviewAudience)" />
             </div>
-            <p>{{ label.number }} <span class="code">{{ record.number || "待分配" }}</span></p>
+            <p>{{ numberLabel }} <span class="code">{{ record.number || numberPlaceholder }}</span></p>
           </div>
           <div v-if="canEditCase || canReviewCase" class="page-actions">
             <template v-if="canEditCase">
@@ -359,7 +361,7 @@ onBeforeUnmount(() => {
               aria-labelledby="overview-title">
               <header class="panel-heading panel-compact"><h2 id="overview-title">基本信息</h2></header>
               <dl class="facts">
-                <div><dt>{{ label.number }}</dt><dd class="code">{{ record.number || "待分配" }}</dd></div>
+                <div><dt>{{ numberLabel }}</dt><dd class="code">{{ record.number || numberPlaceholder }}</dd></div>
                 <div><dt>所属单位</dt><dd>{{ record.directorySnapshot?.unit?.name || record.organizationName }}</dd></div>
                 <div><dt>测评机构</dt><dd>{{ record.directorySnapshot?.institution?.name || record.assessmentOrg }}</dd></div>
                 <template v-if="kind === 'filings'">
@@ -466,6 +468,7 @@ onBeforeUnmount(() => {
         <label v-if="assignsFilingNumber" class="field">
           <span>正式备案编号</span>
           <input v-model="assignedFilingNumber" maxlength="80" required :disabled="changing">
+          <small class="muted" v-if="record?.filingNumberProvisional">可确认预填编号或另填，终审通过后生效。</small>
         </label>
         <p v-if="actionError" class="form-message error-message" role="alert">{{ actionError }}</p>
         <div class="form-actions">

@@ -96,6 +96,7 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	hit(org, "POST", "/api/v1/institution/filings/"+own+"/review-actions", map[string]string{}, 403)
 	hit(unit, "GET", "/api/v1/operator/filings/"+own, nil, 200)
 	hit(unit, "GET", "/api/v1/operator/filings/"+other, nil, 404)
+	assertInstitutionDraftScope(t, db, hit, org, unit)
 	hit(unit, "GET", "/api/v1/operator/filings?organization=其他单位", nil, 403)
 	hit(unit, "GET", "/api/v1/dashboard/statistics", nil, 403)
 	for _, actor := range []*http.Cookie{area, org, unit} {
@@ -201,6 +202,7 @@ func checkFilingNumberReview(t *testing.T, hit requestAccess, path, id string, v
 	t.Helper()
 	decision := map[string]any{"decision": "approve", "expectedVersion": version, "filingNumber": "BA-ACCESS-001"}
 	hit(operator, "POST", path, decision, 403)
+	verifyNoInstitutionReviewAction(t, hit(institution, "GET", "/api/v1/institution/filings/"+id, nil, 200))
 	hit(institution, "POST", "/api/v1/institution/filings/"+id+"/review-actions", decision, 403)
 	hit(regulator, "POST", path, decision, 400)
 	delete(decision, "filingNumber")
@@ -219,6 +221,66 @@ func checkFilingNumberReview(t *testing.T, hit requestAccess, path, id string, v
 		detail.Status != "approved" {
 		t.Fatalf("运营者详情未同步最终编号和审批状态: %s", body)
 	}
+}
+
+// verifyNoInstitutionReviewAction 核对机构详情不会声明管理端专属操作。
+// 参数 t、response 为测试上下文及已认证机构的详情响应。
+// 返回值 无。
+func verifyNoInstitutionReviewAction(t *testing.T, response *httptest.ResponseRecorder) {
+	t.Helper()
+	var detail struct{ AllowedActions []string }
+	if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil || len(detail.AllowedActions) != 0 {
+		t.Fatalf("机构待初审详情返回了不可执行的动作：%v, %v", detail.AllowedActions, err)
+	}
+}
+
+// assertInstitutionDraftScope 核对机构未核实代报草稿的归属与运营者正常权限。
+// 参数 t、db、hit 为测试入口与隔离库，institution 和 operator 为已认证的两类业务会话。
+// 返回值 无。
+func assertInstitutionDraftScope(t *testing.T, db *pgxpool.Pool, hit requestAccess, institution, operator *http.Cookie) {
+	t.Helper()
+	const collection = "/api/v1/institution/filings"
+	form := map[string]any{
+		"number": "ACCESS-INSTITUTION-DRAFT", "systemName": "未核实草稿",
+		"organizationName": "权限单位甲", "level": "2",
+	}
+	var draft struct{ ID string }
+	body := hit(institution, "POST", collection, form, 201).Body.Bytes()
+	if err := json.Unmarshal(body, &draft); err != nil || draft.ID == "" {
+		t.Fatalf("无法读取机构草稿：%v", err)
+	}
+	hit(institution, "GET", collection+"/"+draft.ID, nil, 200)
+	const operatorCollection = "/api/v1/operator/filings"
+	if listing := hit(operator, "GET", operatorCollection, nil, 200).Body.String(); strings.Contains(listing, draft.ID) {
+		t.Fatal("运营者看到了未核实归属的机构代报草稿")
+	}
+	path := operatorCollection + "/" + draft.ID
+	for _, suffix := range []string{"", "/attachments", "/review-history", "/receipt"} {
+		hit(operator, "GET", path+suffix, nil, 404)
+	}
+	hit(operator, "POST", path+"/submit", map[string]int{"expectedVersion": 1}, 404)
+	assertLegacyDraftNoticeScope(t, db, hit, operator, draft.ID)
+}
+
+// assertLegacyDraftNoticeScope 验证旧版本投递的无可信归属意见不会进入运营者收件箱。
+// 参数 t、db、hit 为隔离环境，operator、filingID 为运营者会话和无归属备案。
+// 返回值 无。
+func assertLegacyDraftNoticeScope(t *testing.T, db *pgxpool.Pool, hit requestAccess,
+	operator *http.Cookie, filingID string,
+) {
+	t.Helper()
+	var notice string
+	if err := db.QueryRow(t.Context(), `INSERT INTO review_notices
+		(audience,resource,resource_id,event_version,state,recipient,reference,subject,comment)
+		VALUES('operator','filings',$1,1,'returned','权限单位甲','测试引用','未核实草稿','测试意见')
+		RETURNING id::text`, filingID).Scan(&notice); err != nil {
+		t.Fatal(err)
+	}
+	const inbox = "/api/v1/operator/feedback"
+	if listing := hit(operator, "GET", inbox, nil, 200).Body.String(); strings.Contains(listing, notice) {
+		t.Fatal("运营者收到了未核实归属的历史退回意见")
+	}
+	hit(operator, "POST", inbox+"/"+notice+"/acknowledge", nil, 404)
 }
 
 // uploadWorkflowMaterial 通过运营者会话上传首报所需的合成 PDF。

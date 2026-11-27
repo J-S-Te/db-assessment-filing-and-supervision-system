@@ -55,7 +55,7 @@ type issueRecipient struct {
 
 const issueRecipientColumns = "id::text,institution,organization_name,reference,system_name"
 
-const materialIssueListSQL = `
+var materialIssueListSQL = `
 	SELECT i.id::text,
 	       CASE WHEN $1<>'operator' THEN i.case_id::text ELSE '' END,
 	       i.case_kind,i.reference,i.system_name,
@@ -74,7 +74,8 @@ const materialIssueListSQL = `
 	       i.sequence
 	FROM material_issues i JOIN business_cases c ON c.id=i.case_id
 	WHERE ($1='regulator' OR ($1='institution' AND i.institution=$2)
-	    OR ($1='operator' AND i.organization_name=$2))
+	    OR ($1='operator' AND i.organization_name=$2 AND
+	        (i.case_kind<>'filing' OR` + operatorFilingBinding("$7") + `)))
 	  AND ($3='all' OR ($3='open' AND i.closed_at IS NULL) OR ($3='closed' AND i.closed_at IS NOT NULL))
 	  AND ($4='' OR i.case_kind=$4) AND ($5::uuid IS NULL OR i.id=$5)
 	  AND ($6::bigint=0 OR i.sequence<$6)
@@ -86,7 +87,7 @@ const materialIssueListSQL = `
 // 返回值 一页精简的异常记录或数据库错误。
 func (s *Service) listMaterialIssues(ctx context.Context, filter materialIssueFilter) (materialIssuePage, error) {
 	rows, err := s.db.Query(ctx, materialIssueListSQL, filter.audience, filter.name, filter.status,
-		filter.caseKind, filter.id, filter.before)
+		filter.caseKind, filter.id, filter.before, operatorUnitID(ctx))
 	if err != nil {
 		return materialIssuePage{}, err
 	}
@@ -242,6 +243,15 @@ func deliverMaterialNotice(ctx context.Context, tx pgx.Tx, row issueRecipient, c
 	}
 	message.Audience, message.Recipient, message.Comment = "institution", row.Institution, reason
 	if err := reviewinbox.Deliver(ctx, tx, message); err != nil {
+		return err
+	}
+	var unverified bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM material_issues i JOIN business_cases c ON c.id=i.case_id
+		WHERE i.id=$1 AND i.case_kind='filing' AND NOT c.operator_origin
+		  AND c.directory_unit_id IS NULL AND c.status NOT IN ('approved','withdrawn'))`, row.ID).
+		Scan(&unverified)
+	if err != nil || unverified {
 		return err
 	}
 	message.Audience, message.Recipient = "operator", row.Organization

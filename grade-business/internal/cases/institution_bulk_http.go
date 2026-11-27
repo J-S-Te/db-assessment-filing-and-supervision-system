@@ -22,7 +22,7 @@ func (s *Service) registerInstitutionBulk(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/institution/reports/export", s.downloadInstitutionReports)
 }
 
-// institutionCopyHTTP 从当前机构范围读取并复制单条备案记录。
+// institutionCopyHTTP 用途为从当前机构范围复制备案记录，支持可选预填编号。
 // 参数 w、r 为响应及请求，scope 是已经校验的机构名。
 // 返回值 无，成功时返回草稿摘要。
 func (s *Service) institutionCopyHTTP(w http.ResponseWriter, r *http.Request, scope string) {
@@ -32,13 +32,16 @@ func (s *Service) institutionCopyHTTP(w http.ResponseWriter, r *http.Request, sc
 		respondError(w, ErrNotFound)
 		return
 	}
-	if httpx.Decode(w, r, &input) != nil || !validID(input.RequestID) || input.ExpectedVersion < 1 ||
-		!validText(strings.TrimSpace(input.Number), 80) {
+	if httpx.Decode(w, r, &input) != nil || !validID(input.RequestID) || input.ExpectedVersion < 1 {
 		respondError(w, ErrInvalid)
 		return
 	}
 	input.RequestID = strings.ToLower(input.RequestID)
 	input.Number = strings.TrimSpace(input.Number)
+	if input.Number != "" && !validText(input.Number, 80) {
+		respondError(w, ErrInvalid)
+		return
+	}
 	payload := struct {
 		SourceID string
 		filingCopyInput

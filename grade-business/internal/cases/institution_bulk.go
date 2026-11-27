@@ -58,9 +58,9 @@ func (input *filingBatchInput) valid() bool {
 	return true
 }
 
-// copyInstitutionFiling 从本机构有效记录读取可复制的表单值，新建无材料及审核历史的独立草稿。
-// 参数 ctx、tx 为受控事务，scope、id 为机构及源记录，input 为新编号及源版本。
-// 返回值 草稿标识与版本，或归属、版本及编号冲突。
+// copyInstitutionFiling 用途为从本机构有效记录复制表单，创建带可选预填编号的独立草稿。
+// 参数 ctx、tx 为受控事务，scope、id 为机构及源记录，input 为预填编号及源版本。
+// 返回值 草稿标识与版本，或归属、版本及输入错误。
 func copyInstitutionFiling(ctx context.Context, tx pgx.Tx, scope, id string, input filingCopyInput) (mutation, error) {
 	form := filingInput{Number: input.Number, AssessmentOrg: scope}
 	var version int64
@@ -77,7 +77,7 @@ func copyInstitutionFiling(ctx context.Context, tx pgx.Tx, scope, id string, inp
 	if version != input.ExpectedVersion {
 		return mutation{}, ErrConflict
 	}
-	fields, err := filingFields(form)
+	fields, err := parseFilingFields(form, false)
 	if err != nil {
 		return mutation{}, err
 	}

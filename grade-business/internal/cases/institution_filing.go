@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 )
 
@@ -39,7 +40,8 @@ func (h endpoint) institutionFilingDetail(w http.ResponseWriter, r *http.Request
 	item, err := h.service.detailInScope(r.Context(), filing, r.PathValue("id"), institution)
 	item.AllowedActions = institutionEditActions(item.Status)
 	if item.InitialReviewAudience != "" {
-		item.AllowedActions = initialReviewActions(item.Status, true)
+		_, authenticated := access.Current(r.Context())
+		item.AllowedActions = initialReviewActions(item.Status, !authenticated)
 	}
 	if item.withdrawalPending {
 		item.AllowedActions = []string{}
@@ -57,7 +59,7 @@ func institutionEditActions(status string) []string {
 	return []string{}
 }
 
-// institutionFilingUpdate 保存本机构草稿或补正备案，并兼容旧客户端回传同名机构。
+// institutionFilingUpdate 用途为编辑本机构草稿或补正备案，允许修改或清空预填编号。
 // 参数 w、r 为响应和编辑请求，institution 为接收范围。
 // 返回值 无。
 func (h endpoint) institutionFilingUpdate(w http.ResponseWriter, r *http.Request, institution string) {
@@ -72,7 +74,7 @@ func (h endpoint) institutionFilingUpdate(w http.ResponseWriter, r *http.Request
 	if input.AssessmentOrg == "" {
 		input.AssessmentOrg = institution
 	}
-	fields, err := filingFields(input.filingInput)
+	fields, err := parseFilingFields(input.filingInput, false)
 	if err != nil {
 		respondError(w, err)
 		return
@@ -145,7 +147,8 @@ func publishFilingReview(ctx context.Context, tx pgx.Tx, id string, version int6
 		) target(audience,recipient)
 		WHERE c.kind='filing' AND c.id=$1
 		  AND ((e.to_status IN ('returned','approved') AND (target.audience='institution'
-		            OR ($2<>0 AND length(target.recipient) BETWEEN 1 AND 200)))
+		            OR ($2<>0 AND length(target.recipient) BETWEEN 1 AND 200
+		                AND (e.to_status='approved' OR c.operator_origin OR c.directory_unit_id IS NOT NULL))))
 		    OR (c.operator_origin AND target.audience='institution' AND e.to_status='pending_initial'
 		            AND e.operator_role IS NULL)
 		    OR (c.operator_origin AND target.audience='operator' AND e.to_status='pending_final'

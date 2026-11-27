@@ -30,6 +30,7 @@ type stateRow struct {
 	assessmentOrg      string
 	submissionProfile  string
 	operatorOrigin     bool
+	numberProvisional  bool
 	assessmentPersonID *string
 }
 
@@ -107,7 +108,7 @@ func (s *Service) create(ctx context.Context, kind string, fields saveFields, in
 	return result, tx.Commit(ctx)
 }
 
-// createCaseInTx 在既有事务内沿用新建草稿的名录与材料配置。
+// createCaseInTx 用途为保存草稿及名录快照，机构备案编号在终审前保持预填状态。
 // 参数 ctx、tx 为请求及写入事务，kind、fields、institution 为业务类型、输入和机构范围。
 // 返回值 本事务保存的草稿或业务错误。
 func createCaseInTx(ctx context.Context, tx pgx.Tx, kind string, fields saveFields, institution string) (mutation, error) {
@@ -120,11 +121,11 @@ func createCaseInTx(ctx context.Context, tx pgx.Tx, kind string, fields saveFiel
 		INSERT INTO business_cases
 		  (kind,number,system_name,organization_name,assessment_org,level,filing_id,risk,
 		   submission_profile,operator_origin,directory_unit_id,directory_institution_id,
-		   directory_person_id,directory_snapshot,classification_assessment)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		   directory_person_id,directory_snapshot,classification_assessment,filing_number_provisional)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		RETURNING id::text,status,version`, kind, fields.number, fields.systemName, fields.organizationName,
 		fields.assessmentOrg, fields.level, fields.filingID, fields.risk, profile, operatorFilingScope(ctx) != "",
-		unitID, institutionID, personID, snapshot, fields.classification)
+		unitID, institutionID, personID, snapshot, fields.classification, kind == filing && institution != "")
 	return scanMutation(row)
 }
 
@@ -147,7 +148,7 @@ func lockReportFiling(ctx context.Context, tx pgx.Tx, id, institution string) er
 	return err
 }
 
-// update 保存尚可编辑的记录并检测版本变化。
+// update 用途为保存尚可编辑的记录并检测版本变化。
 // 参数 ctx 携带可选运营单位，kind、id、expected 和 fields 指定记录与编辑输入，institution 为机构范围。
 // 返回值 新版本或不存在、版本冲突、写入错误。
 func (s *Service) update(ctx context.Context, kind, id string, expected int64,
@@ -173,10 +174,9 @@ func (s *Service) update(ctx context.Context, kind, id string, expected int64,
 		return mutation{}, ErrConflict
 	}
 	if kind == filing {
-		if operatorFilingScope(ctx) != "" || (current.operatorOrigin && current.number == "") {
-			fields.number = current.number
-		} else if fields.number == "" {
-			return mutation{}, ErrInvalid
+		fields.number, err = filingNumberAfterEdit(ctx, current, fields.number, institution)
+		if err != nil {
+			return mutation{}, err
 		}
 	}
 	snapshot, err := prepareCaseUpdate(ctx, tx, kind, institution, current, &fields)
@@ -208,6 +208,24 @@ func (s *Service) update(ctx context.Context, kind, id string, expected int64,
 		}
 	}
 	return result, tx.Commit(ctx)
+}
+
+// filingNumberAfterEdit 用途为检查编辑时可变更的备案编号，保护已占用的历史编号。
+// 参数 ctx 为当前会话，current 为锁定记录，number 为表单编号，institution 为机构范围。
+// 返回值 应保存的编号或输入错误。
+func filingNumberAfterEdit(ctx context.Context, current stateRow, number, institution string) (string, error) {
+	switch {
+	case operatorFilingScope(ctx) != "" || (current.operatorOrigin && current.number == ""):
+		return current.number, nil
+	case current.numberProvisional:
+		return number, nil
+	case institution != "" && (number == "" || number == current.number):
+		return current.number, nil
+	case institution != "" || number == "":
+		return "", ErrInvalid
+	default:
+		return number, nil
+	}
 }
 
 // validateReportAssociation 锁定新选择的备案，并在新版报告的草稿阶段重新核对归属。
@@ -251,7 +269,7 @@ func lockRecord(ctx context.Context, tx pgx.Tx, kind, id string) (stateRow, erro
 	return lockInstitutionRecord(ctx, tx, kind, id, "")
 }
 
-// lockInstitutionRecord 在读取和锁定记录前应用机构和已有的运营单位范围。
+// lockInstitutionRecord 用途为按机构和运营单位范围锁定记录及编号状态。
 // 参数 ctx、tx 为请求及事务，kind、id、institution 为业务标识及可选机构。
 // 返回值 当前版本、状态及归属，或记录不可见和数据库错误。
 func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution string) (stateRow, error) {
@@ -260,14 +278,15 @@ func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution
 	}
 	var row stateRow
 	err := tx.QueryRow(ctx, `SELECT c.number,c.status,c.version,COALESCE(c.filing_id::text,''),
-		    c.assessment_org,c.submission_profile,c.operator_origin,c.directory_person_id::text`+
+		    c.assessment_org,c.submission_profile,c.operator_origin,c.directory_person_id::text,
+		    c.filing_number_provisional`+
 		recordJoin+`
 		WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
-		  AND ($3='' OR (c.kind='filing' AND c.organization_name=$3))
+		  AND ($3='' OR (c.kind='filing' AND c.organization_name=$3 AND`+operatorFilingBinding("$6")+`))
 		  AND ($4='' OR c.assessment_org=$4)`+caseDistrictScope("$5")+
-		` FOR UPDATE OF c`, kind, id, operatorFilingScope(ctx), institution, access.Districts(ctx)).
+		` FOR UPDATE OF c`, kind, id, operatorFilingScope(ctx), institution, access.Districts(ctx), operatorUnitID(ctx)).
 		Scan(&row.number, &row.status, &row.version, &row.filingID, &row.assessmentOrg, &row.submissionProfile,
-			&row.operatorOrigin, &row.assessmentPersonID)
+			&row.operatorOrigin, &row.assessmentPersonID, &row.numberProvisional)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -343,11 +362,12 @@ func (s *Service) changeStatusInTx(ctx context.Context, tx pgx.Tx, kind, id stri
 	return s.persistDecision(ctx, tx, kind, id, current, next, input.Decision, comment, operator)
 }
 
-// filingNumberAfterReview 只在无编号首报终审通过时接收管理端分配的编号。
+// filingNumberAfterReview 用途为在终审时确认预填编号或为无号首报分配正式编号。
 // 参数 kind、current、next 为记录类型、已有状态和目标状态，assigned 为管理端给出的正式编号。
 // 返回值 应保存的编号或输入错误。
 func filingNumberAfterReview(kind string, current stateRow, next, assigned string) (string, error) {
-	if kind != filing || !current.operatorOrigin || current.number != "" || next != approved {
+	needsNumber := current.numberProvisional || (current.operatorOrigin && current.number == "")
+	if kind != filing || next != approved || !needsNumber {
 		if assigned != "" {
 			return "", ErrInvalid
 		}
@@ -355,6 +375,9 @@ func filingNumberAfterReview(kind string, current stateRow, next, assigned strin
 	}
 
 	number := strings.TrimSpace(assigned)
+	if assigned == "" {
+		number = current.number
+	}
 	if number == "" {
 		return "", errFilingNumberRequired
 	}
@@ -408,7 +431,7 @@ func submissionReady(ctx context.Context, tx pgx.Tx, kind, id string, input revi
 	return ready, err
 }
 
-// persistDecision 同时持久化状态、审核记录及相应的测评或备案意见。
+// persistDecision 用途为在同一事务内保存状态、正式编号、审核留痕和相应意见。
 // 参数 ctx、tx、kind、id、current 为事务及锁定记录，next、action、comment、operator 描述操作。
 // 返回值 新状态与版本，或数据库执行错误。
 func (s *Service) persistDecision(ctx context.Context, tx pgx.Tx,
@@ -416,6 +439,7 @@ func (s *Service) persistDecision(ctx context.Context, tx pgx.Tx,
 ) (mutation, error) {
 	result, err := scanMutation(tx.QueryRow(ctx, `
 		UPDATE business_cases SET status=$2,version=version+1,number=$4,
+		    filing_number_provisional=filing_number_provisional AND $2<>'approved',
 		    submitted_at=CASE WHEN $3='submit' THEN clock_timestamp() ELSE submitted_at END
 		WHERE id=$1 RETURNING id::text,status,version`, id, next, action, current.number))
 	if err != nil {

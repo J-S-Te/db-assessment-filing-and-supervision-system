@@ -309,8 +309,15 @@ type contentResult struct {
 // 返回值 内容结论、回退或失败原因，以及无法更新任务状态时的错误。
 func (s *Service) checkContents(ctx context.Context, id string, revision int64,
 	materials []Material, progress filingaudit.BatchProgress,
-) (contentResult, error) {
-	result := contentResult{checks: []filingaudit.Result{}}
+) (result contentResult, resultErr error) {
+	defer func() {
+		if recover() != nil {
+			slog.Error("备案材料预审发生内部异常", "filingId", id, "revision", revision)
+			result = contentResult{checks: []filingaudit.Result{}, failure: "材料正文暂时无法检查，请重新发起预审。"}
+			resultErr = nil
+		}
+	}()
+	result = contentResult{checks: []filingaudit.Result{}}
 	if s.content == nil {
 		return result, nil
 	}
