@@ -33,14 +33,21 @@
 }
 
 .regulator-shell .v2-brand {
+  height: auto;
+  min-height: var(--topbar-h);
+  flex-shrink: 0;
+  padding-block: 10px;
   background: #1029405e;
   border-bottom-color: #6490aa5e;
   border-radius: 12px 12px 0 0;
 }
 
-.regulator-shell .v2-brand small { color: #9ab7ce; }
+.regulator-shell .v2-brand-title { line-height: 1.25; }
+.regulator-shell .v2-brand-title > span { display: block; }
+.regulator-shell .v2-brand-title small { margin-top: 4px; color: #9ab7ce; }
 
 .regulator-shell .v2-logo {
+  flex-shrink: 0;
   width: 33px;
   height: 33px;
   background: #112d46;
