@@ -10,16 +10,16 @@ const boundaries = `{"type":"FeatureCollection","features":[
   {"type":"Feature","properties":{"name":"测试二区"},"geometry":${multipolygon}}
 ]}`
 
-test('台州底图覆盖九个法定县级行政区并可生成地图标签', () => {
+test('衢州底图覆盖六个法定县级行政区并可生成地图标签', () => {
   const source = readFileSync(new URL('../assets/district-boundaries.geojson', import.meta.url), 'utf8')
-  const features = JSON.parse(source).features
+  const { features, metadata } = JSON.parse(source)
+  assert.equal(metadata.cityCode, '330800')
   assert.deepEqual(features.map(({ properties }) => [properties.code, properties.name]), [
-    ['331002', '椒江区'], ['331003', '黄岩区'], ['331004', '路桥区'],
-    ['331022', '三门县'], ['331023', '天台县'], ['331024', '仙居县'],
-    ['331081', '温岭市'], ['331082', '临海市'], ['331083', '玉环市'],
+    ['330802', '柯城区'], ['330803', '衢江区'], ['330822', '常山县'],
+    ['330824', '开化县'], ['330825', '龙游县'], ['330881', '江山市'],
   ])
   const paths = projectDistrictBoundaries(readDistrictBoundaries(source))
-  assert.equal(paths.length, 9)
+  assert.equal(paths.length, 6)
   for (const path of paths) {
     assert.match(path.path, /^M/)
     assert.equal(path.label.length, 2)

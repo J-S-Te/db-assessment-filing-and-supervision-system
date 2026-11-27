@@ -96,7 +96,7 @@ onMounted(() => { if (districtAsset) void showMap() })
           <p class="response-note">{{ summary ? '按未销项高风险隐患数着色' : '暂未取得区县风险统计' }}<template v-if="heatmap.unmatched.length">
             · {{ dashboardNumber(heatmap.unmatched.length) }} 个区县无匹配边界
           </template></p>
-          <p v-if="districtAsset" class="response-note">浙江省台州市 · 底图 CTAmap v2.0</p>
+          <p v-if="districtAsset" class="response-note">浙江省衢州市 · 底图 CTAmap v2.0</p>
         </template>
         <div v-else class="map-empty">
           <Map aria-hidden="true" />
