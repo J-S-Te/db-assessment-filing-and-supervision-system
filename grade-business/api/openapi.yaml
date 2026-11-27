@@ -51,7 +51,7 @@ paths:
               "$ref": "#/components/schemas/OperatorRegistrationInput"
       responses:
         '201':
-          description: 已受理，查询码仅随本次响应返回
+          description: 已受理并等待人工核验，查询码仅随本次响应返回
           content:
             application/json:
               schema:
@@ -68,7 +68,7 @@ paths:
     post:
       operationId: lookupOperatorRegistration
       security: []
-      summary: 凭私密查询码查看状态及驳回原因
+      summary: 凭私密查询码查看状态及统一处理提示
       requestBody:
         required: true
         content:
@@ -105,6 +105,10 @@ paths:
         in: query
         description: 按单位名称、信用代码或登录账号查询
         schema: {type: string, maxLength: 120}
+      - name: creditCode
+        in: query
+        description: 精确查询一个单位的独立申请。省略时待审队列按信用代码聚合。
+        schema: {type: string, minLength: 18, maxLength: 18}
       - name: cursor
         in: query
         schema: {type: string}
@@ -154,7 +158,7 @@ paths:
                 reason:
                   type: string
                   maxLength: 500
-                  description: 驳回时必填，将向持有查询码的申请人显示
+                  description: 驳回时必填，只在审核端展示
       responses:
         '200':
           description: 已保存的审核结果
@@ -9834,7 +9838,6 @@ paths:
               required:
               - requestId
               - expectedVersion
-              - number
               properties:
                 requestId:
                   type: string
@@ -9845,6 +9848,7 @@ paths:
                 number:
                   type: string
                   maxLength: 80
+                  description: 可预填编号，终审通过后占用正式编号。
   "/institution/filings/batch":
     post:
       operationId: batchInstitutionFilings
@@ -11818,6 +11822,7 @@ components:
           username: {type: string}
           areaCode: {type: string}
           district: {type: string}
+          pendingCount: {type: integer, minimum: 1, description: 待审分组内当前辖区可见的申请数量。}
           reviewer: {type: string}
           reviewerRole: {type: string, enum: [ROLE_SYS_ADMIN, ROLE_REGULATOR]}
           subjectId: {type: string, format: uuid}
@@ -13830,7 +13835,6 @@ components:
       type: object
       additionalProperties: false
       required:
-      - number
       - systemName
       - organizationName
       - level
@@ -13838,6 +13842,8 @@ components:
         classificationAssessment: {$ref: "#/components/schemas/ClassificationInput"}
         number:
           type: string
+          maxLength: 80
+          description: 可预填编号，终审通过后占用正式编号。
         systemName:
           type: string
         organizationName:
@@ -13854,7 +13860,6 @@ components:
       type: object
       additionalProperties: false
       required:
-      - number
       - systemName
       - organizationName
       - level
@@ -13863,6 +13868,8 @@ components:
         classificationAssessment: {$ref: "#/components/schemas/ClassificationInput"}
         number:
           type: string
+          maxLength: 80
+          description: 可修改或清空预填编号，已有正式编号由监管端维护。
         systemName:
           type: string
         organizationName:
@@ -17168,7 +17175,7 @@ components:
         filingNumber:
           type: string
           maxLength: 80
-          description: 管理端终审通过无编号的运营者首报时必填。
+          description: 终审可确认或替换预填编号。没有预填编号的待分配备案终审时必填。
         expectedVersion:
           type: integer
           format: int64
@@ -17345,6 +17352,7 @@ components:
       - version
       - allowedActions
       properties:
+        filingNumberProvisional: {type: boolean, description: 当前编号为预填且尚未占用正式编号。}
         classificationAssessment: {$ref: "#/components/schemas/ClassificationAssessment"}
         policyMaterials: {type: array, items: {$ref: "#/components/schemas/FilingMaterialRule"}}
         cancelledAt:
@@ -17437,7 +17445,7 @@ components:
         classificationAssessment: {$ref: "#/components/schemas/ClassificationInput"}
         number:
           type: string
-          description: 通常必填。运营者首报待分配编号时省略，正式编号随后在终审中分配。
+          description: 通常必填。预填编号可清空，运营者首报待分配编号时省略。
         systemName:
           type: string
         organizationName:
@@ -17517,6 +17525,7 @@ components:
       - version
       - allowedActions
       properties:
+        filingNumberProvisional: {type: boolean, description: 当前编号为预填且尚未占用正式编号。}
         classificationAssessment: {$ref: "#/components/schemas/ClassificationAssessment"}
         policyMaterials: {type: array, items: {$ref: "#/components/schemas/FilingMaterialRule"}}
         cancelledAt:

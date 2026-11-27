@@ -174,6 +174,12 @@ func TestInstitutionDiscardClosesMaterialIssue(t *testing.T) {
 	reviewinbox.Register(mux, service.db)
 	scope := firstSubmissionScope(bulkInstitution)
 	source := createBulkFixture(t, handler, scope, "BULK-DISCARD-MATERIAL")
+	if _, err := service.db.Exec(t.Context(), `WITH unit AS (
+		INSERT INTO directory_parties(kind,scope_name,name,code,district)
+		VALUES ('unit','批量测试单位','批量测试单位','91331002MA1000001R','椒江区') RETURNING id
+	) UPDATE business_cases SET directory_unit_id=unit.id FROM unit WHERE business_cases.id=$1`, source.ID); err != nil {
+		t.Fatal(err)
+	}
 	path := bulkEndpoint + "/" + source.ID
 	postMaterialAt(t, handler, path+"/attachments"+scope, "filing_form")
 	assertError(t, materialRecoveryUpload(handler, path+"/attachments"+scope,

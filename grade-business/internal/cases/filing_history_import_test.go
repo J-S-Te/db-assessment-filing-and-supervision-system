@@ -45,6 +45,7 @@ type historyImportTestResponse struct {
 func TestFilingHistoryImportWorkflow(t *testing.T) {
 	service, router := fixtureService(t)
 	createHistoryImportExisting(t, router)
+	createBulkFixture(t, router, firstSubmissionScope("联验机构"), "BA-IMP-001")
 	payload := historyImportTestZip(t, map[string]string{
 		"manifest.csv": "number,systemName,organizationName,assessmentOrg,level,filingForm,classificationReport\n" +
 			"BA-IMP-001,联验系统,联验单位,联验机构,2,a.pdf,b.pdf\n" +

@@ -451,9 +451,10 @@ function eventLabel(event: BusinessEvent) {
 function facts(item: BusinessRecord): Array<[string, string | undefined]> {
   const base: Array<[string, string]> = [['所属单位', item.detail.organizationName]]
   if (item.resource === 'filings') {
-    const { number, assessmentOrg, level, submittedAt } = item.detail
+    const { number, assessmentOrg, level, submittedAt, filingNumberProvisional } = item.detail
     const lastSubmission = submittedAt ?? history.value.find(event => event.action === 'submit')?.occurredAt
-    return [...base, ['备案编号', number || '待分配'], ['测评机构', assessmentOrg],
+    const numberLabel = filingNumberProvisional ? '预填备案编号' : '备案编号'
+    return [...base, [numberLabel, number || (filingNumberProvisional ? '未填写' : '待分配')], ['测评机构', assessmentOrg],
       ['定级', level ? levels[level] : undefined], ['提交时间', formatTime(lastSubmission)]]
   }
   if (item.resource === 'filing-applications') {

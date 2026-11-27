@@ -19,8 +19,11 @@ func TestBoundaries(t *testing.T) {
 		status             int
 	}{
 		{"127.0.0.1:18444", "http://127.0.0.1:18444", "same-origin", 204},
+		{"127.0.0.1:18444", "https://127.0.0.1:18444", "same-origin", 204},
 		{"127.0.0.1:18444", "", "", 204},
 		{"127.0.0.1:18444", "http://example.test", "cross-site", 403},
+		{"127.0.0.1:18444", "https://example.test", "cross-site", 403},
+		{"127.0.0.1:18444", "null", "", 403},
 		{"example.test:18444", "", "", 400},
 	} {
 		req := httptest.NewRequest("POST", "http://"+row.host+"/api/v1/filings", nil)

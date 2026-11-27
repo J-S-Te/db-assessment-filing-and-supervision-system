@@ -107,7 +107,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 401, "invalid_credentials", "账号、密码或账号状态无效。")
 		return
 	}
-	if !s.limitLogin(r.RemoteAddr, input.Username) {
+	if !s.limitLogin(s.authSource(r), input.Username) {
 		w.Header().Set("Retry-After", "300")
 		httpx.Error(w, 429, "login_throttled", "登录尝试过多，请五分钟后重试。")
 		return
@@ -148,7 +148,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r.Context(), actor, "logout", "session")
-	clearCookie(w, r)
+	s.clearCookie(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -163,7 +163,7 @@ func (s *Service) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor, _ := Current(r.Context())
-	if !s.limitLogin(r.RemoteAddr, actor.ID) {
+	if !s.limitLogin(s.authSource(r), actor.ID) {
 		httpx.Error(w, 429, "login_throttled", "口令校验次数过多，请五分钟后重试。")
 		return
 	}
@@ -178,14 +178,14 @@ func (s *Service) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r.Context(), actor, "password_changed", "password")
-	clearCookie(w, r)
+	s.clearCookie(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // clearCookie 让浏览器删除当前应用的会话 Cookie。
 // 参数 w、r 为响应及用于识别传输方式的请求。
 // 返回值 无。
-func clearCookie(w http.ResponseWriter, r *http.Request) {
+func (s *Service) clearCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1,
-		HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
+		HttpOnly: true, Secure: s.options.SecureCookies || r.TLS != nil, SameSite: http.SameSiteStrictMode})
 }

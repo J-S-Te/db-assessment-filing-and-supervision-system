@@ -29,7 +29,7 @@ type registrationTestResult struct {
 	SubjectID  string `json:"subjectId"`
 }
 
-// TestOperatorRegistrationOnIsolatedDB 验证申请、辖区审核、留痕和会话开通的真实接口。
+// TestOperatorRegistrationOnIsolatedDB 用途为验证申请、分组审核、留痕和会话开通的真实接口。
 // 参数 t 为隔离 PostgreSQL 及 HTTP 路由测试。
 // 返回值 无。
 func TestOperatorRegistrationOnIsolatedDB(t *testing.T) {
@@ -38,8 +38,8 @@ func TestOperatorRegistrationOnIsolatedDB(t *testing.T) {
 	first := registrationInput("自助注册单位甲", "91331002MA1000001R", "registration-first")
 	invalid := registrationInput("无效信用代码单位", "91331002MA1000001W", "bad-registration")
 	hit(nil, "POST", publicRegistrationPath, invalid, 400)
-	hit(nil, "POST", publicRegistrationPath,
-		registrationInput("域外单位", "91330102MA1000001J", "outside-registration"), 422)
+	outside := submitRegistration(t, hit,
+		registrationInput("域外单位", "91330102MA1000001J", "outside-registration"))
 	first["roleCode"] = "ROLE_SYS_ADMIN"
 	hit(nil, "POST", publicRegistrationPath, first, 400)
 	delete(first, "roleCode")
@@ -48,18 +48,23 @@ func TestOperatorRegistrationOnIsolatedDB(t *testing.T) {
 	hit(nil, "POST", "/api/v1/auth/login", credentials, 401)
 	hit(nil, "GET", registrationPath, nil, 401)
 	hit(org, "GET", registrationPath, nil, 403)
-	hit(nil, "POST", publicRegistrationPath, first, 409)
+	repeated := submitRegistration(t, hit, first)
+	if repeated.ID == submitted.ID || repeated.LookupCode == submitted.LookupCode {
+		t.Fatal("各次申请必须具有独立的查询回执")
+	}
 	hit(nil, "POST", publicRegistrationPath+"/status", map[string]string{"lookupCode": strings.Repeat("A", 43)}, 404)
 	query := map[string]string{"lookupCode": submitted.LookupCode}
 	readRegistration(t, hit(nil, "POST", publicRegistrationPath+"/status", query, 200), "pending")
 	other := registrationInput("自助注册单位乙", "91331003MA10000018", "registration-other")
 	otherResult := submitRegistration(t, hit, other)
-	visible := hit(regulator, "GET", registrationPath+"?status=pending", nil, 200).Body.String()
-	if !strings.Contains(visible, submitted.ID) || strings.Contains(visible, otherResult.ID) ||
-		strings.Contains(visible, "lookupCode") || strings.Contains(visible, "password") {
-		t.Fatal("审核清单返回了不适当的数据")
+	assertRegistrationQueue(t, hit, regulator, first["creditCode"], submitted, repeated)
+	foreign := hit(regulator, "GET", registrationPath+"?creditCode="+other["creditCode"], nil, 200)
+	if strings.Contains(foreign.Body.String(), otherResult.ID) {
+		t.Fatal("信用代码明细不应返回其他辖区的申请")
 	}
 	approve := map[string]any{"decision": "approve", "verified": true}
+	hit(admin, "POST", registrationPath+"/"+outside.ID+"/review-actions", approve, 422)
+	assertUnassignedRegistrationReview(t, db, hit, admin, regulator, outside)
 	hit(regulator, "POST", registrationPath+"/"+otherResult.ID+"/review-actions", approve, 404)
 	hit(org, "POST", registrationPath+"/"+submitted.ID+"/review-actions", approve, 403)
 	hit(regulator, "POST", registrationPath+"/"+submitted.ID+"/review-actions",
@@ -67,6 +72,7 @@ func TestOperatorRegistrationOnIsolatedDB(t *testing.T) {
 	approved := readRegistration(t, hit(regulator, "POST", registrationPath+"/"+submitted.ID+"/review-actions",
 		approve, 200), "approved")
 	hit(admin, "POST", registrationPath+"/"+submitted.ID+"/review-actions", approve, 409)
+	hit(admin, "POST", registrationPath+"/"+repeated.ID+"/review-actions", approve, 409)
 	readRegistration(t, hit(nil, "POST", publicRegistrationPath+"/status", query, 200), "approved")
 	cookie := hit(nil, "POST", "/api/v1/auth/login", credentials, 200).Result().Cookies()[0]
 	session := hit(cookie, "GET", "/api/v1/auth/session", nil, 200).Body.String()
@@ -77,9 +83,55 @@ func TestOperatorRegistrationOnIsolatedDB(t *testing.T) {
 	hit(cookie, "GET", "/api/v1/operator/filings", nil, 200)
 	hit(cookie, "GET", registrationPath, nil, 403)
 	assertRegistrationAudit(t, db, submitted.ID, approved.SubjectID)
-	t.Run("驳回后重提及当日限额", func(t *testing.T) {
+	t.Run("驳回后仍可重新受理", func(t *testing.T) {
 		assertRegistrationRejection(t, hit, admin, other, otherResult)
 	})
+}
+
+// assertRegistrationQueue 用途为验证待审申请按单位聚合，仍可查看同组独立申请。
+// 参数 t、hit 给出测试上下文和实际路由，regulator 为辖区会话，code、first、repeated 为测试申请。
+// 返回值 无。
+func assertRegistrationQueue(t *testing.T, hit requestAccess, regulator *http.Cookie,
+	code string, first, repeated registrationTestResult,
+) {
+	t.Helper()
+	var page struct {
+		Items []struct {
+			ID           string
+			PendingCount int64
+		}
+		NextCursor string
+	}
+	group := hit(regulator, "GET", registrationPath+"?status=pending&limit=1", nil, 200).Body.Bytes()
+	if err := json.Unmarshal(group, &page); err != nil || len(page.Items) != 1 ||
+		page.Items[0].ID != first.ID || page.Items[0].PendingCount != 2 || page.NextCursor != "" {
+		t.Fatalf("待审列表应仅返回本辖区的一个单位组：%s", group)
+	}
+	detail := hit(regulator, "GET", registrationPath+"?creditCode="+code, nil, 200).Body.String()
+	if !strings.Contains(detail, first.ID) || !strings.Contains(detail, repeated.ID) ||
+		strings.Contains(detail, "lookupCode") || strings.Contains(detail, "password") {
+		t.Fatalf("同组申请应可独立核对且不返回回执或密码字段：%s", detail)
+	}
+}
+
+// assertUnassignedRegistrationReview 验证管理员复核名录后可以办理原待核实申请。
+// 参数 t、db、hit 为隔离环境，admin、regulator 和 pending 为审核会话和申请回执。
+// 返回值 无。
+func assertUnassignedRegistrationReview(t *testing.T, db *pgxpool.Pool, hit requestAccess,
+	admin, regulator *http.Cookie, pending registrationTestResult,
+) {
+	t.Helper()
+	if _, err := db.Exec(t.Context(), `INSERT INTO directory_parties(kind,scope_name,name,code,district)
+		VALUES('unit','域外单位','域外单位','91330102MA1000001J','台州')`); err != nil {
+		t.Fatal(err)
+	}
+	path := registrationPath + "/" + pending.ID + "/review-actions"
+	approve := map[string]any{"decision": "approve", "verified": true}
+	hit(regulator, "POST", path, approve, 404)
+	result := readRegistration(t, hit(admin, "POST", path, approve, 200), "approved")
+	if result.AreaCode != "331000" {
+		t.Fatal("补齐名录后未原子记录经管理员核实的辖区")
+	}
 }
 
 // registrationFixture 以项目现有测试模式启动真实路由并准备三个审核权限样本。
@@ -167,7 +219,7 @@ func assertRegistrationAudit(t *testing.T, db *pgxpool.Pool, id, subject string)
 	}
 }
 
-// assertRegistrationRejection 确认可见的驳回理由及同一信用代码重提额度。
+// assertRegistrationRejection 核对审核端留痕、公开提示及重新受理。
 // 参数 t、hit、admin 为测试环境，input、submitted 为申请资料及首单回执。
 // 返回值 无。
 func assertRegistrationRejection(t *testing.T, hit requestAccess, admin *http.Cookie,
@@ -181,15 +233,15 @@ func assertRegistrationRejection(t *testing.T, hit requestAccess, admin *http.Co
 			map[string]string{"decision": "reject", "reason": "请核对管理员授权"}, 200), "rejected")
 		status := readRegistration(t, hit(nil, "POST", publicRegistrationPath+"/status",
 			map[string]string{"lookupCode": submitted.LookupCode}, 200), "rejected")
-		if result.Reason != "请核对管理员授权" || status.Reason != result.Reason {
-			t.Fatal("申请人未能查到持久化的驳回原因")
+		if result.Reason != "请核对管理员授权" || status.Reason == "" || status.Reason == result.Reason {
+			t.Fatal("审批原因应留存在审核端，公开查询应使用统一提示")
 		}
 		if i < 2 {
 			submitted = submitRegistration(t, hit, input)
 			review = registrationPath + "/" + submitted.ID + "/review-actions"
 		}
 	}
-	hit(nil, "POST", publicRegistrationPath, input, 429)
+	submitRegistration(t, hit, input)
 }
 
 // TestOperatorRegistrationExistingDirectoryOnIsolatedDB 验证存量单位归属及并发审批。
@@ -205,7 +257,7 @@ func TestOperatorRegistrationExistingDirectoryOnIsolatedDB(t *testing.T) {
 		VALUES('unit','原有业务范围',$1,$2,'椒江区') RETURNING id::text`, name, code).Scan(&unitID); err != nil {
 		t.Fatal(err)
 	}
-	hit(nil, "POST", publicRegistrationPath, registrationInput("名称不匹配", code, "wrong-name"), 409)
+	mismatched := submitRegistration(t, hit, registrationInput("名称不匹配", code, "wrong-name"))
 	result := submitRegistration(t, hit, registrationInput(name, code, "existing-registration"))
 	scoped := hit(regulator, "GET", registrationPath+"?q=存量单位&limit=1", nil, 200).Body.String()
 	if !strings.Contains(scoped, result.ID) || !strings.Contains(scoped, "331002") {
@@ -213,15 +265,25 @@ func TestOperatorRegistrationExistingDirectoryOnIsolatedDB(t *testing.T) {
 	}
 	changeRegistrationDistrict(t, db, unitID, "黄岩区")
 	approve := map[string]any{"decision": "approve", "verified": true}
+	hit(admin, "POST", registrationPath+"/"+mismatched.ID+"/review-actions", approve, 409)
 	path := registrationPath + "/" + result.ID + "/review-actions"
 	hit(regulator, "POST", path, approve, 409)
 	changeRegistrationDistrict(t, db, unitID, "椒江区")
-	assertConcurrentRegistrationReview(t, handler, regulator, admin, path, unitID)
-
-	duplicate := hit(nil, "POST", publicRegistrationPath, registrationInput(name, code, "duplicate-unit"), 409)
-	if !strings.Contains(duplicate.Body.String(), "registration_unit_has_account") {
-		t.Fatal("已有账号的单位未获得明确提示")
+	concurrent := submitRegistration(t, hit, registrationInput(name, code, "existing-registration-other"))
+	otherPath := registrationPath + "/" + concurrent.ID + "/review-actions"
+	assertConcurrentRegistrationReview(t, handler, regulator, admin, [2]string{path, otherPath}, unitID)
+	var accounts, events int
+	err := db.QueryRow(t.Context(), `SELECT
+		(SELECT count(*) FROM access_accounts WHERE subject_id=$1),
+		(SELECT count(*) FROM access_events
+		 WHERE event='operator_registration_approved' AND target IN ($2,$3))`,
+		unitID, result.ID, concurrent.ID).Scan(&accounts, &events)
+	if err != nil || accounts != 1 || events != 1 {
+		t.Fatalf("并发审批应只开通一个账号和一条事件，账号 %d、事件 %d：%v", accounts, events, err)
 	}
+
+	duplicate := submitRegistration(t, hit, registrationInput(name, code, "duplicate-unit"))
+	hit(admin, "POST", registrationPath+"/"+duplicate.ID+"/review-actions", approve, 409)
 }
 
 // changeRegistrationDistrict 模拟待审期间在名录中发生的辖区调整。
@@ -235,17 +297,17 @@ func changeRegistrationDistrict(t *testing.T, db *pgxpool.Pool, id, district str
 }
 
 // assertConcurrentRegistrationReview 同时尝试两次审批并核对只有一个结果能绑定原单位。
-// 参数 t、handler 为测试与真实路由，reviewers 为两个会话，path 和 unitID 为单据路径及预期主档。
+// 参数 t、handler 为测试与真实路由，regulator 和 admin 为两个会话，paths 和 unitID 为单据路径及预期主档。
 // 返回值 无。
 func assertConcurrentRegistrationReview(t *testing.T, handler http.Handler,
-	regulator, admin *http.Cookie, path, unitID string,
+	regulator, admin *http.Cookie, paths [2]string, unitID string,
 ) {
 	t.Helper()
 	start := make(chan struct{})
 	responses := make(chan *httptest.ResponseRecorder, 2)
-	for _, reviewer := range []*http.Cookie{regulator, admin} {
+	for index, reviewer := range []*http.Cookie{regulator, admin} {
 		go func() {
-			request := httptest.NewRequest("POST", "http://127.0.0.1:18549"+path,
+			request := httptest.NewRequest("POST", "http://127.0.0.1:18549"+paths[index],
 				bytes.NewBufferString(`{"decision":"approve","verified":true}`))
 			request.Header.Set("Content-Type", "application/json")
 			request.AddCookie(reviewer)
@@ -298,6 +360,7 @@ func TestOperatorRegistrationRollsBackOnAccountConflict(t *testing.T) {
 	}
 	readRegistration(t, hit(nil, "POST", publicRegistrationPath+"/status",
 		map[string]string{"lookupCode": result.LookupCode}, 200), "pending")
+	submitRegistration(t, hit, registrationInput(name, code, username))
 }
 
 // TestOperatorRegistrationQuzhouScopeOnIsolatedDB 验证恢复启用后的衢州市及区县审核范围。

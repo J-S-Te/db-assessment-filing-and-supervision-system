@@ -106,7 +106,7 @@ func TestAdminFilingUsesDirectoryDistrict(t *testing.T) {
 	assertAdminFilingDistrictReview(t, handler, hit, admin, city, county, other, institution)
 }
 
-// assertAdminFilingDistrictReview 比对市县可见范围并验证初审和终审。
+// assertAdminFilingDistrictReview 用途为核对市县可见范围、初终审及机构代报补齐归属。
 // 参数 t、handler、hit 提供测试路由，五个会话对应管理员、市级、区县、外市及机构。
 // 返回值 无。
 func assertAdminFilingDistrictReview(t *testing.T, handler http.Handler, hit requestAccess,
@@ -161,4 +161,35 @@ func assertAdminFilingDistrictReview(t *testing.T, handler http.Handler, hit req
 	form["organizationName"], form["expectedVersion"] = "另一个待核实单位", 2
 	hit(institution, "PATCH", "/api/v1/institution/filings/"+second.ID, form, 200)
 	hit(county, "GET", collection+"/"+second.ID, nil, 404)
+	assertUnboundInstitutionFilingHandoff(t, handler, hit, admin, county, other, institution)
+}
+
+// assertUnboundInstitutionFilingHandoff 用途为核对管理员补齐机构代报名录后的辖区分派。
+// 参数 t、handler、hit 提供隔离路由，admin、county、other、institution 为各角色会话。
+// 返回值 无。
+func assertUnboundInstitutionFilingHandoff(t *testing.T, handler http.Handler, hit requestAccess,
+	admin, county, other, institution *http.Cookie,
+) {
+	t.Helper()
+	form := map[string]any{"systemName": "机构代报测试系统", "organizationName": "待核实名录单位", "level": "2"}
+	const collection = "/api/v1/institution/filings"
+	response := hit(institution, "POST", collection, form, 201)
+	var result struct{ ID string }
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.ID == "" {
+		t.Fatal("未创建机构代报草稿")
+	}
+	scoped, management := collection+"/"+result.ID, "/api/v1/filings/"+result.ID
+	uploadWorkflowMaterial(t, handler, institution, scoped+"/attachments", "filing_form")
+	uploadWorkflowMaterial(t, handler, institution, scoped+"/attachments", "classification_report")
+	hit(institution, "POST", scoped+"/submit", map[string]int{"expectedVersion": 3}, 200)
+	hit(admin, "GET", management, nil, 200)
+	hit(county, "GET", management, nil, 404)
+	hit(admin, "POST", management+"/review-actions", map[string]any{
+		"decision": "return_for_correction", "comment": "请核对单位名录", "expectedVersion": 4,
+	}, 200)
+	form["organizationName"], form["assessmentOrg"], form["expectedVersion"] = "台州测试单位", "权限机构甲", 5
+	hit(admin, "PATCH", management, form, 200)
+	hit(institution, "POST", scoped+"/submit", map[string]int{"expectedVersion": 6}, 200)
+	hit(county, "GET", management, nil, 200)
+	hit(other, "GET", management, nil, 404)
 }

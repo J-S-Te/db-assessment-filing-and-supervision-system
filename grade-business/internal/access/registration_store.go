@@ -19,9 +19,9 @@ type registrationReceipt struct {
 	registrationResult
 }
 
-// submitRegistration 生成受理回执，并按信用代码串行检查同日提交和主体唯一性。
+// submitRegistration 登记待人工核实的资料并返回独立查询码。
 // 参数 ctx 为申请上下文，input 为已完成格式验证的注册资料。
-// 返回值 待审申请及私密查询码，或限额、重复及数据库错误。
+// 返回值 待审申请及私密查询码，或持久化错误。
 func (s *Service) submitRegistration(ctx context.Context, input registrationInput) (registrationReceipt, error) {
 	var result registrationReceipt
 	raw := make([]byte, 32)
@@ -38,15 +38,8 @@ func (s *Service) submitRegistration(ctx context.Context, input registrationInpu
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-		"operator-registration:"+input.CreditCode); err != nil {
-		return result, err
-	}
-	unit, area, err := registrationSubject(ctx, tx, input.UnitName, input.CreditCode)
+	unit, area, err := registrationRouting(ctx, tx, input.CreditCode)
 	if err != nil {
-		return result, err
-	}
-	if err := checkRegistrationSubmission(ctx, tx, input); err != nil {
 		return result, err
 	}
 	err = tx.QueryRow(ctx, `INSERT INTO operator_registrations
@@ -66,34 +59,37 @@ func (s *Service) submitRegistration(ctx context.Context, input registrationInpu
 	return result, tx.Commit(ctx)
 }
 
-// checkRegistrationSubmission 校验账号占用、现存申请及上海自然日内的提交额度。
-// 参数 ctx、tx 为已持有信用代码锁的申请事务，input 为规范化的资料。
-// 返回值 可继续登记时为空，否则为冲突、限额或数据库错误。
-func checkRegistrationSubmission(ctx context.Context, tx pgx.Tx, input registrationInput) error {
-	var usernameTaken, open bool
-	var today int
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM access_accounts WHERE username=$1),
-		COALESCE(bool_or(status IN ('pending','approved')),false),
-		count(*) FILTER (WHERE created_at>=date_trunc('day',statement_timestamp(),'Asia/Shanghai'))
-		FROM operator_registrations WHERE credit_code=$2`, input.Username, input.CreditCode).
-		Scan(&usernameTaken, &open, &today)
-	if err != nil {
-		return err
+// registrationRouting 为待审申请分派可信辖区，分派结果只对审核端可见。
+// 参数 ctx、tx 为申请事务，code 为通过格式校验的信用代码。
+// 返回值 当时的单位标识、有效辖区（无法确定时为空）和读取错误。
+func registrationRouting(ctx context.Context, tx pgx.Tx, code string) (string, string, error) {
+	var id, district string
+	err := tx.QueryRow(ctx, `SELECT id::text,district FROM directory_parties
+		WHERE kind='unit' AND lower(code)=lower($1)`, code).Scan(&id, &district)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", registrationDistrict(code[2:8]), nil
 	}
-	switch {
-	case open:
-		return errRegistrationPending
-	case usernameTaken:
-		return errRegistrationUsername
-	case today >= 3:
-		return errRegistrationDaily
-	default:
-		return nil
+	return id, registrationDistrict(district), err
+}
+
+// registrationDistrict 将受支持的辖区名称或编码转换为标准审核范围。
+// 参数 district 为名录辖区或信用代码中的登记区划。
+// 返回值 可分派的标准编码，无法确认时为空。
+func registrationDistrict(district string) string {
+	district = strings.TrimSpace(district)
+	if district == "台州" {
+		return "331000"
 	}
+	for area, label := range districtNames {
+		if district == area || district == label {
+			return area
+		}
+	}
+	return ""
 }
 
 // registrationSubject 以信用代码确定可绑定的有效主档及可信辖区，并锁定命中的名录。
-// 参数 ctx、tx 为申请或审批事务，name 和 code 为申请时的单位身份。
+// 参数 ctx、tx 为审批事务，name 和 code 为申请时的单位身份。
 // 返回值 现有单位标识或空值、标准辖区码，以及名录冲突或数据库错误。
 func registrationSubject(ctx context.Context, tx pgx.Tx, name, code string) (string, string, error) {
 	var id, currentName, district string
@@ -118,25 +114,35 @@ func registrationSubject(ctx context.Context, tx pgx.Tx, name, code string) (str
 	if !usable || currentName != name {
 		return "", "", errRegistrationUnit
 	}
-	district = strings.TrimSpace(district)
-	for area, label := range districtNames {
-		if district == area || district == label {
-			return id, area, nil
-		}
+	if area := registrationDistrict(district); area != "" {
+		return id, area, nil
 	}
 	return "", "", errRegistrationArea
 }
 
-// listRegistrations 仅查询当前监管范围内的单据，按受理序号倒序翻页。
-// 参数 ctx 含已认证的审核身份，filter 为状态、检索和分页条件。
-// 返回值 一页范围内的申请、下一页游标或数据库错误。
+// listRegistrations 用途为分页读取辖区内的申请并按信用代码归并待审队列。
+// 参数 ctx 含已认证的审核身份，filter 为状态、检索、信用代码和分页条件。
+// 返回值 一页申请或待审分组、下一页游标或数据库错误。
 func (s *Service) listRegistrations(ctx context.Context, filter registrationFilter) ([]registrationItem, int64, error) {
-	rows, err := s.db.Query(ctx, `SELECT `+registrationColumns+` FROM operator_registrations
+	pageRows := `SELECT sequence,0::bigint AS pending_count FROM eligible WHERE matches_query`
+	if filter.status == "pending" && filter.creditCode == "" {
+		// 最早申请决定分组位置，重复提交不会将已有分组推回队首。
+		pageRows = `SELECT min(sequence) FILTER (WHERE matches_query) AS sequence, count(*) AS pending_count
+			FROM eligible GROUP BY credit_code HAVING bool_or(matches_query)`
+	}
+	query := `WITH eligible AS (
+		SELECT sequence,credit_code,($4='' OR strpos(lower(unit_name),lower($4))>0
+		       OR strpos(lower(credit_code),lower($4))>0 OR strpos(username,lower($4))>0) AS matches_query
+		FROM operator_registrations
 		WHERE status=$1 AND ($2::text[] IS NULL OR area_code=ANY($2))
-		  AND ($3::bigint=0 OR sequence<$3)
-		  AND ($4='' OR strpos(lower(unit_name),lower($4))>0
-		       OR strpos(lower(credit_code),lower($4))>0 OR strpos(username,lower($4))>0)
-		ORDER BY sequence DESC LIMIT $5`, filter.status, Districts(ctx), filter.cursor, filter.query, filter.limit+1)
+		  AND ($6='' OR credit_code=$6)
+	), candidates AS (` + pageRows + `)
+	SELECT ` + registrationColumns + `,pending_count FROM candidates
+	JOIN operator_registrations USING (sequence)
+	WHERE ($3::bigint=0 OR sequence<$3)
+	ORDER BY sequence DESC LIMIT $5`
+	rows, err := s.db.Query(ctx, query, filter.status, Districts(ctx), filter.cursor,
+		filter.query, filter.limit+1, filter.creditCode)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -158,7 +164,7 @@ func (s *Service) listRegistrations(ctx context.Context, filter registrationFilt
 	return items, 0, nil
 }
 
-// reviewRegistration 按可信辖区锁定待审单据，原子地办理决策、开通和留痕。
+// reviewRegistration 用途为按可信辖区锁定并办理单份申请，原子地开通及留痕。
 // 参数 ctx、actor 为审核会话，id 为单据标识，input 为已校验的审批决定。
 // 返回值 已保存的审核记录，或越域、重复办理和事务错误。
 func (s *Service) reviewRegistration(ctx context.Context, actor Principal, id string,
@@ -176,6 +182,9 @@ func (s *Service) reviewRegistration(ctx context.Context, actor Principal, id st
 	}
 	status, accountID, subjectID := "rejected", "", ""
 	if input.Decision == "approve" {
+		if pending.area == "" && actor.Role != SystemAdmin {
+			return result, errRegistrationArea
+		}
 		status = "approved"
 		accountID, subjectID, err = activateRegistration(ctx, tx, pending)
 		if err != nil {
@@ -186,7 +195,7 @@ func (s *Service) reviewRegistration(ctx context.Context, actor Principal, id st
 		SET status=$2, reviewed_at=clock_timestamp(), reviewer_id=$3, reviewer_role=$4,
 		    reviewer_name=$5, reason=$6, account_id=NULLIF($7,'')::uuid,
 		    subject_id=NULLIF($8,'')::uuid, password_salt=NULL, password_hash=NULL
-		WHERE id=$1 RETURNING `+registrationColumns, id, status, actor.ID, actor.Role,
+		WHERE id=$1 RETURNING `+registrationColumns+`,0::bigint`, id, status, actor.ID, actor.Role,
 		actor.Name, input.Reason, accountID, subjectID))
 	if err != nil {
 		return result, err
@@ -221,11 +230,16 @@ func lockRegistration(ctx context.Context, tx pgx.Tx, id string) (pendingRegistr
 // 参数 ctx、tx 为锁定后的审批事务，pending 为提交时的单位身份及辖区快照。
 // 返回值 运营账号与单位标识，或归属变更、账号冲突及数据库错误。
 func activateRegistration(ctx context.Context, tx pgx.Tx, pending pendingRegistration) (string, string, error) {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		"operator-registration:"+pending.code); err != nil {
+		return "", "", err
+	}
 	subjectID, area, err := registrationSubject(ctx, tx, pending.unitName, pending.code)
 	if err != nil {
 		return "", "", err
 	}
-	if area != pending.area || (pending.originalUnitID != "" && subjectID != pending.originalUnitID) {
+	if (pending.area != "" && area != pending.area) ||
+		(pending.originalUnitID != "" && subjectID != pending.originalUnitID) {
 		return "", "", errRegistrationUnit
 	}
 	if subjectID == "" {
@@ -239,6 +253,9 @@ func activateRegistration(ctx context.Context, tx pgx.Tx, pending pendingRegistr
 		(username,display_name,role_code,subject_id,password_salt,password_hash,must_change_password)
 		SELECT username,contact_name,'ROLE_OPERATOR',$2,password_salt,password_hash,false
 		FROM operator_registrations WHERE id=$1 RETURNING id::text`, pending.id, subjectID).Scan(&accountID)
+	if err == nil && pending.area == "" {
+		_, err = tx.Exec(ctx, "UPDATE operator_registrations SET area_code=$2 WHERE id=$1", pending.id, area)
+	}
 	return accountID, subjectID, err
 }
 

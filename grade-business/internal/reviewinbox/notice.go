@@ -81,9 +81,20 @@ type receipt struct {
 	AcknowledgedAt time.Time `json:"acknowledgedAt"`
 }
 
+// 仅凭机构自填单位名称投递的历史退回与材料异常意见不应向运营者展示。
+const trustedFilingNotice = `(n.audience<>'operator' OR (
+	    (n.resource<>'filings' OR n.state<>'returned'
+	      OR EXISTS (SELECT 1 FROM business_cases c WHERE c.id=n.resource_id AND c.kind='filing'
+	        AND (c.operator_origin OR c.directory_unit_id IS NOT NULL OR c.status IN ('approved','withdrawn'))))
+	    AND (n.resource<>'material-issues' OR NOT EXISTS (
+	      SELECT 1 FROM material_issues i JOIN business_cases c ON c.id=i.case_id
+	      WHERE i.id=n.resource_id AND i.case_kind='filing' AND NOT c.operator_origin
+	        AND c.directory_unit_id IS NULL AND c.status NOT IN ('approved','withdrawn')))))`
+
 const listSQL = `
 	WITH selected AS (
-	    SELECT * FROM review_notices WHERE audience=$1 AND recipient=$2
+	    SELECT * FROM review_notices n WHERE audience=$1 AND recipient=$2
+	      AND ` + trustedFilingNotice + `
 	      AND ($3::bigint=0 OR sequence<$3) ORDER BY sequence DESC LIMIT $4
 	)
 	SELECT n.id::text,n.resource,n.resource_id::text,n.reference,n.subject,n.state,n.comment,

@@ -88,7 +88,9 @@ func readWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
 	query := `SELECT c.status,c.version,c.organization_name,c.assessment_org,c.number,c.system_name,
 		c.operator_origin AND c.cancelled_at IS NULL FROM business_cases c
 		WHERE c.id=$1 AND c.kind='filing' AND c.discarded_at IS NULL
-		  AND ($2='' OR c.organization_name=$2) AND ($3='' OR c.assessment_org=$3)`
+		  AND ($2='' OR (c.organization_name=$2 AND` + operatorFilingBinding("$4") + `))
+		  AND ($3='' OR c.assessment_org=$3)`
+	args := []any{scope.id, scope.organization, scope.institution}
 	if scope.resource == withdrawalApplications {
 		query = `SELECT a.status,a.version,a.before_values->>'organizationName',
 			a.before_values->>'assessmentOrg',a.filing_number,a.before_values->>'systemName',
@@ -97,6 +99,8 @@ func readWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
 			FROM filing_applications a JOIN business_cases f ON f.id=a.filing_id
 			WHERE a.id=$1 AND ($2='' OR a.before_values->>'organizationName'=$2)
 			  AND ($3='' OR a.before_values->>'assessmentOrg'=$3)`
+	} else {
+		args = append(args, operatorUnitID(ctx))
 	}
 	if lock && scope.resource == withdrawalFilings {
 		query += " FOR UPDATE OF c"
@@ -104,7 +108,7 @@ func readWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
 	if lock && scope.resource == withdrawalApplications {
 		query += " FOR UPDATE OF a"
 	}
-	err := tx.QueryRow(ctx, query, scope.id, scope.organization, scope.institution).Scan(
+	err := tx.QueryRow(ctx, query, args...).Scan(
 		&target.status, &target.version, &target.organization, &target.institution,
 		&target.number, &target.system, &target.eligible)
 	if errors.Is(err, pgx.ErrNoRows) {

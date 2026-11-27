@@ -30,7 +30,7 @@ func (s *Service) registerOperatorRegistration(mux *http.ServeMux) {
 // 参数 w、r 为 HTTP 响应和注册请求。
 // 返回值 无。
 func (s *Service) createRegistration(w http.ResponseWriter, r *http.Request) {
-	if !s.limitRegistration(r.RemoteAddr, "submit", 15) {
+	if !s.limitRegistration(s.authSource(r), "submit", 15) {
 		registrationThrottled(w)
 		return
 	}
@@ -43,17 +43,17 @@ func (s *Service) createRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.submitRegistration(r.Context(), input)
 	if err != nil {
-		writeRegistrationError(w, err)
+		registrationUnavailable(w, err)
 		return
 	}
 	httpx.JSON(w, 201, result)
 }
 
-// lookupRegistration 通过独立随机凭据仅返回申请状态及驳回原因。
+// lookupRegistration 通过独立随机凭据返回申请状态和统一的驳回提示。
 // 参数 w、r 为 HTTP 响应和带查询码的请求。
 // 返回值 无。
 func (s *Service) lookupRegistration(w http.ResponseWriter, r *http.Request) {
-	if !s.limitRegistration(r.RemoteAddr, "status", 60) {
+	if !s.limitRegistration(s.authSource(r), "status", 60) {
 		registrationThrottled(w)
 		return
 	}
@@ -71,13 +71,19 @@ func (s *Service) lookupRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result registrationResult
-	err := s.db.QueryRow(r.Context(), `SELECT status,created_at,reviewed_at,
-		CASE WHEN status='rejected' THEN reason ELSE '' END
+	err := s.db.QueryRow(r.Context(), `SELECT status,created_at,reviewed_at
 		FROM operator_registrations WHERE lookup_hash=$1`, fingerprint[:]).
-		Scan(&result.Status, &result.CreatedAt, &result.ReviewedAt, &result.Reason)
+		Scan(&result.Status, &result.CreatedAt, &result.ReviewedAt)
 	if err != nil {
-		writeRegistrationError(w, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Error(w, 404, "registration_not_found", "未找到该注册申请。")
+		} else {
+			registrationUnavailable(w, err)
+		}
 		return
+	}
+	if result.Status == "rejected" {
+		result.Reason = "申请未通过，请联系监管部门核对资料。"
 	}
 	httpx.JSON(w, 200, result)
 }
@@ -107,12 +113,12 @@ func (s *Service) registrationList(w http.ResponseWriter, r *http.Request) {
 }
 
 type registrationFilter struct {
-	status, query string
-	cursor        int64
-	limit         int
+	status, query, creditCode string
+	cursor                    int64
+	limit                     int
 }
 
-// parseRegistrationFilter 校验状态、检索和分页条件，辖区由服务端会话确定。
+// parseRegistrationFilter 用途为校验状态、检索、单位分组明细和分页条件。
 // 参数 raw 为原始查询字符串。
 // 返回值 正规化列表条件和是否有效。
 func parseRegistrationFilter(raw string) (registrationFilter, bool) {
@@ -123,7 +129,7 @@ func parseRegistrationFilter(raw string) (registrationFilter, bool) {
 	}
 	for key, items := range values {
 		switch key {
-		case "status", "q", "cursor", "limit":
+		case "status", "q", "creditCode", "cursor", "limit":
 			if len(items) != 1 {
 				return filter, false
 			}
@@ -150,6 +156,12 @@ func parseRegistrationFilter(raw string) (registrationFilter, bool) {
 		}
 	}
 	filter.query = strings.TrimSpace(values.Get("q"))
+	if values.Has("creditCode") {
+		filter.creditCode = strings.ToUpper(strings.TrimSpace(values.Get("creditCode")))
+		if !validCreditCode(filter.creditCode) {
+			return filter, false
+		}
+	}
 	return filter, registrationText(filter.query, 120, true)
 }
 
@@ -216,9 +228,7 @@ func writeRegistrationError(w http.ResponseWriter, err error) {
 	case errRegistrationUsername:
 		httpx.Error(w, 409, "registration_username_taken", "登录账号已被占用，请使用其他账号。")
 	case errRegistrationPending:
-		httpx.Error(w, 409, "registration_exists", "该单位已有在审或已通过的申请，请凭查询码查看。")
-	case errRegistrationDaily:
-		httpx.Error(w, 429, "registration_daily_limit", "该信用代码今日已提交三次，请于次日重试。")
+		httpx.Error(w, 409, "registration_exists", "该单位已存在审批通过的申请。")
 	case errRegistrationReviewed:
 		httpx.Error(w, 409, "registration_reviewed", "申请已审核，请刷新后查看最新结果。")
 	default:
@@ -226,12 +236,19 @@ func writeRegistrationError(w http.ResponseWriter, err error) {
 			httpx.Error(w, 404, "registration_not_found", "未找到该注册申请。")
 			return
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			slog.Error("运营单位注册处理失败", "sqlState", pgErr.Code, "constraint", pgErr.ConstraintName)
-		} else {
-			slog.Error("运营单位注册处理失败", "errorType", fmt.Sprintf("%T", err))
-		}
-		httpx.Error(w, 503, "registration_unavailable", "暂时无法办理注册申请，请稍后重试。")
+		registrationUnavailable(w, err)
 	}
+}
+
+// registrationUnavailable 记录错误类型并向调用方返回统一的服务异常。
+// 参数 w 为 HTTP 响应，err 为内部持久化或读取错误。
+// 返回值 无。
+func registrationUnavailable(w http.ResponseWriter, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		slog.Error("运营单位注册处理失败", "sqlState", pgErr.Code, "constraint", pgErr.ConstraintName)
+	} else {
+		slog.Error("运营单位注册处理失败", "errorType", fmt.Sprintf("%T", err))
+	}
+	httpx.Error(w, 503, "registration_unavailable", "暂时无法办理注册申请，请稍后重试。")
 }

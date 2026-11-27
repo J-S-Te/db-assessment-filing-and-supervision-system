@@ -26,6 +26,7 @@ export interface CaseSummary {
 }
 
 export interface CaseDetail extends CaseSummary {
+  filingNumberProvisional?: boolean
   classificationAssessment?: ClassificationAssessment
   policyMaterials?: FilingMaterialRule[]
   version: number

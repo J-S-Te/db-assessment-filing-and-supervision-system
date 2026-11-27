@@ -86,14 +86,15 @@ func resolveHistoryImportParty(ctx context.Context, tx pgx.Tx, item *historyImpo
 	return nil
 }
 
-// findHistoryFiling 查询当前目录同一备案号对应的归属及业务标识。
+// findHistoryFiling 用途为查询已有正式备案号的归属及业务标识。
 // 参数 ctx、tx 为候选检查所在事务，number 为真实备案编号。
 // 返回值 已存在的当前备案，或 pgx.ErrNoRows 和查询错误。
 func findHistoryFiling(ctx context.Context, tx pgx.Tx, number string) (existingHistoryFiling, error) {
 	var result existingHistoryFiling
 	err := tx.QueryRow(ctx, `SELECT id::text,organization_name,system_name FROM business_cases
 		WHERE kind='filing' AND lower(number)=lower($1)
-		  AND discarded_at IS NULL AND status<>'withdrawn'`, number).
+		  AND discarded_at IS NULL AND status<>'withdrawn'
+		  AND number<>'' AND NOT filing_number_provisional`, number).
 		Scan(&result.id, &result.unit, &result.system)
 	return result, err
 }
@@ -179,7 +180,7 @@ func (s *Service) persistHistoryRows(ctx context.Context, tx pgx.Tx, items []his
 	return nil
 }
 
-// insertHistoryFiling 用编号唯一索引保护并发导入，向真实草稿登记两项必须材料。
+// insertHistoryFiling 用途为用正式编号唯一索引保护并发导入，并登记两项必需材料。
 // 参数 ctx、tx 为同批事务，item 为当前记录，staged 用于跟踪文件回滚。
 // 返回值 确定的备案归属，或由调用方回滚的写入错误。
 func (s *Service) insertHistoryFiling(ctx context.Context, tx pgx.Tx, item *historyImportCandidate,
@@ -193,7 +194,7 @@ func (s *Service) insertHistoryFiling(ctx context.Context, tx pgx.Tx, item *hist
 		directory_unit_id,directory_institution_id,directory_snapshot)
 		VALUES ('filing',$1,$2,$3,$4,$5,3,2,$6,$7,$8)
 		ON CONFLICT (kind,lower(number)) WHERE discarded_at IS NULL AND status<>'withdrawn'
-		    AND number<>''
+		    AND number<>'' AND NOT filing_number_provisional
 		DO NOTHING RETURNING id::text`,
 		fields.number, fields.systemName, fields.organizationName, fields.assessmentOrg, fields.level,
 		unitID, institutionID, item.snapshot).Scan(&id)

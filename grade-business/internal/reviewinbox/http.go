@@ -60,8 +60,9 @@ func (e inboxEndpoint) unreadCount(w http.ResponseWriter, r *http.Request) {
 	var result struct {
 		Count int64 `json:"count"`
 	}
-	err = e.pool.QueryRow(r.Context(), `SELECT count(*) FROM review_notices
-		WHERE audience=$1 AND recipient=$2 AND acknowledged_at IS NULL`, e.audience, name).Scan(&result.Count)
+	err = e.pool.QueryRow(r.Context(), `SELECT count(*) FROM review_notices n
+		WHERE audience=$1 AND recipient=$2 AND acknowledged_at IS NULL
+		AND `+trustedFilingNotice, e.audience, name).Scan(&result.Count)
 	if err != nil {
 		httpx.Error(w, 500, "internal_error", "暂时无法读取待签收消息数量。")
 		return
@@ -84,9 +85,10 @@ func (e inboxEndpoint) acknowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result receipt
-	err = e.pool.QueryRow(r.Context(), `UPDATE review_notices
+	err = e.pool.QueryRow(r.Context(), `UPDATE review_notices n
 		SET acknowledged_at=COALESCE(acknowledged_at,clock_timestamp())
-		WHERE id=$1 AND audience=$2 AND recipient=$3 RETURNING acknowledged_at`,
+		WHERE id=$1 AND audience=$2 AND recipient=$3
+		AND `+trustedFilingNotice+` RETURNING acknowledged_at`,
 		id, e.audience, name).Scan(&result.AcknowledgedAt)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

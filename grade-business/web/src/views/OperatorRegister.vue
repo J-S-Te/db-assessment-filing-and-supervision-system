@@ -140,7 +140,7 @@ async function lookup() {
         <p v-if="result.reviewedAt">审核时间 {{ formatTime(result.reviewedAt) }}</p>
         <RouterLink v-if="result.status === 'approved'" to="/login" class="back-link">使用注册账号登录</RouterLink>
         <template v-else-if="result.status === 'rejected'">
-          <p>驳回原因 {{ result.reason }}</p>
+          <p>{{ result.reason }}</p>
           <button type="button" class="button neutral" @click="selectMode('apply')">修改后重新申请</button>
         </template>
       </section>

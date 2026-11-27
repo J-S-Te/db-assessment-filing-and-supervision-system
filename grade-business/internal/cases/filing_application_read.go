@@ -157,7 +157,7 @@ func (s *Service) applicationInScope(ctx context.Context, id, institution string
 	actor, authenticated := access.Current(ctx)
 	if operatorOrigin && (institution != "" || (detail.Status == pendingInitial &&
 		(!authenticated || actor.Role != access.SystemAdmin))) {
-		detail.AllowedActions = initialReviewActions(detail.Status, institution != "")
+		detail.AllowedActions = initialReviewActions(detail.Status, institution != "" && !authenticated)
 	} else if institution != "" {
 		detail.AllowedActions = institutionEditActions(detail.Status)
 	}

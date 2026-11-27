@@ -29,3 +29,25 @@ func TestDeploymentListener(t *testing.T) {
 		}
 	}
 }
+
+// TestSecureCookieDeploymentSetting 验证受控 HTTPS 反代可显式启用安全 Cookie。
+// 参数 t 为启动配置的测试上下文。
+// 返回值 无。
+func TestSecureCookieDeploymentSetting(t *testing.T) {
+	t.Setenv("GRADE_BUSINESS_DSN", "postgres://fixture")
+	t.Setenv("GRADE_BUSINESS_COOKIE_SECURE", "true")
+	t.Setenv("GRADE_BUSINESS_AUTH_TRUSTED_PROXY", "127.0.0.1")
+	cfg, err := loadSettings()
+	if err != nil || !cfg.accessOptions.SecureCookies || cfg.accessOptions.TrustedProxy.String() != "127.0.0.1" {
+		t.Fatalf("安全 Cookie 配置未生效：%v", err)
+	}
+	t.Setenv("GRADE_BUSINESS_COOKIE_SECURE", "invalid")
+	if _, err := loadSettings(); err == nil {
+		t.Fatal("启动配置接受了无效的 Cookie 安全值")
+	}
+	t.Setenv("GRADE_BUSINESS_COOKIE_SECURE", "true")
+	t.Setenv("GRADE_BUSINESS_AUTH_TRUSTED_PROXY", "0.0.0.0")
+	if _, err := loadSettings(); err == nil {
+		t.Fatal("启动配置接受了泛地址作为可信代理")
+	}
+}

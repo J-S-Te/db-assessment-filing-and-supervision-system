@@ -51,6 +51,7 @@ type settings struct {
 	reviewWindows                               app.ReviewWindows
 	lan                                         netip.Prefix
 	filingAI                                    *filingaudit.DeepSeek
+	accessOptions                               access.Options
 }
 
 // main 启动管理端业务服务，可使用本机回环或经配置的服务器内网地址。
@@ -92,6 +93,17 @@ func loadSettings() (settings, error) {
 	}
 	if strings.TrimSpace(cfg.dsn) == "" {
 		return settings{}, errors.New("请配置 GRADE_BUSINESS_DSN")
+	}
+	cfg.accessOptions.SecureCookies, err = strconv.ParseBool(env("GRADE_BUSINESS_COOKIE_SECURE", "false"))
+	if err != nil {
+		return settings{}, errors.New("GRADE_BUSINESS_COOKIE_SECURE 必须是布尔值")
+	}
+	if proxy := strings.TrimSpace(os.Getenv("GRADE_BUSINESS_AUTH_TRUSTED_PROXY")); proxy != "" {
+		addr, parseErr := netip.ParseAddr(proxy)
+		if parseErr != nil || addr.Zone() != "" || addr.IsUnspecified() {
+			return settings{}, errors.New("GRADE_BUSINESS_AUTH_TRUSTED_PROXY 必须是单一反代 IP 地址")
+		}
+		cfg.accessOptions.TrustedProxy = addr.Unmap()
 	}
 	cfg.reviewWindows, err = loadReviewWindows()
 	if err != nil {
@@ -347,7 +359,7 @@ func routes(cfg settings, pool *pgxpool.Pool, records *cases.Service,
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { ready(w, r, pool) })
 	app.RegisterAIReview(mux, os.DirFS(filepath.Join(cfg.assets, "review")))
 	mux.Handle("/", pages)
-	return app.LocalBoundary(cfg.address, cfg.lan, access.New(pool).Protect(mux))
+	return app.LocalBoundary(cfg.address, cfg.lan, access.New(pool, cfg.accessOptions).Protect(mux))
 }
 
 // ready 提供仅含业务服务就绪状态的探针。

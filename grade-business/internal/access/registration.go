@@ -33,7 +33,6 @@ var (
 	errRegistrationAccount  = errors.New("单位已有账号")
 	errRegistrationUsername = errors.New("登录账号已被使用")
 	errRegistrationPending  = errors.New("已存在在审或已通过申请")
-	errRegistrationDaily    = errors.New("此统一社会信用代码今日申请次数已用完")
 	errRegistrationReviewed = errors.New("申请已完成审核")
 )
 
@@ -54,17 +53,18 @@ type registrationResult struct {
 }
 
 type registrationItem struct {
-	ID          string `json:"id"`
-	UnitName    string `json:"unitName"`
-	CreditCode  string `json:"creditCode"`
-	ContactName string `json:"contactName"`
-	Phone       string `json:"phone"`
-	Username    string `json:"username"`
-	AreaCode    string `json:"areaCode"`
-	District    string `json:"district"`
-	Reviewer    string `json:"reviewer,omitempty"`
-	ReviewRole  Role   `json:"reviewerRole,omitempty"`
-	SubjectID   string `json:"subjectId,omitempty"`
+	ID           string `json:"id"`
+	UnitName     string `json:"unitName"`
+	CreditCode   string `json:"creditCode"`
+	ContactName  string `json:"contactName"`
+	Phone        string `json:"phone"`
+	Username     string `json:"username"`
+	AreaCode     string `json:"areaCode"`
+	District     string `json:"district"`
+	Reviewer     string `json:"reviewer,omitempty"`
+	ReviewRole   Role   `json:"reviewerRole,omitempty"`
+	SubjectID    string `json:"subjectId,omitempty"`
+	PendingCount int64  `json:"pendingCount,omitempty"`
 	registrationResult
 	sequence int64
 }
@@ -147,7 +147,7 @@ func registrationStoreError(err error) error {
 		return errRegistrationUsername
 	case "access_accounts_subject_id_key":
 		return errRegistrationAccount
-	case "operator_registrations_open_code":
+	case "operator_registrations_approved_code":
 		return errRegistrationPending
 	case "directory_parties_kind_scope", "directory_parties_kind_name", "directory_parties_kind_code":
 		return errRegistrationUnit
@@ -156,14 +156,17 @@ func registrationStoreError(err error) error {
 	}
 }
 
-// registrationFields 读取审批清单和办理结果共享的安全展示字段。
+// registrationFields 用途为读取审批清单、分组数量和办理结果的展示字段。
 // 参数 item 为扫描目标，row 为查询行。
 // 返回值 查询或扫描错误。
 func registrationFields(item *registrationItem, row pgx.Row) error {
 	err := row.Scan(&item.ID, &item.sequence, &item.UnitName, &item.CreditCode, &item.ContactName,
 		&item.Phone, &item.Username, &item.AreaCode, &item.Status, &item.CreatedAt, &item.ReviewedAt,
-		&item.Reason, &item.Reviewer, &item.ReviewRole, &item.SubjectID)
+		&item.Reason, &item.Reviewer, &item.ReviewRole, &item.SubjectID, &item.PendingCount)
 	item.District = districtNames[item.AreaCode]
+	if item.District == "" {
+		item.District = "辖区待核实"
+	}
 	return err
 }
 
