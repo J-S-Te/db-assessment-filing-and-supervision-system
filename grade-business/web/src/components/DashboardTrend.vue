@@ -14,6 +14,8 @@ const pinned = ref('')
 const hidden = ref(new Set<DashboardSeriesKey>())
 const chart = computed(() => dashboardTrend(props.history ?? [], range.value))
 const option = computed(() => dashboardTrendOption(chart.value, hidden.value))
+const firstDate = computed(() => chart.value.days[0]?.date)
+const lastDate = computed(() => chart.value.days.at(-1)?.date)
 const selected = computed(() => chart.value.days.find(day => day.date === pinned.value) ?? chart.value.days[active.value])
 const hasActivity = computed(() => Object.values(chart.value.totals).some(value => value > 0))
 watch(() => chart.value.days.map(day => day.date).join(), () => {
@@ -62,6 +64,11 @@ function toggleSeries(key: DashboardSeriesKey) {
     {{ loading ? '正在读取业务趋势…' : '暂时无法读取业务趋势。' }}
   </p>
   <div v-else class="trend-body">
+    <p v-if="firstDate && lastDate" class="trend-period" role="status">
+      <time :datetime="firstDate">{{ firstDate }}</time>
+      至
+      <time :datetime="lastDate">{{ lastDate }}</time>
+    </p>
     <div tabindex="0" class="trend-plot" role="group" aria-label="每日业务趋势，左右键查看日期，回车固定"
       @keydown.left.prevent="selectDay(active - 1)" @keydown.right.prevent="selectDay(active + 1)"
       @keydown.home.prevent="selectDay(0)" @keydown.end.prevent="selectDay(chart.days.length - 1)"
@@ -95,6 +102,7 @@ function toggleSeries(key: DashboardSeriesKey) {
 .range-pills button[aria-pressed="true"] { color: #c8edff; background: #183d60; border-color: #3d7192; }
 .range-pills button:hover { color: #f0faff; }
 .trend-body { display: flex; flex: 1; flex-direction: column; gap: .35em; min-height: 0; padding-top: .35em; }
+.trend-period { margin: 0; color: var(--dashboard-muted); font-size: .72em; font-variant-numeric: tabular-nums; }
 .trend-plot { position: relative; flex: 1; min-height: 5.5em; }
 .trend-empty { color: var(--dashboard-muted); font-size: .83em; }
 .trend-plot .trend-empty { position: absolute; inset: 37% 0 auto; text-align: center; pointer-events: none; }

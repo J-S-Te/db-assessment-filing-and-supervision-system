@@ -100,7 +100,7 @@ function afterImport(result: KnowledgeImportResult) {
     </p>
     <div class="panel v2-list-table">
       <AsyncState :loading="loading" :error="failure" :empty="!page.items.length"
-        empty-text="未找到符合条件的知识。" @retry="load">
+        empty-text="暂无符合条件的知识。" @retry="load">
         <div class="table-wrap">
           <table class="data-table knowledge-table">
             <thead><tr><th>分类</th><th>名称</th><th>来源</th><th>标签</th><th>更新时间</th><th>操作</th></tr></thead>

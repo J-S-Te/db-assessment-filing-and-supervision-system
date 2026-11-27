@@ -94,6 +94,14 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	hit(unit, "GET", "/api/v1/operator/filings/"+other, nil, 404)
 	hit(unit, "GET", "/api/v1/operator/filings?organization=其他单位", nil, 403)
 	hit(unit, "GET", "/api/v1/dashboard/statistics", nil, 403)
+	for _, actor := range []*http.Cookie{area, org, unit} {
+		hit(actor, "GET", "/api/v1/audit/export", nil, 403)
+	}
+	hit(nil, "GET", "/api/v1/audit/export", nil, 401)
+	export := hit(sys, "GET", "/api/v1/audit/export", nil, 200)
+	if !strings.HasPrefix(export.Header().Get("Content-Type"), "text/csv") {
+		t.Fatal("系统管理员审计导出未返回 CSV")
+	}
 
 	hit(area, "GET", "/api/v1/filings/"+other+"/attachments", nil, 404)
 	hit(area, "GET", "/api/v1/filings/"+own+"/attachments", nil, 200)

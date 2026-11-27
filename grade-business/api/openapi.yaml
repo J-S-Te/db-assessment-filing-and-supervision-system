@@ -5813,6 +5813,7 @@ paths:
   "/audit":
     get:
       operationId: listBusinessAudit
+      description: 系统管理员可按操作人、业务对象、对象编号及已记录的审核或处置意见检索操作日志。
       responses:
         '200':
           description: 业务操作结果
@@ -5865,6 +5866,37 @@ paths:
           type: integer
           minimum: 1
           maximum: 100
+  "/audit/export":
+    get:
+      operationId: exportBusinessAudit
+      description: 系统管理员按操作日志当前筛选条件导出 CSV，最多 10000 条，超出时应缩小筛选范围。
+      security:
+      - AccessSession: []
+      parameters:
+      - name: resource
+        in: query
+        schema:
+          type: string
+          enum: [filings, filing-applications, implementations, reports, remediations, hazards, alerts, publications, workday-calendar]
+      - name: q
+        in: query
+        schema: {type: string, maxLength: 120}
+      responses:
+        '200':
+          description: 以 UTF-8 BOM 编码、按北京时间显示的业务操作日志附件
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '422':
+          description: 匹配日志超过导出上限
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        default:
+          "$ref": "#/components/responses/Error"
   "/reports/export":
     get:
       operationId: exportReportRegister

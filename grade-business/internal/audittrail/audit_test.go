@@ -54,7 +54,37 @@ func TestAuditUnifiesActualEvents(t *testing.T) {
 	verifyAuditLinksAndFilters(t, router)
 }
 
-// TestAuditShowsDirectHazardRegistration 验证登记事件按真实备案编号进入审计。
+// TestAuditSearchesRecordedBusinessText 核对报告审核意见和对象标识可检索。
+// 参数 t 为隔离 PostgreSQL 测试上下文。
+// 返回值 无。
+func TestAuditSearchesRecordedBusinessText(t *testing.T) {
+	pool := auditFixture(t)
+	if _, err := pool.Exec(t.Context(), auditBusinessFixtures); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		UPDATE case_review_events SET comment='test 报告结论需补正'
+		WHERE action='return_for_correction'`); err != nil {
+		t.Fatal(err)
+	}
+	router := http.NewServeMux()
+	New(pool).Register(router)
+	page := readAuditTest[testAuditPage](t, router, auditEndpoint+"?resource=reports&q=TEST", 200)
+	if len(page.Items) != 1 || page.Items[0].ActionLabel != "退回补正" {
+		t.Errorf("按审核意见检索报告事件 = %+v，期望退回补正事件", page.Items)
+	}
+	published := readAuditTest[testAuditPage](t, router, auditEndpoint+"?resource=publications", 200)
+	if len(published.Items) != 1 {
+		t.Fatalf("公告夹具记录不唯一: %+v", published.Items)
+	}
+	id := published.Items[0].ResourceID
+	matched := readAuditTest[testAuditPage](t, router, auditEndpoint+"?q="+id, 200)
+	if len(matched.Items) != 1 || matched.Items[0].ResourceID != id {
+		t.Errorf("按业务对象标识 %s 检索 = %+v", id, matched.Items)
+	}
+}
+
+// TestAuditShowsDirectHazardRegistration 验证登记事件可按真实备案编号或隐患标题检索。
 // 参数 t 为隔离 PostgreSQL 测试上下文。
 // 返回值 无。
 func TestAuditShowsDirectHazardRegistration(t *testing.T) {
@@ -65,7 +95,7 @@ func TestAuditShowsDirectHazardRegistration(t *testing.T) {
 	), hazard AS (
 	    INSERT INTO hazard_items(registration_filing_id,ledger,title,source,discovered_on,severity,
 	      description,measure,responsibility,deadline,status)
-	    SELECT id,'major_risk','手工登记','manual','2026-11-22','high','需整改风险','整改措施','运营单位',
+	    SELECT id,'major_risk','test 手工登记','manual','2026-11-22','high','需整改风险','整改措施','运营单位',
 	        '2026-12-01','pending_dispatch' FROM filing RETURNING id
 	)
 	INSERT INTO hazard_events(hazard_id,action,from_status,to_status,operator,version)
@@ -75,10 +105,12 @@ func TestAuditShowsDirectHazardRegistration(t *testing.T) {
 	}
 	router := http.NewServeMux()
 	New(pool).Register(router)
-	page := readAuditTest[testAuditPage](t, router, auditEndpoint+"?resource=hazards&q=F-DIRECT", 200)
-	if len(page.Items) != 1 || page.Items[0].Action != "register" || page.Items[0].ActionLabel != "登记隐患" ||
-		page.Items[0].Title != "直接登记系统" || page.Items[0].Operator != "登记席位" {
-		t.Fatalf("按备案编号检索登记事件 = %+v", page.Items)
+	for _, keyword := range []string{"F-DIRECT", "TEST"} {
+		page := readAuditTest[testAuditPage](t, router, auditEndpoint+"?resource=hazards&q="+keyword, 200)
+		if len(page.Items) != 1 || page.Items[0].Action != "register" || page.Items[0].ActionLabel != "登记隐患" ||
+			page.Items[0].Title != "直接登记系统" || page.Items[0].Operator != "登记席位" {
+			t.Errorf("按 %s 检索登记事件 = %+v", keyword, page.Items)
+		}
 	}
 }
 

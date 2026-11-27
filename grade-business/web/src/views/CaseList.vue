@@ -93,7 +93,8 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
       </form>
 
       <AsyncState :loading="loading" :error="failure" :empty="!page.items.length"
-        empty-text="未找到符合条件的记录。" @retry="load">
+        :empty-text="kind === 'filings' ? '暂无符合条件的备案记录。' : '暂无符合条件的测评报告。'"
+        @retry="load">
         <div class="table-wrap v2-list-table">
           <table class="data-table">
             <thead>

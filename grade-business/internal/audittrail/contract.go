@@ -64,12 +64,12 @@ var resourceActions = map[string]map[string]string{
 	"workday-calendar": {"workday": "设置工作日", "restday": "设置休息日", "default": "恢复默认日历"},
 }
 
-// parseFilter 校验审计业务筛选、关键词和游标字段。
-// 参数 raw 为原始 URL 查询字符串。
+// parseFilter 校验审计业务类型、关键词及可选分页条件。
+// 参数 raw 为原始 URL 查询字符串，paged 表示是否允许列表分页字段。
 // 返回值 有界查询条件或者无效输入错误。
-func parseFilter(raw string) (auditFilter, error) {
+func parseFilter(raw string, paged bool) (auditFilter, error) {
 	values, err := url.ParseQuery(raw)
-	if err != nil {
+	if err != nil || !paged && (values.Has("cursor") || values.Has("limit")) {
 		return auditFilter{}, errFilter
 	}
 	for key, entries := range values {

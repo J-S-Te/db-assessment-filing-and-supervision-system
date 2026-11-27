@@ -24,6 +24,7 @@ export interface Session {
 }
 
 export const session = shallowRef<Session | null>(null)
+export const deniedRoute = shallowRef<string>()
 
 /**
  * 用途 从服务端恢复会话和菜单，区分未登录与服务故障。
