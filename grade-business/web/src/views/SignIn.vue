@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ArrowRight, Fingerprint, LockKeyhole, ShieldCheck, UserRound } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
+import SignInClock from '../components/SignInClock.vue'
 import SignInSecurityCore from '../components/SignInSecurityCore.vue'
 import { api, errorText } from '../lib/api'
 import { canVisit, session, type Session } from '../lib/session'
@@ -19,26 +20,11 @@ const failure = ref('')
 const loginAccepted = ref(false)
 const biometricHelp = ref(false)
 const passwordHelp = ref(false)
-const now = ref(new Date())
-let clockTimer = 0
 const loginState = computed(() => {
   if (loginAccepted.value) return 'success'
   if (failure.value) return 'error'
   return pending.value ? 'checking' : 'idle'
 })
-
-/**
- * 用途 把当前时间格式化为指挥条上使用的秒级时钟文本。
- * 参数 date 为需要展示的时刻。
- * 返回值 年月日与时分秒组成的文本。
- */
-function formatClock(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
-    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-}
-
-const clockText = computed(() => formatClock(now.value))
 
 /**
  * 用途 汇总当前登录状态对应的顶部提示语。
@@ -136,12 +122,6 @@ async function logout() {
     failure.value = errorText(error)
   }
 }
-
-onMounted(() => {
-  clockTimer = window.setInterval(() => { now.value = new Date() }, 1000)
-})
-
-onUnmounted(() => window.clearInterval(clockTimer))
 </script>
 
 <template>
@@ -161,7 +141,7 @@ onUnmounted(() => window.clearInterval(clockTimer))
           <i class="signin-status-dot" :class="statusTone"></i>{{ statusText }}
         </span>
         <span class="signin-status-sep" aria-hidden="true"></span>
-        <span class="signin-status-clock">{{ clockText }}</span>
+        <SignInClock class="signin-status-clock" />
       </div>
     </header>
 
@@ -400,15 +380,13 @@ onUnmounted(() => window.clearInterval(clockTimer))
   transform: perspective(1300px) rotateY(-5deg);
 }
 
-/* 分开卡片与输入框的模糊层，让玻璃表面保留不同深浅的光线。 */
+/* 固定渐变和高光提供玻璃层次，免去对背景的滤镜采样。 */
 .signin-card::before {
   position: absolute;
   z-index: -1;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(145deg, #1a3655bc, #09182bc7 58%, #0c2038bd);
-  -webkit-backdrop-filter: blur(16px) saturate(125%);
-  backdrop-filter: blur(16px) saturate(125%);
+  background: linear-gradient(145deg, #1a3655df, #09182be5 58%, #0c2038db);
   pointer-events: none;
   content: "";
 }
@@ -482,8 +460,6 @@ onUnmounted(() => window.clearInterval(clockTimer))
   border-radius: 9px;
   background: linear-gradient(125deg, #3b6b9396, #18324da8 55%, #3a648880);
   box-shadow: inset 0 1px 0 #c7e8ff2b, inset 0 -1px 0 #0a152b68, 0 5px 14px #01061138;
-  -webkit-backdrop-filter: blur(9px) saturate(135%);
-  backdrop-filter: blur(9px) saturate(135%);
   color: #f1f7ff;
 }
 

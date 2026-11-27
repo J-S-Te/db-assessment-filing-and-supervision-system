@@ -21,31 +21,35 @@ let drag: { pointerId: number; x: number; y: number } | undefined
 let dragged = false
 let restoreAfterMouseDrag = false
 let resetFrame = 0
+let pointerFrame = 0
+let pointerX = 0
+let pointerY = 0
 
 /** 平台台面在舞台高度中的位置，基座裁切后保持在同一水平线上。 */
 const platformTop = '87.1%'
 
 /**
- * 用途 生成环绕盾牌的粒子节点，按角度、半径和景深偏移排布成一圈三维轨道。
- * 参数 无。
- * 返回值 粒子的角度、半径、景深与动画错相序列。
+ * 用途 把一圈散点合并到同一条 SVG 路径，由整个轨道统一旋转。
+ * 参数 count 为粒子数量，drift 为粒子偏离圆周的幅度。
+ * 返回值 可用圆头描边渲染的粒子路径。
  */
-function buildParticles(count: number, radius: number, depth: number) {
-  return Array.from({ length: count }, (_, index) => ({
-    angle: (360 / count) * index,
-    radius,
-    depth: Math.sin(index * 0.47) * depth,
-    delay: -(index * 0.13).toFixed(2),
-  }))
+function buildParticlePath(count: number, drift: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (Math.PI * 2 / count) * index
+    const offset = Math.sin(index * .47) * drift
+    const x = Math.cos(angle) * 50 - Math.sin(angle) * offset
+    const y = Math.sin(angle) * 50 + Math.cos(angle) * offset
+    return `M${x.toFixed(1)} ${y.toFixed(1)}h.01`
+  }).join('')
 }
 
-const particlesNear = buildParticles(40, 32.8, 4.6)
-const particlesFar = buildParticles(28, 24.4, -3.2)
+const particlesNear = buildParticlePath(40, 7)
+const particlesFar = buildParticlePath(28, -6.5)
 
 /**
- * 用途 生成可无缝横向滚动的信号波形路径，首尾两段波形完全一致。
+ * 用途 生成全息面板上显示的信号波形路径。
  * 参数 无。
- * 返回值 两倍宽度的折线路径。
+ * 返回值 SVG 折线路径。
  */
 const wavePath = computed(() => {
   const points: string[] = []
@@ -101,17 +105,30 @@ function resetDraggedPose() {
 }
 
 /**
- * 用途 根据鼠标相对视口中心的位置调整盾牌透视，合成倾角上限为 12 度。
+ * 用途 使用最近一次鼠标位置更新盾牌透视，合成倾角上限为 12 度。
+ * 参数 无。
+ * 返回值 无。
+ */
+function applyPointerTilt() {
+  pointerFrame = 0
+  if (drag || resetFrame) return
+  const x = 2 * pointerX / window.innerWidth - 1
+  const y = 2 * pointerY / window.innerHeight - 1
+  const angle = 12 / Math.max(1, Math.hypot(x, y))
+  tilt.value?.style.setProperty('--tilt-x', `${-y * angle}deg`)
+  tilt.value?.style.setProperty('--tilt-y', `${x * angle}deg`)
+}
+
+/**
+ * 用途 合并同一画面帧内的鼠标移动，避免高频指针事件重复写入样式。
  * 参数 event 为页面鼠标移动事件。
  * 返回值 无。
  */
 function followPointer(event: MouseEvent) {
   if (drag || resetFrame) return
-  const x = 2 * event.clientX / window.innerWidth - 1
-  const y = 2 * event.clientY / window.innerHeight - 1
-  const angle = 12 / Math.max(1, Math.hypot(x, y))
-  tilt.value?.style.setProperty('--tilt-x', `${-y * angle}deg`)
-  tilt.value?.style.setProperty('--tilt-y', `${x * angle}deg`)
+  pointerX = event.clientX
+  pointerY = event.clientY
+  if (!pointerFrame) pointerFrame = requestAnimationFrame(applyPointerTilt)
 }
 
 /**
@@ -121,6 +138,8 @@ function followPointer(event: MouseEvent) {
  */
 function resetPointer(event: Event) {
   if (event.type === 'blur') drag = undefined
+  cancelAnimationFrame(pointerFrame)
+  pointerFrame = 0
   tilt.value?.style.removeProperty('--tilt-x')
   tilt.value?.style.removeProperty('--tilt-y')
   setOrbitSpeed(1)
@@ -265,6 +284,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelPoseReset()
+  cancelAnimationFrame(pointerFrame)
   window.removeEventListener('mousemove', followPointer)
   window.removeEventListener('pointermove', moveDrag)
   window.removeEventListener('pointerup', endDrag)
@@ -367,14 +387,14 @@ onUnmounted(() => {
         <span class="security-flow" aria-hidden="true"><i></i><i></i><i></i></span>
 
         <!-- 环绕粒子 -->
-        <span class="security-particles security-particles-near" aria-hidden="true">
-          <i v-for="(node, index) in particlesNear" :key="index" class="security-particle"
-            :style="{ '--angle': node.angle + 'deg', '--radius': node.radius + 'cqw', '--depth': node.depth + 'cqw', '--delay': node.delay + 's' }"></i>
-        </span>
-        <span class="security-particles security-particles-far" aria-hidden="true">
-          <i v-for="(node, index) in particlesFar" :key="index" class="security-particle is-small"
-            :style="{ '--angle': node.angle + 'deg', '--radius': node.radius + 'cqw', '--depth': node.depth + 'cqw', '--delay': node.delay + 's' }"></i>
-        </span>
+        <svg class="security-particles security-particles-near" viewBox="-56 -56 112 112"
+          aria-hidden="true" focusable="false">
+          <path :d="particlesNear" />
+        </svg>
+        <svg class="security-particles security-particles-far" viewBox="-56 -56 112 112"
+          aria-hidden="true" focusable="false">
+          <path :d="particlesFar" />
+        </svg>
 
         <span class="security-halo" aria-hidden="true"></span>
         <span class="security-halo-outer" aria-hidden="true"></span>
@@ -393,9 +413,7 @@ onUnmounted(() => {
         </div>
         <span class="security-base-reflect" aria-hidden="true"></span>
         <span class="security-lift-pool" aria-hidden="true"></span>
-        <span class="security-scan is-a" aria-hidden="true"></span>
-        <span class="security-scan is-b" aria-hidden="true"></span>
-        <span class="security-scan is-c" aria-hidden="true"></span>
+        <span class="security-scan" aria-hidden="true"></span>
 
         <button ref="shieldButton" class="security-core" type="button" aria-label="旋转或激活安防盾牌"
           aria-describedby="security-controls"
@@ -493,9 +511,9 @@ onUnmounted(() => {
 
 .security-floor-grid {
   position: absolute;
-  width: 2800px;
-  height: 2800px;
-  margin: -1400px 0 0 -1400px;
+  width: clamp(800px, 175cqw, 2000px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
   transform: rotateX(75deg) translateZ(-60px);
   background:
     repeating-linear-gradient(90deg, rgba(96, 196, 255, .22) 0 1.5px, transparent 1.5px 98px),
@@ -518,7 +536,6 @@ onUnmounted(() => {
   bottom: 2%;
   height: 30%;
   background: radial-gradient(52% 100% at 50% 100%, rgba(66, 150, 220, .17), transparent 70%);
-  filter: blur(34px);
 }
 
 .security-spotlight {
@@ -529,7 +546,6 @@ onUnmounted(() => {
   height: 62%;
   margin-left: -23%;
   background: radial-gradient(ellipse 30% 58% at 50% 0, rgba(150, 225, 255, .19), rgba(90, 180, 240, .05) 58%, transparent 80%);
-  filter: blur(28px);
   opacity: .9;
 }
 
@@ -564,9 +580,7 @@ onUnmounted(() => {
   padding: 11px 14px 12px;
   border: 1px solid rgba(111, 198, 255, .3);
   border-radius: 10px;
-  background: linear-gradient(140deg, rgba(16, 48, 80, .5), rgba(8, 24, 42, .32));
-  -webkit-backdrop-filter: blur(9px);
-  backdrop-filter: blur(9px);
+  background: linear-gradient(140deg, #102f50d9, #08182ab3);
   box-shadow: 0 12px 30px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(200, 235, 255, .14);
 }
 
@@ -650,8 +664,6 @@ onUnmounted(() => {
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 4px rgba(95, 216, 255, .6));
-  animation: security-wave 6s linear infinite;
 }
 
 .security-holo-bar {
@@ -669,7 +681,7 @@ onUnmounted(() => {
   height: 100%;
   border-radius: 2px;
   background: linear-gradient(90deg, transparent, #2f8fd6, #7fe0ff, transparent);
-  animation: security-holo-scan 4s linear infinite;
+  translate: 48% 0;
 }
 
 /* ---------- 舞台 ---------- */
@@ -739,16 +751,15 @@ onUnmounted(() => {
 .security-flow i:nth-child(3)::after { animation-delay: -4.5s; }
 
 /* 悬浮光柱 */
-.security-beam {  position: absolute;
+.security-beam {
+  position: absolute;
   left: 50%;
   top: 66%;
   z-index: 1;
   width: 11%;
   height: 23%;
   margin-left: -5.5%;
-  background: linear-gradient(180deg, rgba(160, 230, 255, .5), rgba(90, 185, 245, .16) 45%, transparent 88%);
-  filter: blur(14px);
-  animation: security-beam 4s ease-in-out infinite;
+  background: radial-gradient(ellipse 50% 88% at 50% 0, #a0e6ff63, #5ab9f529 48%, transparent);
 }
 
 .security-beam-wide {
@@ -760,8 +771,6 @@ onUnmounted(() => {
   height: 28%;
   margin-left: -12%;
   background: radial-gradient(60% 100% at 50% 0, rgba(90, 190, 250, .28), transparent 72%);
-  filter: blur(26px);
-  animation: security-beam-wide 8s ease-in-out infinite;
 }
 
 /* 环绕粒子 */
@@ -770,39 +779,32 @@ onUnmounted(() => {
   left: 50%;
   top: 43.2%;
   z-index: 4;
-  width: 0;
-  height: 0;
-  perspective: 1200px;
-  transform-style: preserve-3d;
+  translate: -50% -50%;
+  aspect-ratio: 1;
+  fill: none;
+  stroke: #c7f1ff;
+  stroke-linecap: round;
   pointer-events: none;
 }
 
-.security-particles-near { transform: rotateX(70deg); animation: security-orbit-near 20s linear infinite; }
-.security-particles-far { top: 46%; z-index: 3; transform: rotateX(-62deg); animation: security-orbit-far 28s linear infinite; }
+.security-particles path { vector-effect: non-scaling-stroke; }
 
-.security-particle {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #e6fbff;
-  box-shadow: 0 0 8px #4fd6ff, 0 0 22px rgba(79, 214, 255, .85), 0 0 44px rgba(79, 214, 255, .4);
-  transform: rotate(var(--angle)) translateX(var(--radius)) translateY(var(--depth));
-  animation: security-particle 4s ease-in-out infinite;
-  animation-delay: var(--delay);
+.security-particles-near {
+  width: 73.5cqw;
+  stroke-width: 5px;
+  opacity: .8;
+  transform: rotateX(70deg);
+  animation: security-orbit-near 20s linear infinite;
 }
 
-.security-particle.is-small {
-  width: 5px;
-  height: 5px;
-  opacity: .7;
-}
-
-@keyframes security-particle {
-  0%, 100% { opacity: .35; scale: .7; }
-  50% { opacity: .95; scale: 1.2; }
+.security-particles-far {
+  top: 46%;
+  z-index: 3;
+  width: 54.7cqw;
+  stroke-width: 3px;
+  opacity: .55;
+  transform: rotateX(-62deg);
+  animation: security-orbit-far 28s linear infinite;
 }
 
 /* 盾牌外的两层光晕 */
@@ -976,8 +978,7 @@ onUnmounted(() => {
   margin: -7% 0 0 -25.5%;
   border-radius: 50%;
   background: radial-gradient(closest-side, rgba(140, 225, 255, .5), rgba(70, 180, 245, .14) 55%, transparent 76%);
-  filter: blur(10px);
-  animation: security-lift 4s ease-in-out infinite;
+  opacity: .68;
 }
 
 /* 贴地扫描波 */
@@ -991,17 +992,13 @@ onUnmounted(() => {
   margin: -34.15% 0 0 -34.15%;
   border-radius: 50%;
   background: radial-gradient(closest-side, transparent 66%, rgba(140, 228, 255, .34) 75%, rgba(140, 228, 255, .07) 85%, transparent 93%);
-  filter: blur(2px);
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 22% 78%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 22% 78%, transparent);
   opacity: 0;
   transform: rotateX(85deg);
+  animation: security-scan 3s linear infinite;
   pointer-events: none;
 }
-
-.security-scan.is-a { animation: security-scan 2s linear infinite; }
-.security-scan.is-b { animation: security-scan 2s linear infinite -0.66s; }
-.security-scan.is-c { animation: security-scan 2s linear infinite -1.33s; }
 
 /* 盾牌 */
 .security-core {
@@ -1032,10 +1029,15 @@ onUnmounted(() => {
   opacity: .55;
   pointer-events: none;
   content: "";
+  animation: security-core-breathe 3.4s ease-in-out infinite;
   transition: opacity .28s ease-in-out;
 }
 
-.security-core:is(:hover, :focus-visible)::before { opacity: 1; }
+.security-core:is(:hover, :focus-visible)::before {
+  --core-glow-min: .84;
+  --core-glow-max: 1;
+  opacity: 1;
+}
 
 .security-float,
 .security-sway,
@@ -1106,11 +1108,8 @@ onUnmounted(() => {
   padding: 10px 13px;
   border: 1px solid rgba(111, 198, 255, .22);
   border-radius: 9px;
-  background: linear-gradient(140deg, rgba(14, 40, 68, .55), rgba(8, 22, 40, .35));
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  background: linear-gradient(140deg, #0e2844e0, #081628c2);
   box-shadow: 0 14px 34px rgba(0, 0, 0, .55);
-  filter: blur(.4px);
   pointer-events: none;
 }
 
@@ -1200,29 +1199,9 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-@keyframes security-wave {
-  from { transform: translateX(0); }
-  to { transform: translateX(-120px); }
-}
-
-@keyframes security-holo-scan {
-  from { transform: translateX(-110%); }
-  to { transform: translateX(330%); }
-}
-
-@keyframes security-beam {
-  0%, 100% { opacity: .62; transform: translateY(0); }
-  50% { opacity: .84; transform: translateY(6px); }
-}
-
-@keyframes security-beam-wide {
-  0%, 100% { opacity: .5; }
-  50% { opacity: .7; }
-}
-
-@keyframes security-lift {
-  0%, 100% { opacity: .55; }
-  50% { opacity: .75; }
+@keyframes security-core-breathe {
+  0%, 100% { opacity: var(--core-glow-min, .55); }
+  50% { opacity: var(--core-glow-max, .82); }
 }
 
 @keyframes security-scan {
@@ -1284,9 +1263,8 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .security-float, .security-sway, .security-orbit-spin, .security-particle,
-  .security-holo-wave path, .security-holo-bar i, .security-scan,
-  .security-beam, .security-beam-wide, .security-lift-pool,
+  .security-float, .security-sway, .security-orbit-spin, .security-scan,
+  .security-core::before, .security-flow i::after,
   .security-particles-near, .security-particles-far { animation: none; }
   .security-tilt { transform: none; }
   .security-impact { transform: none !important; }
