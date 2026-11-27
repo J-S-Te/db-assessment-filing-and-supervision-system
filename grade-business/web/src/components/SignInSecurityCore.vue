@@ -242,15 +242,33 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.security-base {
+.security-stage::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(ellipse 45% 3.8% at 50% 86.6%, #010711d1 38%, transparent),
+    radial-gradient(ellipse 9% 5% at 25% 87.3%, var(--base-reflection, #f43a5669), transparent),
+    radial-gradient(ellipse 19% 6% at 50% 89%, var(--base-reflection, #f43a5669), transparent),
+    radial-gradient(ellipse 9% 5% at 75% 87.3%, var(--base-reflection, #f43a5669), transparent),
+    radial-gradient(ellipse 47% 7% at 50% 86.4%, #16a7ef4d, transparent);
+}
+
+.security-base,
+.security-base-glow {
   object-fit: fill;
-  mask-image: linear-gradient(90deg, transparent, #000 10% 90%, transparent),
-    linear-gradient(180deg, transparent, #000 22% 87%, transparent);
-  mask-composite: intersect;
+  /* 沿基座实体轮廓裁切，让房间光轨和地面贯穿整个盾牌区域。 */
+  clip-path: polygon(
+    50% 68.9%, 60% 69.05%, 69% 69.65%, 76% 70.6%, 82% 72.1%, 86.8% 73.2%,
+    90% 75.65%, 92.7% 78.8%, 92.7% 83.15%, 88.8% 84.9%, 82.8% 86.3%, 70% 87.45%,
+    59% 87.8%, 40% 87.8%, 29% 87.45%, 17.4% 86.2%, 10.9% 84.9%, 7.3% 83.1%,
+    7.3% 78.8%, 10.1% 75.7%, 13% 73.7%, 17.6% 72.2%, 23% 70.9%, 30.6% 69.8%,
+    39.2% 69.18%
+  );
 }
 
 .security-base-glow {
-  object-fit: fill;
   opacity: 0;
   filter: var(--base-lamp-filter, brightness(1.2));
   /* 只调红色内环和三条灯带，让底板和蓝色外环保留素材的原色。 */
@@ -266,14 +284,17 @@ onUnmounted(() => {
 
 .security-stage[data-login-state="checking"] {
   --base-lamp-filter: hue-rotate(180deg) saturate(1.35) brightness(1.6);
+  --base-reflection: #49c3e377;
 }
 
 .security-stage[data-login-state="success"] {
   --base-lamp-filter: hue-rotate(120deg) saturate(1.4) brightness(1.65);
+  --base-reflection: #45db8377;
 }
 
 .security-stage[data-login-state="error"] {
   --base-lamp-filter: saturate(1.35) brightness(1.45);
+  --base-reflection: #ff42597a;
 }
 
 .security-stage[data-login-state]:not([data-login-state="idle"]) .security-base-glow { opacity: 1; }
