@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 // FilingMaterials 返回在同一数据库快照中读取的备案实际材料和材料版本。
@@ -31,12 +32,13 @@ func (s *Service) materialsInScope(ctx context.Context, kind, id, institution st
 	}
 	rows, err := s.db.Query(ctx, `
 		SELECT c.material_revision,a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at
-		FROM business_cases c LEFT JOIN case_attachments a ON c.id=a.case_id
+		FROM business_cases c LEFT JOIN business_cases f ON f.id=c.filing_id
+		LEFT JOIN case_attachments a ON c.id=a.case_id
 		  AND ($4='' OR COALESCE(a.merge_history_scope,c.organization_name)=$4)
 		WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
 		  AND ($3='' OR c.assessment_org=$3)
-		  AND ($4='' OR (c.kind='filing' AND (c.organization_name=$4 OR a.id IS NOT NULL)))
-		ORDER BY a.uploaded_at,a.id`, kind, id, institution, operatorFilingScope(ctx))
+		  AND ($4='' OR (c.kind='filing' AND (c.organization_name=$4 OR a.id IS NOT NULL)))`+caseDistrictScope("$5")+`
+		ORDER BY a.uploaded_at,a.id`, kind, id, institution, operatorFilingScope(ctx), access.Districts(ctx))
 	if err != nil {
 		return MaterialSnapshot{}, err
 	}
@@ -187,10 +189,11 @@ func (s *Service) readAttachment(ctx context.Context, kind, id, materialID, inst
 	err := s.db.QueryRow(ctx, `
 		SELECT a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at,a.file_key
 		FROM case_attachments a JOIN business_cases c ON a.case_id=c.id
+		LEFT JOIN business_cases f ON f.id=c.filing_id
 		WHERE c.kind=$1 AND c.id=$2 AND a.id=$3 AND c.discarded_at IS NULL
 		  AND ($4='' OR c.assessment_org=$4)
-		  AND ($5='' OR (c.kind='filing' AND COALESCE(a.merge_history_scope,c.organization_name)=$5))`,
-		kind, id, materialID, institution, operatorFilingScope(ctx)).
+		  AND ($5='' OR (c.kind='filing' AND COALESCE(a.merge_history_scope,c.organization_name)=$5))`+caseDistrictScope("$6"),
+		kind, id, materialID, institution, operatorFilingScope(ctx), access.Districts(ctx)).
 		Scan(&a.ID, &a.Kind, &a.FileName, &a.Size, &a.UploadedAt, &a.fileKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return attachmentRow{}, ErrNotFound

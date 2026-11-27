@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { ChevronLeft, ChevronRight, Plus, RefreshCw } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -84,8 +85,8 @@ function afterImport(result: KnowledgeImportResult) {
         <button class="button neutral" type="button" @click="resetFilters">重置</button>
       </div>
       <div class="v2-toolbar-row">
-        <RouterLink class="button primary" to="/knowledge/new"><Plus :size="16" aria-hidden="true" />新增知识</RouterLink>
-        <button class="button neutral" type="button" @click="importOpen = true">批量导入</button>
+        <RouterLink v-if="hasPermission('admin.agent.kb.edit')" class="button primary" to="/knowledge/new"><Plus :size="16" aria-hidden="true" />新增知识</RouterLink>
+        <button v-if="hasPermission('admin.agent.kb.edit')" class="button neutral" type="button" @click="importOpen = true">批量导入</button>
         <span class="v2-toolbar-spacer"></span>
         <button class="button neutral small" type="button" :disabled="loading" @click="load">
           <RefreshCw :size="14" aria-hidden="true" />刷新
@@ -121,10 +122,10 @@ function afterImport(result: KnowledgeImportResult) {
                   <RouterLink class="text-action"
                     :to="{ path: knowledgeRecord(item.id), query: route.query }"
                     :aria-label="'查看 ' + item.title">查看</RouterLink>
-                  <RouterLink class="text-action"
+                  <RouterLink v-if="hasPermission('admin.agent.kb.edit')" class="text-action"
                     :to="{ path: knowledgeRecord(item.id) + '/tags', query: route.query }"
                     :aria-label="'维护标签 ' + item.title">标签</RouterLink>
-                  <RouterLink class="text-action"
+                  <RouterLink v-if="hasPermission('admin.agent.kb.edit')" class="text-action"
                     :to="{ path: knowledgeRecord(item.id) + '/edit', query: route.query }"
                     :aria-label="'编辑 ' + item.title">编辑</RouterLink>
                 </div></td>

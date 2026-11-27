@@ -3,7 +3,7 @@ import { onMounted, onScopeDispose, ref, watch } from 'vue'
 import AsyncState from './AsyncState.vue'
 import { api, errorText, isAbort } from '../lib/api'
 import { formatTime } from '../lib/domain'
-import { feedbackDecisions, feedbackPath, type FeedbackDelivery } from '../lib/reportFeedback'
+import { feedbackDecisions, type FeedbackDelivery } from '../lib/reportFeedback'
 
 const props = defineProps<{ path: string; institution: string }>()
 const items = ref<FeedbackDelivery[]>([])
@@ -66,7 +66,6 @@ onScopeDispose(() => {
       <h2>机构回执</h2>
       <div class="page-actions">
         <button class="button neutral small" type="button" :disabled="loading" @click="load">刷新回执</button>
-        <RouterLink class="text-action" :to="{ path: feedbackPath, query: { institution } }">打开机构收件箱</RouterLink>
       </div>
     </header>
     <p v-if="items.length && failure" class="form-message warning-message" role="status">{{ failure }}</p>

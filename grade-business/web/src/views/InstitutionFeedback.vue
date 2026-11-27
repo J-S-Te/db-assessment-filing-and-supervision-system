@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import AsyncState from '../components/AsyncState.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api, errorText, isAbort, params } from '../lib/api'
@@ -11,10 +11,9 @@ import {
 } from '../lib/reportFeedback'
 
 const route = useRoute()
-const router = useRouter()
 const scope = computed(() => queryValue(route.query.institution).trim())
 const before = computed(() => queryValue(route.query.before))
-const term = ref('')
+const inbox = '/institution/feedback'
 const page = ref<Page<FeedbackMessage>>({ items: [] })
 const loading = ref(false)
 const failure = ref('')
@@ -57,18 +56,6 @@ async function load(quiet = false) {
 }
 
 /**
- * 用途 以输入的机构名称在收件箱中查询业务意见。
- * 参数 无，机构名称来自用户输入。
- * 返回值 查询导航或重新读取任务。
- */
-function search() {
-  const institution = term.value.trim()
-  if (!institution) return
-  if (scope.value === institution && !before.value) return load()
-  return router.push({ path: feedbackPath, query: { institution } })
-}
-
-/**
  * 用途 确认收到指定审核意见并呈现服务端的签收时间。
  * 参数 item 为当前机构收件箱中真实存在的消息。
  * 返回值 签收并更新列表的任务。
@@ -104,7 +91,6 @@ function refreshVisible() {
 }
 
 watch([scope, before], () => {
-  term.value = scope.value
   page.value = { items: [] }
   failure.value = actionFailure.value = ''
   void load()
@@ -124,18 +110,9 @@ onScopeDispose(() => {
 <template>
   <section class="v2-list" aria-labelledby="institution-inbox">
     <header class="v2-page-head">
-      <div><h1 id="institution-inbox">审核意见查收</h1><p>测评报告 · 退回补正与终审结果</p></div>
+      <div><h2 id="institution-inbox">测评报告意见</h2></div>
+      <button v-if="scope" class="button neutral" type="button" :disabled="loading" @click="load()">刷新</button>
     </header>
-    <form class="v2-list-toolbar" @submit.prevent="search">
-      <div class="v2-toolbar-row">
-        <label class="field filter-keyword">
-          <span>测评机构名称</span>
-          <input v-model="term" required maxlength="200" placeholder="输入报告登记的测评机构名称">
-        </label>
-        <button class="button primary" type="submit">查询意见</button>
-        <button v-if="scope" class="button neutral" type="button" :disabled="loading" @click="load()">刷新</button>
-      </div>
-    </form>
     <p v-if="!scope" class="muted">请选择本地测试所用的测评机构。</p>
     <template v-else>
       <p v-if="actionFailure" class="form-message error-message" role="alert">{{ actionFailure }}</p>
@@ -170,11 +147,11 @@ onScopeDispose(() => {
       </AsyncState>
       <footer v-if="before || page.nextCursor" class="panel-footer pager">
         <div>
-          <RouterLink v-if="before" class="button neutral small" :to="{ path: feedbackPath, query: { institution: scope } }">
+          <RouterLink v-if="before" class="button neutral small" :to="{ path: inbox, query: { view: 'reports', institution: scope } }">
             最新消息
           </RouterLink>
           <RouterLink v-if="page.nextCursor" class="button neutral small"
-            :to="{ path: feedbackPath, query: { institution: scope, before: page.nextCursor } }">下一页</RouterLink>
+            :to="{ path: inbox, query: { view: 'reports', institution: scope, before: page.nextCursor } }">下一页</RouterLink>
         </div>
       </footer>
     </template>

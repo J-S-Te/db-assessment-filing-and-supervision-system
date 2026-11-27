@@ -173,6 +173,6 @@ export function formatSize(bytes: number): string {
  * 返回值 涉及机构初审时的状态标签，其余状态沿用已有文案。
  */
 export function filingReviewLabel(status: string, audience?: 'institution') {
-  if (audience === 'institution' && status === 'pending_initial') return '待机构初审'
+  if (audience === 'institution' && status === 'pending_initial') return '待监管初审'
   if (audience === 'institution' && status === 'pending_final') return '待监管终审'
 }

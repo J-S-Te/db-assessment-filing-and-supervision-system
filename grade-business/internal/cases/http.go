@@ -247,6 +247,8 @@ func respondError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusConflict, "duplicate_number", "该编号已存在，可核对并修改。")
 	case errors.Is(err, errWithdrawalPending):
 		httpx.Error(w, http.StatusConflict, "withdrawal_pending", "此单正在等待监管确认撤回，原审核已暂停。")
+	case errors.Is(err, errSameReviewer):
+		httpx.Error(w, http.StatusConflict, "different_reviewer_required", "终审须由不同于初审的监管账号办理。")
 	case errors.Is(err, ErrConflict):
 		httpx.Error(w, http.StatusConflict, "conflict", "记录已变化，请刷新后核对可操作状态。")
 	case errors.Is(err, ErrFilingInactive):

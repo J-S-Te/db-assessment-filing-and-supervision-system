@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/classification"
 	"grade-business/internal/directoryref"
 	"grade-business/internal/filingpolicy"
@@ -237,13 +238,13 @@ func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution
 		return stateRow{}, ErrNotFound
 	}
 	var row stateRow
-	err := tx.QueryRow(ctx, `SELECT status,version,COALESCE(filing_id::text,''),
-		    assessment_org,submission_profile,operator_origin,directory_person_id::text
-		FROM business_cases
-		WHERE kind=$1 AND id=$2 AND discarded_at IS NULL
-		  AND ($3='' OR (kind='filing' AND organization_name=$3))
-		  AND ($4='' OR assessment_org=$4)
-		FOR UPDATE`, kind, id, operatorFilingScope(ctx), institution).
+	err := tx.QueryRow(ctx, `SELECT c.status,c.version,COALESCE(c.filing_id::text,''),
+		    c.assessment_org,c.submission_profile,c.operator_origin,c.directory_person_id::text`+
+		recordJoin+`
+		WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
+		  AND ($3='' OR (c.kind='filing' AND c.organization_name=$3))
+		  AND ($4='' OR c.assessment_org=$4)`+caseDistrictScope("$5")+
+		` FOR UPDATE OF c`, kind, id, operatorFilingScope(ctx), institution, access.Districts(ctx)).
 		Scan(&row.status, &row.version, &row.filingID, &row.assessmentOrg, &row.submissionProfile,
 			&row.operatorOrigin, &row.assessmentPersonID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -285,7 +286,10 @@ func (s *Service) changeStatusInTx(ctx context.Context, tx pgx.Tx, kind, id stri
 	if current.version != input.ExpectedVersion {
 		return mutation{}, ErrConflict
 	}
-	if err := input.checkReviewRole(current.status, current.operatorOrigin); err != nil {
+	if err := input.checkReviewRole(ctx, current.status, current.operatorOrigin); err != nil {
+		return mutation{}, err
+	}
+	if err := requireSeparateReviewer(ctx, tx, id, current.status, false); err != nil {
 		return mutation{}, err
 	}
 	if kind == filing {
@@ -310,7 +314,7 @@ func (s *Service) changeStatusInTx(ctx context.Context, tx pgx.Tx, kind, id stri
 			return mutation{}, err
 		}
 	}
-	operator := input.reviewActor(s.operator, operatorFilingScope(ctx))
+	operator := input.reviewActor(ctx, s.operator, operatorFilingScope(ctx))
 	return s.persistDecision(ctx, tx, kind, id, current, next, input.Decision, comment, operator)
 }
 
@@ -371,10 +375,12 @@ func (s *Service) persistDecision(ctx context.Context, tx pgx.Tx,
 	if err != nil {
 		return mutation{}, err
 	}
+	actor, _ := access.Current(ctx)
 	_, err = tx.Exec(ctx, `
 		WITH event AS (
-		    INSERT INTO case_review_events(case_id,action,from_status,to_status,operator,comment,version,directory_snapshot)
-		    SELECT id,$2,$3,$4,$5,$6,$7,directory_snapshot FROM business_cases WHERE id=$1
+		    INSERT INTO case_review_events(case_id,action,from_status,to_status,operator,comment,version,
+		                                   directory_snapshot,operator_id,operator_role)
+		    SELECT id,$2,$3,$4,$5,$6,$7,directory_snapshot,NULLIF($8,'')::uuid,NULLIF($9,'') FROM business_cases WHERE id=$1
 		    RETURNING id,case_id,to_status
 		)
 		INSERT INTO report_feedback(event_id,institution,report_number,system_name)
@@ -382,7 +388,7 @@ func (s *Service) persistDecision(ctx context.Context, tx pgx.Tx,
 		JOIN business_cases c ON c.id=e.case_id
 		JOIN business_cases f ON f.id=c.filing_id
 		WHERE c.kind='report' AND e.to_status IN ('returned','approved')`,
-		id, action, current.status, next, operator, comment, result.Version)
+		id, action, current.status, next, operator, comment, result.Version, actor.ID, actor.Role)
 	if err == nil && kind == filing && (current.operatorOrigin || next == returned || next == approved) {
 		err = publishFilingReview(ctx, tx, id, result.Version)
 	}
