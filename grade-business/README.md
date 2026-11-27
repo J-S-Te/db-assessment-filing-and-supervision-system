@@ -6,6 +6,8 @@
 
 [业务接口契约](api/openapi.yaml) · [管理端原型 V2](../原型/管理端/index.html) · [页面对照与核验](FRONTEND_V2_ALIGNMENT.md) · [业务流核对](BUSINESS_GAPS.md) · [测评意见回传](BUSINESS_FEEDBACK.md) · [功能清单](../软件开发功能清单（原型基线版）.md) · [整改闭环目标](BUSINESS_PHASE_3.md) · [运营者备案和换机构复测](BUSINESS_OPERATOR_FILING.md) · [运营者整改单和预警处置](BUSINESS_OPERATOR_RECTIFICATION.md) · [机构复测及初终审](BUSINESS_INSTITUTION_REVIEW.md) · [三端工作台与驾驶舱](BUSINESS_WORKBENCH.md) · [测评比对、运营者资料及资产指标](BUSINESS_REPORT_RESOURCES_ASSETS.md) · [本地验收记录](TASK_STATE.md)
 
+M8 AI 智能审核的同源页面、原会话复用、已授权角色范围与固定前端发布依赖见 [接入说明](AI_REVIEW_INTEGRATION.md)。
+
 ## Gitea 发布到 Ubuntu
 
 推送到 `main` 后，`ubuntu-vm` Runner 构建触发该次发布的提交。前端使用 `web/package.json` 声明的 pnpm 版本和锁文件，和 Go 二进制一起发布。Runner 需要 Git、Go、curl、iproute2、flock 和 systemd 操作权限。缺少 Node.js 24 或 Corepack 时，流水线下载并校验固定版本的 Node.js 构建包，解压到临时工作目录。首次部署使用 Docker Compose v2 和 OpenSSL 初始化数据库。

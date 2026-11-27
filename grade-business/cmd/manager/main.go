@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -293,6 +294,7 @@ func routes(cfg settings, pool *pgxpool.Pool, records *cases.Service,
 	app.RegisterWorkbenchOverview(mux, pool, cfg.reviewWindows)
 	app.RegisterWorkdayCalendar(mux, pool, cfg.operator)
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { ready(w, r, pool) })
+	app.RegisterAIReview(mux, os.DirFS(filepath.Join(cfg.assets, "review")))
 	mux.Handle("/", pages)
 	return app.LocalBoundary(cfg.address, cfg.lan, access.New(pool).Protect(mux))
 }

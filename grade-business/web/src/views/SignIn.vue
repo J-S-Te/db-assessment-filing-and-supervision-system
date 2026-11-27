@@ -41,6 +41,11 @@ async function enterAfterLogin(actor: Session) {
   const destination = signInRoute.query.redirect
   const resume = typeof destination === 'string' && /^\/(?![\/\\])/.test(destination) &&
     canVisit(actor, router.resolve(destination).path)
+  // 审核入口由同源 Go 路由提供，不能交给 SPA 的兜底页面处理。
+  if (!actor.mustChangePassword && resume && ['/review', '/review/'].includes(router.resolve(destination).path)) {
+    window.location.assign('/review/')
+    return
+  }
   await router.replace(actor.mustChangePassword ? '/account/password' : resume ? destination : actor.home)
 }
 

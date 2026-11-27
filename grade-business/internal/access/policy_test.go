@@ -50,3 +50,53 @@ func TestBindSubject(t *testing.T) {
 		}
 	}
 }
+
+// TestAIReviewPolicy 用途：核验用户明确授权的 M8 角色范围和菜单一致性。
+// 参数：t 为测试环境。
+// 返回值：无，角色越权或缺少页面声明时失败。
+func TestAIReviewPolicy(t *testing.T) {
+	for _, role := range []Role{SystemAdmin, Regulator, OrgAdmin, Operator, "ROLE_UNKNOWN"} {
+		want := role == SystemAdmin || role == Regulator
+		for _, pattern := range []string{aiReviewContextPattern, "GET /review/{$}", "GET /review/{asset...}", "GET /review"} {
+			if allowed(Principal{Role: role}, pattern) != want {
+				t.Errorf("%s %s", role, pattern)
+			}
+		}
+		v := view(Principal{Role: role})
+		found := false
+		for _, page := range v.Pages {
+			if page == "/review" {
+				found = true
+			}
+		}
+		if found != want {
+			t.Errorf("页面声明 %s", role)
+		}
+	}
+}
+
+// TestAIReviewRejectsForgedIdentity 用途：匿名用户不能用伪造身份头进入 M8。
+// 参数：t 为测试环境。
+// 返回值：无；页面须返回原登录入口，API 须拒绝。
+func TestAIReviewRejectsForgedIdentity(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /review/{$}", func(w http.ResponseWriter, r *http.Request) { t.Error("匿名到达页面处理器") })
+	h := New(nil).Protect(mux)
+	for _, path := range []string{"/review/", "/api/v1/ai-review/context"} {
+		r := httptest.NewRequest("GET", path, nil)
+		r.Header.Set("X-User-ID", "admin")
+		r.Header.Set("X-Role", "ROLE_SYS_ADMIN")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		want := 401
+		if path == "/review/" {
+			want = 303
+			if w.Header().Get("Location") != "/login?redirect=%2Freview%2F" {
+				t.Error("未回到平台登录")
+			}
+		}
+		if w.Code != want {
+			t.Errorf("%s %d", path, w.Code)
+		}
+	}
+}

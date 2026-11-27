@@ -37,6 +37,13 @@ func Current(ctx context.Context) (Principal, bool) {
 	return value, ok
 }
 
+const aiReviewContextPattern = "GET /api/v1/ai-review/context"
+
+// isAIReviewPattern 仅匹配固定的审核入口与只读会话接口。
+func isAIReviewPattern(pattern string) bool {
+	return pattern == aiReviewContextPattern || pattern == "GET /review/{$}" || pattern == "GET /review/{asset...}" || pattern == "GET /review"
+}
+
 const directoryOptions = "/api/v1/directory/options"
 
 // allowed 按实际匹配的服务端路由与方法判断角色授权。
@@ -44,6 +51,9 @@ const directoryOptions = "/api/v1/directory/options"
 // 返回值 当前角色能进入该业务路由时为真。
 func allowed(actor Principal, pattern string) bool {
 	role := actor.Role
+	if isAIReviewPattern(pattern) {
+		return role == SystemAdmin || role == Regulator
+	}
 	if pattern == institutionAccountPattern {
 		return role == SystemAdmin
 	}
@@ -171,6 +181,10 @@ func view(actor Principal) sessionView {
 		return scopedView(data, "operator", "UNIT", []string{"workbench", "filings",
 			"hazards", "remediations", "assessment-history", "supervisions", "feedback", "alerts",
 			"publications"}, []string{"filing-applications", "material-expiries", "assessment-dues"})
+	}
+	if actor.Role == SystemAdmin || actor.Role == Regulator {
+		data.Pages = append(data.Pages, "/review")
+		data.Permissions = append(data.Permissions, "admin.ai-review.view")
 	}
 	return data
 }

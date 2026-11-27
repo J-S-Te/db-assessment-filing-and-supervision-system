@@ -32,6 +32,7 @@ type passwordInput struct {
 func (s *Service) Protect(mux *http.ServeMux) http.Handler {
 	mux.HandleFunc(loginPattern, s.login)
 	mux.HandleFunc(sessionPattern, s.current)
+	mux.HandleFunc(aiReviewContextPattern, s.current)
 	mux.HandleFunc(logoutPattern, s.logout)
 	mux.HandleFunc(passwordPattern, s.changePassword)
 	mux.HandleFunc(institutionAccountPattern, s.createInstitutionAccount)
@@ -43,7 +44,7 @@ func (s *Service) Protect(mux *http.ServeMux) http.Handler {
 			mux.ServeHTTP(w, r)
 			return
 		}
-		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.Contains(pattern, " /api/") {
+		if !isAIReviewPattern(pattern) && !strings.HasPrefix(r.URL.Path, "/api/") && !strings.Contains(pattern, " /api/") {
 			mux.ServeHTTP(w, r)
 			return
 		}
@@ -58,6 +59,10 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, next http.Ha
 	w.Header().Set("Cache-Control", "no-store")
 	actor, err := s.session(r)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if isAIReviewPattern(pattern) && !strings.HasPrefix(r.URL.Path, "/api/") {
+			http.Redirect(w, r, "/login?redirect=%2Freview%2F", http.StatusSeeOther)
+			return
+		}
 		httpx.Error(w, 401, "authentication_required", "请登录后再办理。")
 		return
 	}
@@ -72,6 +77,10 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, next http.Ha
 		return
 	}
 	if actor.MustChange {
+		if isAIReviewPattern(pattern) && !strings.HasPrefix(r.URL.Path, "/api/") {
+			http.Redirect(w, r, "/account/password", http.StatusSeeOther)
+			return
+		}
 		s.record(ctx, actor, "denied", pattern)
 		httpx.Error(w, 403, "password_change_required", "请先修改初始密码。")
 		return

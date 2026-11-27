@@ -52,7 +52,7 @@ const governance = [
   { key: 'agent', name: '智能体', icon: BookOpenText, path: '/knowledge' },
   { key: 'screen', name: '指挥驾驶舱', icon: Radar, path: dashboardPath },
   { key: 'system', name: '系统管理', icon: Settings, path: '/audit' },
-  { key: 'ai-review', name: 'AI 智能审核', icon: ScanText, path: '' },
+  { key: 'ai-review', name: 'AI 智能审核', icon: ScanText, path: '/review/' },
 ]
 const navigation = [
   { label: '业务监管', items: regulatory },
@@ -411,7 +411,10 @@ onBeforeUnmount(() => {
         <template v-for="group in visibleNavigation" :key="group.label">
           <div class="v2-nav-group">{{ group.label }}</div>
           <template v-for="item in group.items" :key="item.key">
-            <RouterLink v-if="item.path" class="v2-nav-item" :class="{ active: activeGroup === item.key }"
+            <a v-if="item.key === 'ai-review' && canVisit(session, item.path)" class="v2-nav-item" :href="item.path">
+              <span class="v2-nav-icon" aria-hidden="true"><component :is="item.icon" :size="15" /></span>{{ item.name }}
+            </a>
+            <RouterLink v-else-if="item.path" class="v2-nav-item" :class="{ active: activeGroup === item.key }"
               :to="item.key === 'screen' ? dashboardTabLocation : item.path"
               :target="item.key === 'screen' ? '_blank' : undefined"
               :rel="item.key === 'screen' ? 'noopener' : undefined"
