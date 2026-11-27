@@ -193,6 +193,7 @@ func (s *Service) insertHistoryFiling(ctx context.Context, tx pgx.Tx, item *hist
 		directory_unit_id,directory_institution_id,directory_snapshot)
 		VALUES ('filing',$1,$2,$3,$4,$5,3,2,$6,$7,$8)
 		ON CONFLICT (kind,lower(number)) WHERE discarded_at IS NULL AND status<>'withdrawn'
+		    AND number<>''
 		DO NOTHING RETURNING id::text`,
 		fields.number, fields.systemName, fields.organizationName, fields.assessmentOrg, fields.level,
 		unitID, institutionID, item.snapshot).Scan(&id)

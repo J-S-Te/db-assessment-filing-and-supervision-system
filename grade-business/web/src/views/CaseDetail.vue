@@ -52,6 +52,7 @@ const historyError = ref('')
 const dialog = ref<HTMLDialogElement>()
 const command = ref<ReviewAction | 'submit'>('submit')
 const comment = ref('')
+const assignedFilingNumber = ref('')
 const changing = ref(false)
 const actionError = ref('')
 const actionNotice = ref('')
@@ -61,6 +62,8 @@ let attachmentRequest: AbortController | undefined
 let historyRequest: AbortController | undefined
 let reportRefresh: ReturnType<typeof setInterval> | undefined
 const decisionText = computed(() => record.value?.status === 'pending_final' ? '终审通过' : '初审通过')
+const assignsFilingNumber = computed(() => props.kind === 'filings' && command.value === 'approve'
+  && record.value?.status === 'pending_final' && !record.value.number)
 const returnedCase = computed(() => record.value?.status === 'returned')
 const submitText = computed(() => returnedCase.value ? '重新提交' : '提交审核')
 const returnReason = computed(() => returnedCase.value
@@ -174,6 +177,7 @@ function confirm(value: ReviewAction | 'submit') {
   if (changing.value || loading.value || !record.value?.allowedActions.includes(value)) return
   command.value = value
   comment.value = ''
+  assignedFilingNumber.value = ''
   actionError.value = ''
   stale.value = false
   dialog.value?.showModal()
@@ -201,6 +205,11 @@ async function act() {
   const selected = command.value
   if (!snapshot || changing.value || stale.value || !snapshot.allowedActions.includes(selected)) return
   const note = comment.value.trim()
+  const filingNumber = assignedFilingNumber.value.trim()
+  if (assignsFilingNumber.value && !filingNumber) {
+    actionError.value = '请填写正式备案编号。'
+    return
+  }
   if (selected === 'return_for_correction' && !note) {
     actionError.value = '请填写退回原因。'
     return
@@ -211,7 +220,8 @@ async function act() {
   try {
     const endpoint = selected === 'submit' ? '/submit' : '/review-actions'
     const body = selected === 'submit' ? { expectedVersion: snapshot.version }
-      : { decision: selected, expectedVersion: snapshot.version, ...(note ? { comment: note } : {}) }
+      : { decision: selected, expectedVersion: snapshot.version, ...(note ? { comment: note } : {}),
+        ...(assignsFilingNumber.value ? { filingNumber } : {}) }
     await api<CaseMutation>(pathAtStart + endpoint, { method: 'POST', body })
     void refreshWorkbench()
     if (path.value !== pathAtStart) return
@@ -221,7 +231,9 @@ async function act() {
   } catch (error) {
     if (path.value !== pathAtStart) return
     actionError.value = errorText(error)
-    if (error instanceof ApiError && error.status === 409) stale.value = true
+    if (error instanceof ApiError && error.status === 409 && error.code !== 'duplicate_number') {
+      stale.value = true
+    }
   } finally {
     changing.value = false
   }
@@ -280,7 +292,7 @@ onBeforeUnmount(() => {
               <span v-if="record.cancelledAt" class="level-tag">已注销</span>
               <StatusBadge v-else :status="record.status" :label="filingReviewLabel(record.status, record.initialReviewAudience)" />
             </div>
-            <p>{{ label.number }} <span class="code">{{ record.number }}</span></p>
+            <p>{{ label.number }} <span class="code">{{ record.number || "待分配" }}</span></p>
           </div>
           <div v-if="canEditCase || canReviewCase" class="page-actions">
             <template v-if="canEditCase">
@@ -347,7 +359,7 @@ onBeforeUnmount(() => {
               aria-labelledby="overview-title">
               <header class="panel-heading panel-compact"><h2 id="overview-title">基本信息</h2></header>
               <dl class="facts">
-                <div><dt>{{ label.number }}</dt><dd class="code">{{ record.number }}</dd></div>
+                <div><dt>{{ label.number }}</dt><dd class="code">{{ record.number || "待分配" }}</dd></div>
                 <div><dt>所属单位</dt><dd>{{ record.directorySnapshot?.unit?.name || record.organizationName }}</dd></div>
                 <div><dt>测评机构</dt><dd>{{ record.directorySnapshot?.institution?.name || record.assessmentOrg }}</dd></div>
                 <template v-if="kind === 'filings'">
@@ -450,6 +462,10 @@ onBeforeUnmount(() => {
           <span>{{ command === 'return_for_correction' ? '退回原因' : '审核意见（选填）' }}</span>
           <textarea v-model="comment" rows="4" maxlength="1000" :required="command === 'return_for_correction'"
             :disabled="changing" placeholder="填写本次审核意见" />
+        </label>
+        <label v-if="assignsFilingNumber" class="field">
+          <span>正式备案编号</span>
+          <input v-model="assignedFilingNumber" maxlength="80" required :disabled="changing">
         </label>
         <p v-if="actionError" class="form-message error-message" role="alert">{{ actionError }}</p>
         <div class="form-actions">

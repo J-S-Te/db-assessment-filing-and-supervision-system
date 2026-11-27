@@ -15,6 +15,9 @@ func TestOperatorFilingWithdrawalConfirmsAndReleasesNumber(t *testing.T) {
 	owner := operatorFilingQuery("本地备案单位")
 	foreign := operatorFilingQuery("其他单位")
 	item := createOperatorFiling(t, handler, owner)
+	if _, err := s.db.Exec(t.Context(), `UPDATE business_cases SET number='BA-SELF' WHERE id=$1`, item.ID); err != nil {
+		t.Fatal(err)
+	}
 	local, admin := operatorFilingsURL+"/"+item.ID, filingsURL+"/"+item.ID
 	partner, scope := institutionBase+"/filings/"+item.ID, firstSubmissionScope("隔离测评机构")
 	sent := submitOperatorFiling(t, handler, local, owner, item.Version)
@@ -54,15 +57,15 @@ func TestOperatorFilingWithdrawalConfirmsAndReleasesNumber(t *testing.T) {
 		t.Fatalf("重复审批意外改变版本: %+v, %+v", done, replay)
 	}
 	assertOperatorFilingScopeStatus(t, handler, item.ID, owner, applicationWithdrawn)
-	assertOperatorFilingReceipt(t, handler, local+"/receipt"+owner, "提交回执")
+	assertOperatorFilingReceipt(t, handler, local+"/receipt"+owner, "提交回执", "BA-SELF")
 	assertAssignedNotice(t, s, "filings", item.ID, version+1, "withdrawal_approved", "institution", "隔离测评机构")
 	assertAssignedNotice(t, s, "filings", item.ID, version+1, "withdrawal_approved", "operator", "本地备案单位")
-	if next := createOperatorFiling(t, handler, owner); next.ID == item.ID {
+	if next := createFiling(t, handler, "BA-SELF"); next.ID == item.ID {
 		t.Fatalf("同一编号的新草稿覆盖旧记录: %+v", next)
 	}
 	active := readResponse[listResponse](t, requestJSON(handler, http.MethodGet,
 		operatorFilingsURL+owner+"&lifecycle=active", nil), 200)
-	if len(active.Items) != 1 || active.Items[0].ID == item.ID {
+	if len(active.Items) != 0 {
 		t.Fatalf("已撤回首报仍出现在有效筛选: %+v", active)
 	}
 }

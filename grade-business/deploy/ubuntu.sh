@@ -22,6 +22,8 @@ fail() {
   exit 1
 }
 
+source "$source_dir/lan-database.sh"
+
 # 用途 选用 Ubuntu 网卡上配置的私有 IPv4 地址和前缀。
 # 参数 无，优先选与 Gitea 通信的网卡，其次使用默认路由。
 # 返回值 内网地址及前缀，无法唯一识别且无适用路由时返回非零。
@@ -223,9 +225,27 @@ if systemctl is-active --quiet "$service"; then
   previously_active=1
 fi
 managed_database=0
+had_managed_database=0
+if [[ -f "$bootstrap" ]]; then
+  had_managed_database=1
+fi
+if (( previously_active == 1 )); then
+  if (( had_managed_database == 1 )); then
+    verify_managed_schema "$root" "$bootstrap" "$source_dir/../migrations" "$service" "$binary" 1
+  else
+    verify_external_schema "$service" "$binary" "$source_dir/../migrations"
+  fi
+fi
 if [[ "$unit_state" == not-found || -f "$bootstrap" ]] || unit_missing_database; then
   start_database
   managed_database=1
+fi
+if (( previously_active == 0 )); then
+  if (( had_managed_database == 1 )); then
+    verify_managed_schema "$root" "$bootstrap" "$source_dir/../migrations" "$service" "$binary" 0
+  elif (( managed_database == 0 )); then
+    fail '现有服务未运行且数据库不受发布脚本管理，无法安全核对迁移状态'
+  fi
 fi
 if [[ "$unit_state" == not-found ]]; then
   install_unit

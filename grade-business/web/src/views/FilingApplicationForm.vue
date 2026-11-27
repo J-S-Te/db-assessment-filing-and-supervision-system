@@ -3,6 +3,7 @@ import { computed, onScopeDispose, reactive, ref, shallowRef, watch } from 'vue'
 import { ArrowLeft } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../components/AsyncState.vue'
+import DirectoryPicker from '../components/DirectoryPicker.vue'
 import { api, ApiError, errorText, isAbort, params } from '../lib/api'
 import { levels, type CaseDetail, type CaseMutation, type CaseSummary, type Page } from '../lib/domain'
 import { applicationTypes, displayFilingValue, filingApplicationPath, filingApplicationsPath,
@@ -240,22 +241,26 @@ onScopeDispose(() => {
             <textarea v-model="reason" rows="4" maxlength="1000" required :disabled="saving" />
           </label>
           <template v-if="type === 'change'">
-            <label v-for="field in availableFields" :key="field" class="field">
-              <span>{{ filingFields[field] }}</span>
-              <span class="muted">原值 {{ displayFilingValue(field, original[field]) }}</span>
-              <select v-if="field === 'level'" v-model="draft[field]" required :disabled="saving">
-                <option v-for="(label, key) in levels" :key="key" :value="key">{{ label }}</option>
-              </select>
-              <input v-else v-model="draft[field]" maxlength="200" required :disabled="saving">
-            </label>
+            <template v-for="field in availableFields" :key="field">
+              <div v-if="operator && field === 'assessmentOrg'" class="field">
+                <DirectoryPicker v-model="draft.assessmentOrg" kind="institution" label="测评机构"
+                  :initial-label="draft.assessmentOrg" required :disabled="saving" />
+                <span class="muted">原值 {{ original.assessmentOrg }}</span>
+              </div>
+              <label v-else class="field">
+                <span>{{ filingFields[field] }}</span>
+                <span class="muted">原值 {{ displayFilingValue(field, original[field]) }}</span>
+                <select v-if="field === 'level'" v-model="draft[field]" required :disabled="saving">
+                  <option v-for="(label, key) in levels" :key="key" :value="key">{{ label }}</option>
+                </select>
+                <input v-else v-model="draft[field]" maxlength="200" required :disabled="saving">
+              </label>
+            </template>
           </template>
           <p v-else class="wide muted">终审通过后，备案将标记为已注销，关联记录仍可查询。</p>
           <p v-if="operator && type === 'change' && draft.assessmentOrg.trim() !== original.assessmentOrg"
             class="wide form-message warning-message">
-            换机构复测须先通过关联备案及目标测评机构的变更实施报备。
-            <RouterLink class="text-action"
-              :to="{ path: '/operator/implementations/new',
-                query: { ...scopeQuery, filingId: source.id, target: draft.assessmentOrg.trim() } }">发起实施报备</RouterLink>
+            保存草稿后，请联系拟变更的测评机构在机构端办理实施报备。报备通过监管复核后可提交备案变更。
           </p>
           <p v-if="operator && type === 'cancel'" class="wide muted">保存后请上传注销及数据留存或销毁说明。</p>
         </div>

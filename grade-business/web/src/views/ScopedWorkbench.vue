@@ -68,7 +68,6 @@ const rectification = computed(() => {
 const deadlines = computed(() => cards.value.filter(task => task.tone === 'overdue' || task.tone === 'near').slice(0, 4))
 const mainActions = computed(() => operator.value ? [
   { label: '新报备案', path: '/filings/new', icon: FilePlus2, detail: '为新的系统提交备案' },
-  { label: '实施报备', path: '/implementations', icon: ClipboardPenLine, detail: '发起报备或查询进度' },
   { label: '隐患整改', path: '/hazards', icon: Wrench, detail: '处理整改单和提交整改证据' },
 ] : [
   { label: '报送备案材料', path: '/filings/new', icon: FileUp, detail: '登记系统并提交备案材料' },

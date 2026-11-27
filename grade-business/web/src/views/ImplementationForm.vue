@@ -15,23 +15,16 @@ import {
   type ImplementationMutation, type ImplementationQuota,
 } from '../lib/implementations'
 
-const props = defineProps<{ institutional?: boolean; operator?: boolean }>()
+const props = defineProps<{ institutional?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => typeof route.params.id === 'string' ? route.params.id : '')
 const institution = computed(() => props.institutional ? queryValue(route.query.institution).trim() : '')
-const organization = computed(() => props.operator ? queryValue(route.query.organization).trim() : '')
-const prefix = computed(() => props.institutional ? '/institution' : props.operator ? '/operator' : '')
-const scopeQuery = computed(() => props.institutional ? { institution: institution.value }
-  : props.operator ? { organization: organization.value } : {})
+const prefix = computed(() => props.institutional ? '/institution' : '')
+const scopeQuery = computed(() => props.institutional ? { institution: institution.value } : {})
 const path = computed(() => prefix.value + (id.value ? implementationRecord(id.value) : implementationPath))
 const recordURL = computed(() => path.value + params(scopeQuery.value))
-const sourceApplication = computed(() => props.operator ? queryValue(route.query.applicationId) : '')
-const pinnedFiling = computed(() => props.operator && !id.value ? queryValue(route.query.filingId) : '')
-const detailQuery = computed(() => ({ ...scopeQuery.value, applicationId: sourceApplication.value || undefined }))
-const returnTo = computed(() => sourceApplication.value && !id.value ? {
-  path: '/operator/filing-applications/' + encodeURIComponent(sourceApplication.value), query: scopeQuery.value,
-} : { path: path.value, query: detailQuery.value })
+const returnTo = computed(() => ({ path: path.value, query: scopeQuery.value }))
 const blank = {
   filingId: '', type: 'routine', reporter: '', reporterId: '', contact: '', assessmentOrg: '', plannedStart: '', plannedEnd: '', plan: '',
 } as const
@@ -50,6 +43,10 @@ const existingCooldown = ref<string>()
 const searchText = ref('')
 const options = ref<FilingOption[]>([])
 const selected = ref<FilingOption>()
+const selectedInstitution = computed(() => options.value.find(item => item.id === fields.filingId)?.assessmentOrg
+  ?? selected.value?.assessmentOrg)
+const retestHandoff = computed(() => Boolean(institution.value && selectedInstitution.value
+  && selectedInstitution.value !== institution.value))
 const searching = ref(false)
 const searchError = ref('')
 const quota = ref<ImplementationQuota>()
@@ -58,8 +55,8 @@ const resubmitAvailableAt = computed(() => existingCooldown.value ?? quota.value
 const preferDirectory = ref(false)
 const effectiveInstitution = computed(() => (institution.value || fields.assessmentOrg || selected.value?.assessmentOrg || '').trim())
 const { option: directoryInstitution, loading: checkingInstitution } =
-  useDirectoryInstitution(() => props.operator ? '' : effectiveInstitution.value)
-const useReporterPicker = computed(() => !props.operator && Boolean(effectiveInstitution.value)
+  useDirectoryInstitution(() => effectiveInstitution.value)
+const useReporterPicker = computed(() => Boolean(effectiveInstitution.value)
   && Boolean(directoryInstitution.value?.id || fields.reporterId))
 const checkingReporter = computed(() => !isAmendment.value && checkingInstitution.value && !useReporterPicker.value)
 let detailRequest: AbortController | undefined
@@ -70,7 +67,7 @@ const filingOptions = computed(() => selected.value && !options.value.some(item 
   ? [selected.value, ...options.value] : options.value)
 
 /**
- * 用途 读取表单所选备案，复测入口使用准确的备案标识。
+ * 用途 检索当前办理端允许关联的有效备案。
  * 参数 无，检索条件来自表单。
  * 返回值 候选读取任务。
  */
@@ -81,19 +78,11 @@ async function findFilings() {
   searching.value = true
   searchError.value = ''
   try {
-    const filingId = pinnedFiling.value
-    const suffix = params(filingId ? { ...scopeQuery.value, filingId } : { ...scopeQuery.value, q: searchText.value.trim() })
+    const suffix = params({ ...scopeQuery.value, q: searchText.value.trim() })
     const result = await api<{ items: FilingOption[] }>(prefix.value + implementationPath + '/filing-options' + suffix, {
       signal: request.signal,
     })
-    if (!request.signal.aborted) {
-      options.value = result.items
-      if (filingId) {
-        selected.value = result.items[0]
-        fields.filingId = selected.value?.id ?? ''
-        if (!selected.value) searchError.value = '原备案已失效或不属于本单位，无法发起复测报备。'
-      }
-    }
+    if (!request.signal.aborted) options.value = result.items
   } catch (error) {
     if (!request.signal.aborted && !isAbort(error)) searchError.value = errorText(error)
   } finally {
@@ -173,14 +162,9 @@ async function load() {
   searchError.value = ''
   preferDirectory.value = false
   Object.assign(fields, blank)
-  if (props.operator) {
-    fields.type = 'change'
-    fields.assessmentOrg = queryValue(route.query.target).trim()
-  }
   loading.value = Boolean(id.value)
-  if ((props.institutional && !institution.value) || (props.operator && !organization.value)) {
-    loadError.value = props.operator
-        ? '请先在我的备案办理中选择所属单位。' : '请先在机构报送页选择测评机构。'
+  if (props.institutional && !institution.value) {
+    loadError.value = '请先在机构报送页选择测评机构。'
     loading.value = false
     return
   }
@@ -211,6 +195,7 @@ function chooseFiling() {
   const previousInstitution = effectiveInstitution.value
   if (fields.assessmentOrg === selected.value?.assessmentOrg) fields.assessmentOrg = ''
   selected.value = choice
+  if (retestHandoff.value) fields.type = 'change'
   if (previousInstitution !== effectiveInstitution.value) clearReporter()
 }
 
@@ -265,10 +250,6 @@ async function save() {
     formError.value = '请填写必填项，并确保计划完成日期不早于开始日期。'
     return
   }
-  if (props.operator && (!assessmentOrg || (!editing && assessmentOrg === selected.value?.assessmentOrg))) {
-    formError.value = '请选择与备案现有测评机构不同的目标机构。'
-    return
-  }
   if (!isAmendment.value && useReporterPicker.value && !fields.reporterId) {
     formError.value = '请从测评人员名录选择报备人员。'
     return
@@ -276,14 +257,14 @@ async function save() {
   const body = {
     filingId, type, reporter, plannedStart, plannedEnd, plan,
     ...(contact ? { contact } : {}), ...(!props.institutional && assessmentOrg ? { assessmentOrg } : {}),
-    ...(!props.operator && fields.reporterId ? { reporterId: fields.reporterId } : {}),
+    ...(fields.reporterId ? { reporterId: fields.reporterId } : {}),
     ...(editing ? { expectedVersion: version.value } : {}),
   }
   saving.value = true
   try {
     const result = await api<ImplementationMutation>(current, { method: editing ? 'PATCH' : 'POST', body })
     if (recordURL.value === current) await router.push({
-      path: prefix.value + implementationRecord(result.id), query: detailQuery.value,
+      path: prefix.value + implementationRecord(result.id), query: scopeQuery.value,
     })
   } catch (error) {
     if (recordURL.value !== current) return
@@ -294,7 +275,7 @@ async function save() {
   }
 }
 
-watch([recordURL, pinnedFiling], load, { immediate: true })
+watch(recordURL, load, { immediate: true })
 watch([() => fields.filingId, lockFiling], loadQuota)
 watchImplementationRuleTimes(() => ({ planEditDeadline: planEditDeadline.value }), closeElapsedPlan)
 watchImplementationRuleTimes(() => ({ resubmitAvailableAt: resubmitAvailableAt.value }), () => {
@@ -310,7 +291,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="form-page">
-    <RouterLink class="back-link" :to="returnTo"><ArrowLeft :size="16" aria-hidden="true" />{{ id ? '返回报备详情' : sourceApplication ? '返回备案变更申请' : '返回实施管理' }}</RouterLink>
+    <RouterLink class="back-link" :to="returnTo"><ArrowLeft :size="16" aria-hidden="true" />{{ id ? '返回报备详情' : '返回实施管理' }}</RouterLink>
     <header class="page-header">
       <div><h1>{{ isAmendment ? '修改实施计划' : id ? '编辑实施报备' : '新建实施报备' }}</h1>
         <p v-if="isCorrection">按退回意见补充报备信息，保存后重新提交。</p>
@@ -321,7 +302,7 @@ onBeforeUnmount(() => {
     <AsyncState :loading="loading" :error="loadError" @retry="load">
       <form class="panel form-panel" @submit.prevent="save">
         <div class="form-grid">
-          <div v-if="!lockFiling && !pinnedFiling" class="field wide">
+          <div v-if="!lockFiling" class="field wide">
             <label for="implementation-filing-search">检索备案</label>
             <div class="input-action">
               <input id="implementation-filing-search" v-model="searchText" type="search" maxlength="120"
@@ -334,19 +315,19 @@ onBeforeUnmount(() => {
           </div>
           <label class="field">
             <span>关联备案</span>
-            <select v-model="fields.filingId" required :disabled="Boolean(pinnedFiling) || lockFiling || saving" @change="chooseFiling">
+            <select v-model="fields.filingId" required :disabled="lockFiling || saving" @change="chooseFiling">
               <option value="" disabled>{{ searching ? '加载候选…' : '选择已通过的有效备案' }}</option>
               <option v-for="option in filingOptions" :key="option.id" :value="option.id">{{ option.number }} · {{ option.systemName }}</option>
             </select>
             <small v-if="selected">{{ selected.organizationName }}</small>
-            <small v-else-if="pinnedFiling && searchError" role="alert">{{ searchError }}</small>
             <small v-else-if="!searching && !searchError && !filingOptions.length">当前没有匹配的有效备案。</small>
           </label>
           <label class="field">
             <span>报备类型</span>
-            <select v-model="fields.type" :disabled="lockFiling || saving">
-              <option v-for="(label, value) in (operator ? { change: implementationTypes.change } : implementationTypes)" :key="value" :value="value">{{ label }}</option>
+            <select v-model="fields.type" :disabled="retestHandoff || lockFiling || saving">
+              <option v-for="(label, value) in implementationTypes" :key="value" :value="value">{{ label }}</option>
             </select>
+            <small v-if="retestHandoff">运营单位已指定本机构复测，请办理变更实施报备。</small>
           </label>
           <p v-if="quota && fields.type === 'change' && !lockFiling" class="wide" role="status">
             {{ quota.year }} 年变更已用 {{ quota.used }} 次，剩余 {{ quota.limit - quota.used }} 次。
@@ -368,14 +349,14 @@ onBeforeUnmount(() => {
           </label>
           <div v-if="!institutional" class="field wide">
             <DirectoryPicker v-if="preferDirectory" v-model="fields.assessmentOrg" kind="institution"
-              :label="operator ? '目标测评机构' : '测评机构'" :required="operator" :initial-label="fields.assessmentOrg"
-              :disabled="isAmendment || saving || (operator && (isCorrection || Boolean(sourceApplication)))" @picked="clearReporter" />
-            <label v-else class="field"><span>{{ operator ? '目标测评机构' : '测评机构' }}</span>
-              <input v-model="fields.assessmentOrg" type="text" maxlength="200" :required="operator"
-                :placeholder="operator ? '填写新的测评机构' : selected?.assessmentOrg || '留空时沿用备案测评机构'"
-                :disabled="isAmendment || saving || (operator && (isCorrection || Boolean(sourceApplication)))" @change="clearReporter" />
+              label="测评机构" :initial-label="fields.assessmentOrg"
+              :disabled="isAmendment || saving" @picked="clearReporter" />
+            <label v-else class="field"><span>测评机构</span>
+              <input v-model="fields.assessmentOrg" type="text" maxlength="200"
+                :placeholder="selected?.assessmentOrg || '留空时沿用备案测评机构'"
+                :disabled="isAmendment || saving" @change="clearReporter" />
             </label>
-            <button v-if="!isAmendment && (!operator || (!isCorrection && !sourceApplication))" class="text-action directory-mode" type="button"
+            <button v-if="!isAmendment" class="text-action directory-mode" type="button"
               :disabled="saving" @click="preferDirectory = !preferDirectory">{{ preferDirectory ? '手工录入办理名称' : '从机构名录选择' }}</button>
           </div>
           <p v-else class="field wide"><span>测评机构</span><strong>{{ institution }}</strong></p>

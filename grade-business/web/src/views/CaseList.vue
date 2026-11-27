@@ -114,7 +114,7 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
                   <td v-show="visibleColumns.includes('systemName')">{{ item.systemName }}</td>
                   <td v-show="visibleColumns.includes('organizationName')">{{ item.organizationName }}</td>
                   <td v-show="visibleColumns.includes('assessmentOrg')">{{ item.assessmentOrg }}</td>
-                  <td v-show="visibleColumns.includes('number')" class="code">{{ item.number }}</td>
+                  <td v-show="visibleColumns.includes('number')" class="code">{{ item.number || "待分配" }}</td>
                   <td v-show="visibleColumns.includes('level')">
                     <span class="level-tag">{{ levels[item.level ?? ''] ?? '—' }}</span>
                   </td>
@@ -130,7 +130,7 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
                 </td>
                 <td><RouterLink class="text-action"
                   :to="{ path: '/' + kind + '/' + encodeURIComponent(item.id), query: route.query }"
-                  :aria-label="'查看 ' + item.number">详情</RouterLink></td>
+                  :aria-label="'查看 ' + (item.number || item.systemName)">详情</RouterLink></td>
               </tr>
             </tbody>
           </table>

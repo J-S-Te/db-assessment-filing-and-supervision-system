@@ -43,16 +43,16 @@ const reminders = computed(() => {
   ].filter(item => item.count > 0)
 })
 const regulatory = [
-  { key: 'home', name: 'M1 工作台', icon: LayoutDashboard, path: '/' },
-  { key: 'grade', name: 'M2 等级保护', icon: ClipboardCheck, path: '/filings' },
-  { key: 'archive', name: 'M3 全息档案', icon: FolderArchive, path: '/archives/directory' },
-  { key: 'monitor', name: 'M4 监测预警', icon: BellRing, path: '/alerts' },
+  { key: 'home', name: '工作台', icon: LayoutDashboard, path: '/' },
+  { key: 'grade', name: '等级保护', icon: ClipboardCheck, path: '/filings' },
+  { key: 'archive', name: '全息档案', icon: FolderArchive, path: '/archives/directory' },
+  { key: 'monitor', name: '监测预警', icon: BellRing, path: '/alerts' },
 ]
 const governance = [
-  { key: 'agent', name: 'M5 智能体', icon: BookOpenText, path: '/knowledge' },
-  { key: 'screen', name: 'M6 指挥驾驶舱', icon: Radar, path: dashboardPath },
-  { key: 'system', name: 'M7 系统管理', icon: Settings, path: '/audit' },
-  { key: 'ai-review', name: 'M8 AI 智能审核', icon: ScanText, path: '' },
+  { key: 'agent', name: '智能体', icon: BookOpenText, path: '/knowledge' },
+  { key: 'screen', name: '指挥驾驶舱', icon: Radar, path: dashboardPath },
+  { key: 'system', name: '系统管理', icon: Settings, path: '/audit' },
+  { key: 'ai-review', name: 'AI 智能审核', icon: ScanText, path: '' },
 ]
 const navigation = [
   { label: '业务监管', items: regulatory },
@@ -138,15 +138,15 @@ const scopedNavigation = {
   institution: {
     name: '测评机构端', role: '测评机构', avatar: '测', groups: [
       { label: '业务办理', items: [
-        { key: 'workbench', label: 'I1 工作台', icon: LayoutDashboard, path: 'workbench' },
-        { key: 'filings', label: 'I2 备案材料', icon: FileUp, path: 'filings' },
-        { key: 'implementations', label: 'I3 实施管理', icon: ClipboardPenLine, path: 'implementations' },
-        { key: 'reports', label: 'I4 测评报告', icon: FileChartColumn, path: 'reports' },
+        { key: 'workbench', label: '工作台', icon: LayoutDashboard, path: 'workbench' },
+        { key: 'filings', label: '备案材料', icon: FileUp, path: 'filings' },
+        { key: 'implementations', label: '实施管理', icon: ClipboardPenLine, path: 'implementations' },
+        { key: 'reports', label: '测评报告', icon: FileChartColumn, path: 'reports' },
         { key: 'hazards', label: '隐患复测', icon: ScanSearch, path: 'hazards' },
-        { key: 'directory', label: 'I6 基础数据', icon: Users, path: 'directory' },
+        { key: 'directory', label: '基础数据', icon: Users, path: 'directory' },
       ] },
       { label: '站内消息', items: [
-        { key: 'publications', label: 'I7 消息公告', icon: Megaphone, path: 'publications' },
+        { key: 'publications', label: '消息公告', icon: Megaphone, path: 'publications' },
         { key: 'alerts', label: '预警消息', icon: BellRing, path: 'alerts' },
         { key: 'feedback', label: '消息通知', icon: MessageSquareText, path: 'feedback' },
       ] },
@@ -157,7 +157,6 @@ const scopedNavigation = {
       { label: '常用办理', items: [
         { key: 'workbench', label: '我的工作台', icon: LayoutDashboard, path: 'workbench' },
         { key: 'filings', label: '备案办理', icon: Files, path: 'filings' },
-        { key: 'implementations', label: '实施报备', icon: ClipboardPenLine, path: 'implementations' },
         { key: 'hazards', label: '隐患整改', icon: Wrench, path: 'hazards' },
         { key: 'remediations', label: '整改规划', icon: ClipboardList, path: 'remediations' },
         { key: 'assessment-history', label: '测评历史对比', icon: History, path: 'assessment-history' },
@@ -402,7 +401,11 @@ onBeforeUnmount(() => {
     <aside id="v2-sidebar" class="v2-sidebar" :class="{ 'v2-sidebar-open': sidebarOpen }">
       <RouterLink class="v2-brand" :to="session.home" aria-label="网络安全等级保护平台首页">
         <span class="v2-logo" aria-hidden="true"><ShieldCheck :size="21" /></span>
-        <span>网络安全等级保护平台<small>网络安全监管</small></span>
+        <span class="v2-brand-title">
+          <span>网络安全</span>
+          <span>等级保护平台</span>
+          <small>网络安全监管</small>
+        </span>
       </RouterLink>
       <nav aria-label="业务导航" class="v2-navigation">
         <template v-for="group in visibleNavigation" :key="group.label">

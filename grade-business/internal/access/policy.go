@@ -168,7 +168,7 @@ func view(actor Principal) sessionView {
 			"reports", "hazards", "directory", "publications", "alerts", "feedback"},
 			[]string{"filing-applications", "material-expiries", "assessment-dues"})
 	case Operator:
-		return scopedView(data, "operator", "UNIT", []string{"workbench", "filings", "implementations",
+		return scopedView(data, "operator", "UNIT", []string{"workbench", "filings",
 			"hazards", "remediations", "assessment-history", "supervisions", "feedback", "alerts",
 			"publications"}, []string{"filing-applications", "material-expiries", "assessment-dues"})
 	}

@@ -11,6 +11,42 @@ import (
 
 const operatorFilingsURL = "/api/v1/operator/filings"
 
+// TestOperatorFilingGetsNumberAtFinalApproval 验证首报编号由管理端终审分配。
+// 参数 t 为隔离 PostgreSQL 和真实 HTTP 路由的测试上下文。
+// 返回值 无。
+func TestOperatorFilingGetsNumberAtFinalApproval(t *testing.T) {
+	_, handler := operatorFilingFixture(t)
+	owner := operatorFilingQuery("本地备案单位")
+	form := map[string]string{
+		"systemName": "无编号首报", "assessmentOrg": "隔离测评机构", "level": "2",
+	}
+	item := readResponse[mutation](t, requestJSON(handler, "POST", operatorFilingsURL+owner, form), 201)
+	form["number"] = "BA-UNAUTHORIZED"
+	other := readResponse[mutation](t, requestJSON(handler, "POST", operatorFilingsURL+owner, form), 201)
+	local := operatorFilingsURL + "/" + item.ID
+	admin := filingsURL + "/" + item.ID
+	for _, id := range []string{item.ID, other.ID} {
+		detail := readResponse[recordDetail](t, requestJSON(handler, "GET", operatorFilingsURL+"/"+id+owner, nil), 200)
+		if detail.Number != "" {
+			t.Fatalf("运营者新建时已有正式编号: %q", detail.Number)
+		}
+	}
+	sent := submitOperatorFiling(t, handler, local, owner, item.Version)
+	partner := institutionBase + "/filings/" + item.ID
+	initial := readResponse[mutation](t, scopedReview(handler, partner, firstSubmissionScope("隔离测评机构"),
+		approve, sent.Version), 200)
+	assertError(t, reviewRequest(handler, admin, approve, "", initial.Version), 400, "filing_number_required")
+	createFiling(t, handler, "BA-ASSIGNED-001")
+	decision := map[string]any{"decision": approve, "expectedVersion": initial.Version, "filingNumber": "ba-assigned-001"}
+	assertError(t, requestJSON(handler, "POST", admin+"/review-actions", decision), 409, "duplicate_number")
+	decision["filingNumber"] = "BA-ASSIGNED-002"
+	readResponse[mutation](t, requestJSON(handler, "POST", admin+"/review-actions", decision), 200)
+	final := readResponse[recordDetail](t, requestJSON(handler, "GET", local+owner, nil), 200)
+	if final.Number != "BA-ASSIGNED-002" || final.Status != approved {
+		t.Fatalf("管理端分配的编号未与终审状态同步: %+v", final)
+	}
+}
+
 // TestOperatorFilingTracksSharedReview 核对自主备案在三端共享提交、退回及通过进度。
 // 参数 t 为隔离测试库与临时材料目录的测试上下文。
 // 返回值 无。
@@ -34,13 +70,13 @@ func TestOperatorFilingTracksSharedReview(t *testing.T) {
 	if progress.SubmittedAt == nil || progress.ReceiptAvailable == nil || !*progress.ReceiptAvailable {
 		t.Fatalf("待审详情缺少真实提交时间和回执入口: %+v", progress)
 	}
-	assertOperatorFilingReceipt(t, handler, receipt, "提交回执")
+	assertOperatorFilingReceipt(t, handler, receipt, "提交回执", "待分配")
 	back := readResponse[mutation](t, requestJSON(handler, "POST", partner+"/review-actions"+partnerScope,
 		reviewInput{versionInput: versionInput{sent.Version}, Decision: returnForFix, Comment: "请复核单位材料"}), 200)
 	assertOperatorReviewNotice(t, s, item.ID, returned)
 	assertOperatorFilingScopeStatus(t, handler, item.ID, own, returned)
 	assertError(t, requestJSON(handler, "PATCH", local+own, map[string]any{
-		"number": "BA-SELF", "systemName": "自主备案系统", "level": "2",
+		"systemName": "自主备案系统", "level": "2",
 		"assessmentOrg": "补正阶段不得自行改派", "expectedVersion": back.Version,
 	}), 409, "conflict")
 	sent = readResponse[mutation](t,
@@ -48,10 +84,12 @@ func TestOperatorFilingTracksSharedReview(t *testing.T) {
 	assertAssignedNotice(t, s, "filings", item.ID, sent.Version, pendingInitial, "institution", "隔离测评机构")
 	initial := readResponse[mutation](t, scopedReview(handler, partner, partnerScope, approve, sent.Version), 200)
 	assertOperatorFilingScopeStatus(t, handler, item.ID, own, pendingFinal)
-	readResponse[mutation](t, reviewRequest(handler, admin, approve, "", initial.Version), 200)
+	readResponse[mutation](t, requestJSON(handler, "POST", admin+"/review-actions", reviewInput{
+		versionInput: versionInput{initial.Version}, Decision: approve, FilingNumber: "BA-SELF",
+	}), 200)
 	assertOperatorReviewNotice(t, s, item.ID, approved)
 	assertOperatorFilingScopeStatus(t, handler, item.ID, own, approved)
-	assertOperatorFilingReceipt(t, handler, receipt, "审核通过回执")
+	assertOperatorFilingReceipt(t, handler, receipt, "审核通过回执", "BA-SELF")
 	events := readResponse[itemResponse[reviewEvent]](
 		t, requestJSON(handler, "GET", local+"/review-history"+own, nil), 200).Items
 	if len(events) != 5 || events[3].Comment != "请复核单位材料" ||
@@ -78,8 +116,9 @@ func TestOperatorFilingWriteAndReadScope(t *testing.T) {
 	if len(result.Items) != 0 {
 		t.Fatalf("另一个运营单位看到备案: %+v", result)
 	}
+	search := "&q=" + url.QueryEscape("自主备案系统") + "&status=draft&limit=1"
 	result = readResponse[listResponse](t,
-		requestJSON(handler, "GET", operatorFilingsURL+own+"&q=BA-SELF&status=draft&limit=1", nil), 200)
+		requestJSON(handler, "GET", operatorFilingsURL+own+search, nil), 200)
 	if len(result.Items) != 1 || result.Items[0].ID != item.ID {
 		t.Fatalf("本单位未获得筛选后的备案: %+v", result)
 	}
@@ -90,6 +129,10 @@ func TestOperatorFilingWriteAndReadScope(t *testing.T) {
 		"assessmentOrg": "隔离候选机构", "level": "3", "expectedVersion": item.Version}
 	assertError(t, requestJSON(handler, "PATCH", local+other, change), 404, "not_found")
 	updated := readResponse[mutation](t, requestJSON(handler, "PATCH", local+own, change), 200)
+	detail := readResponse[recordDetail](t, requestJSON(handler, "GET", local+own, nil), 200)
+	if detail.Number != "" {
+		t.Fatalf("运营者编辑时写入了正式编号: %q", detail.Number)
+	}
 	assertError(t, requestJSON(handler, "PATCH", local+own, change), 409, "conflict")
 	assertError(t, requestJSON(handler, "POST", local+"/submit"+other, versionInput{updated.Version}), 404, "not_found")
 	assertError(t, requestJSON(handler, "POST", local+"/attachments"+other, nil), 404, "not_found")
@@ -179,7 +222,7 @@ func operatorFilingQuery(organization string) string {
 func createOperatorFiling(t *testing.T, handler http.Handler, scope string) mutation {
 	t.Helper()
 	res := requestJSON(handler, "POST", operatorFilingsURL+scope, map[string]string{
-		"number": "BA-SELF", "systemName": "自主备案系统", "assessmentOrg": "隔离测评机构", "level": "2",
+		"systemName": "自主备案系统", "assessmentOrg": "隔离测评机构", "level": "2",
 	})
 	return readResponse[mutation](t, res, 201)
 }
@@ -212,15 +255,15 @@ func assertOperatorFilingScopeStatus(t *testing.T, handler http.Handler, id, sco
 }
 
 // assertOperatorFilingReceipt 核对回执类型及附件仅包含必要业务字段。
-// 参数 t 和 handler 为测试环境，path 为回执地址，title 为所需留痕类型。
+// 参数 t 和 handler 为测试环境，path 为回执地址，title 和 number 为应展示的类型和编号。
 // 返回值 无。
-func assertOperatorFilingReceipt(t *testing.T, handler http.Handler, path, title string) {
+func assertOperatorFilingReceipt(t *testing.T, handler http.Handler, path, title, number string) {
 	t.Helper()
 	res := requestJSON(handler, "GET", path, nil)
 	if res.Code != 200 || res.Header().Get("Content-Type") != "text/plain; charset=utf-8" ||
 		res.Header().Get("Content-Disposition") != "attachment; filename=filing-receipt.txt" ||
 		res.Header().Get("Cache-Control") != "no-store" || !strings.Contains(res.Body.String(), title) ||
-		!strings.Contains(res.Body.String(), "BA-SELF") {
+		!strings.Contains(res.Body.String(), "当前备案编号："+number+"\n") {
 		t.Fatalf("实际回执不符: %d %s", res.Code, res.Body.String())
 	}
 }

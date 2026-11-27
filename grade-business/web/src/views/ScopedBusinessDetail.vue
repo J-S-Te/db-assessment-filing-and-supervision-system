@@ -41,11 +41,8 @@ const resource = computed(() => {
 const id = computed(() => typeof route.params.id === 'string' ? route.params.id : '')
 const path = computed(() => id.value && resource.value
   ? scopedBusinessPath(props.audience, resource.value, id.value) : '')
-const backApplicationId = computed(() => props.audience === 'operator' && resource.value === 'implementations'
-  ? queryValue(route.query.applicationId) : '')
 const backLink = computed(() => ({
-  path: backApplicationId.value ? '/operator/filing-applications/' + encodeURIComponent(backApplicationId.value)
-    : '/' + props.audience + '/' + (resource.value ?? 'feedback'),
+  path: '/' + props.audience + '/' + (resource.value ?? 'feedback'),
   query: resource.value === 'hazards' ? {
     organization: scope.value || undefined, planId: queryValue(route.query.planId) || undefined,
     filingId: queryValue(route.query.filingId) || undefined, q: queryValue(route.query.q) || undefined,
@@ -120,16 +117,6 @@ const relatedImplementation = computed(() => {
 })
 const retestWaiting = computed(() => operator.value && Boolean(retestTarget.value)
   && relatedImplementation.value?.status !== 'approved')
-const retestPath = computed(() => {
-  if (!operator.value || record.value?.resource !== 'filing-applications' || !retestTarget.value) return
-  const applicationId = id.value
-  return relatedImplementation.value
-    ? { path: '/operator/implementations/' + encodeURIComponent(relatedImplementation.value.id),
-      query: { organization: scope.value, applicationId } }
-    : { path: '/operator/implementations/new',
-      query: { organization: scope.value, filingId: record.value.detail.filingId,
-        target: retestTarget.value, applicationId } }
-})
 const isDraft = computed(() => record.value?.detail.status === 'draft')
 const draftEditRoute = computed(() => path.value && isDraft.value && canEdit.value &&
   (resource.value === 'implementations' || resource.value === 'remediations')
@@ -466,7 +453,7 @@ function facts(item: BusinessRecord): Array<[string, string | undefined]> {
   if (item.resource === 'filings') {
     const { number, assessmentOrg, level, submittedAt } = item.detail
     const lastSubmission = submittedAt ?? history.value.find(event => event.action === 'submit')?.occurredAt
-    return [...base, ['备案编号', number], ['测评机构', assessmentOrg],
+    return [...base, ['备案编号', number || '待分配'], ['测评机构', assessmentOrg],
       ['定级', level ? levels[level] : undefined], ['提交时间', formatTime(lastSubmission)]]
   }
   if (item.resource === 'filing-applications') {
@@ -517,7 +504,7 @@ onScopeDispose(() => {
 <template>
   <section class="scoped-detail" :aria-label="title">
     <RouterLink class="back-link" :to="backLink">
-      <ArrowLeft :size="16" aria-hidden="true" />{{ resource === 'hazards' ? '返回整改单' : backApplicationId ? '返回备案变更申请' : '返回业务列表' }}
+      <ArrowLeft :size="16" aria-hidden="true" />{{ resource === 'hazards' ? '返回整改单' : '返回业务列表' }}
     </RouterLink>
     <p v-if="!path" class="form-message warning-message">当前入口无法打开此类业务。</p>
     <p v-else-if="!scope" class="form-message warning-message">请先在业务列表选择办理范围。</p>
@@ -647,19 +634,18 @@ onScopeDispose(() => {
               </table>
             </div>
           </section>
-          <section v-if="!editing && retestPath" class="panel detail-panel">
+          <section v-if="!editing && operator && retestTarget" class="panel detail-panel">
             <header class="panel-heading panel-compact"><h2>换机构复测</h2></header>
             <dl class="facts">
               <div><dt>目标测评机构</dt><dd>{{ retestTarget }}</dd></div>
               <div><dt>实施报备状态</dt><dd>
-                {{ relatedImplementation ? implementationStatuses[relatedImplementation.status] : '待发起' }}
+                {{ relatedImplementation ? implementationStatuses[relatedImplementation.status] : '待测评机构发起' }}
               </dd></div>
             </dl>
             <div class="retest-actions">
-              <span v-if="canSubmit && retestWaiting" class="muted">实施报备通过监管复核后可提交备案变更。</span>
-              <RouterLink v-if="relatedImplementation || canEdit" class="button neutral" :to="retestPath">
-                {{ relatedImplementation ? '查看关联实施报备' : '发起实施报备' }}
-              </RouterLink>
+              <span v-if="retestWaiting" class="muted">
+                请联系目标测评机构办理实施报备。通过监管复核后可提交备案变更。
+              </span>
             </div>
           </section>
           <section v-if="!editing && historySupported" class="panel detail-panel">

@@ -32,8 +32,7 @@ const canReview = computed(() => hasPermission('org.filing.audit') && !operator.
 const reviewQueue = computed(() => canReview.value && queryValue(route.query.review) === 'assigned')
 const heading = computed(() => operator.value ? '我的备案办理' : reviewQueue.value ? '机构初审' : '机构报送')
 const tabs = computed(() => operator.value
-  ? { filings: collections.filings, 'filing-applications': collections['filing-applications'],
-    implementations: collections.implementations }
+  ? { filings: collections.filings, 'filing-applications': collections['filing-applications'] }
   : collections)
 const scopeDraft = ref('')
 const scopeQuery = computed(() => ({ [scopeKey.value]: scope.value }))
@@ -81,7 +80,7 @@ function chooseScope() {
  * 返回值 报告编号或原备案编号。
  */
 function reference(item: CaseSummary | FilingApplicationSummary | ImplementationSummary) {
-  return 'number' in item ? item.number : item.filingNumber
+  return 'number' in item ? item.number || '待分配' : item.filingNumber
 }
 
 /**
@@ -167,7 +166,7 @@ refreshBusinessOnFocus(() => { if (scope.value && !failedReports.value) void ref
           <span class="v2-toolbar-spacer"></span>
           <a v-if="onReports" class="button neutral" :href="reportExport" download>导出测评台账</a>
           <RouterLink v-if="!reviewQueue" class="button primary" :to="{ path: path + '/new', query: scopeQuery }">
-            {{ operator && resource === 'implementations' ? '发起换机构复测报备' : collection.create }}
+            {{ collection.create }}
           </RouterLink>
         </div>
       </form>

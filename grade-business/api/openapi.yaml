@@ -6472,6 +6472,7 @@ paths:
     - "$ref": "#/components/parameters/FeedbackInstitution"
     get:
       operationId: listInstitutionImplementationOptions
+      description: 包含本机构所属的有效备案，以及运营单位在换机构申请草稿中指定本机构复测的有效备案。
       responses:
         '200':
           description: 业务操作结果
@@ -7032,78 +7033,6 @@ paths:
           application/json:
             schema:
               "$ref": "#/components/schemas/Submit"
-  "/operator/implementations/{id}":
-    parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    get:
-      operationId: operatorGetImplementation
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ImplementationDetail"
-        default:
-          "$ref": "#/components/responses/Error"
-    patch:
-      operationId: operatorEditImplementation
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ImplementationMutation"
-        default:
-          "$ref": "#/components/responses/Error"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              properties:
-                filingId:
-                  type: string
-                  format: uuid
-                type:
-                  type: string
-                  enum:
-                  - change
-                reporterId: {type: string, format: uuid}
-                reporter:
-                  type: string
-                contact:
-                  type: string
-                assessmentOrg:
-                  type: string
-                plannedStart:
-                  type: string
-                  format: date
-                plannedEnd:
-                  type: string
-                  format: date
-                plan:
-                  type: string
-                expectedVersion:
-                  type: integer
-                  format: int64
-                  minimum: 1
-              required:
-              - filingId
-              - type
-              - plannedStart
-              - plannedEnd
-              - plan
-              - expectedVersion
   "/operator/filings":
     parameters:
     - "$ref": "#/components/parameters/ReviewOrganization"
@@ -7319,221 +7248,6 @@ paths:
                 "$ref": "#/components/schemas/FilingApplicationMutation"
         default:
           "$ref": "#/components/responses/Error"
-  "/operator/implementations":
-    parameters:
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    get:
-      operationId: operatorListImplementations
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                properties:
-                  items:
-                    type: array
-                    items:
-                      "$ref": "#/components/schemas/ImplementationRow"
-                  nextCursor:
-                    type: string
-                required:
-                - items
-        default:
-          "$ref": "#/components/responses/Error"
-      parameters:
-      - name: q
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 120
-      - name: cursor
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 100
-      - name: status
-        in: query
-        required: false
-        schema:
-          type: string
-          enum:
-          - draft
-          - submitted
-          - pending_initial
-          - pending_final
-          - pending_supervision
-          - approved
-          - returned
-          - withdrawn
-      - name: type
-        in: query
-        required: false
-        schema:
-          type: string
-          enum:
-          - routine
-          - change
-      - name: archive
-        in: query
-        required: false
-        schema:
-          type: string
-          enum:
-          - archived
-          - unarchived
-    post:
-      operationId: operatorCreateImplementation
-      responses:
-        '201':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ImplementationMutation"
-        default:
-          "$ref": "#/components/responses/Error"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              properties:
-                filingId:
-                  type: string
-                  format: uuid
-                type:
-                  type: string
-                  enum:
-                  - change
-                reporterId: {type: string, format: uuid}
-                reporter:
-                  type: string
-                contact:
-                  type: string
-                assessmentOrg:
-                  type: string
-                plannedStart:
-                  type: string
-                  format: date
-                plannedEnd:
-                  type: string
-                  format: date
-                plan:
-                  type: string
-              required:
-              - filingId
-              - type
-              - plannedStart
-              - plannedEnd
-              - plan
-              - assessmentOrg
-  "/operator/implementations/filing-options":
-    parameters:
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    get:
-      operationId: operatorListImplementationOptions
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                properties:
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        systemName:
-                          type: string
-                        organizationName:
-                          type: string
-                        number:
-                          type: string
-                        assessmentOrg:
-                          type: string
-                      required:
-                      - id
-                      - systemName
-                      - organizationName
-                      - number
-                      - assessmentOrg
-                required:
-                - items
-        default:
-          "$ref": "#/components/responses/Error"
-      parameters:
-      - name: q
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: filingId
-        in: query
-        description: 精确查询属于当前运营单位的指定有效备案
-        schema:
-          type: string
-          format: uuid
-  "/operator/implementations/quota":
-    parameters:
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    get:
-      operationId: operatorGetImplementationQuota
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                properties:
-                  resubmitAvailableAt: {type: string, format: date-time}
-                  year:
-                    type: integer
-                    format: int64
-                    minimum: 1
-                  used:
-                    type: integer
-                    format: int64
-                    minimum: 0
-                  limit:
-                    type: integer
-                    format: int64
-                    minimum: 1
-                required:
-                - year
-                - used
-                - limit
-        default:
-          "$ref": "#/components/responses/Error"
-      parameters:
-      - name: filingId
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
   "/operator/filings/{id}/review-history":
     parameters:
     - name: id
@@ -7588,106 +7302,6 @@ paths:
                       "$ref": "#/components/schemas/FilingApplicationEvent"
                 required:
                 - items
-        default:
-          "$ref": "#/components/responses/Error"
-  "/operator/implementations/{id}/review-history":
-    parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    get:
-      operationId: operatorGetImplementationHistory
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                properties:
-                  items:
-                    type: array
-                    items:
-                      "$ref": "#/components/schemas/ImplementationEvent"
-                  nextBeforeVersion:
-                    type: integer
-                    format: int64
-                    minimum: 1
-                required:
-                - items
-        default:
-          "$ref": "#/components/responses/Error"
-      parameters:
-      - name: beforeVersion
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int64
-          minimum: 1
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 100
-  "/operator/implementations/{id}/submit":
-    parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    post:
-      operationId: submitOperatorImplementation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/Submit"
-      responses:
-        '200':
-          description: 已保存的报备状态
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ImplementationMutation"
-        default:
-          "$ref": "#/components/responses/Error"
-  "/operator/implementations/{id}/withdraw":
-    parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    - "$ref": "#/components/parameters/ReviewOrganization"
-    post:
-      operationId: withdrawOperatorImplementation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/Submit"
-      responses:
-        '200':
-          description: 已保存的报备状态
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ImplementationMutation"
         default:
           "$ref": "#/components/responses/Error"
   "/operator/filings/{id}/receipt":
@@ -11891,38 +11505,6 @@ paths:
           minimum: 1
         required: true
       - name: institution
-        in: query
-        schema:
-          type: string
-          maxLength: 200
-        required: true
-  "/operator/implementations/{id}/precheck":
-    get:
-      operationId: readOperatorImplementationPrecheck
-      responses:
-        '200':
-          description: 业务操作结果
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ImplementationPrecheck"
-        default:
-          "$ref": "#/components/responses/Error"
-      parameters:
-      - name: id
-        in: path
-        schema:
-          type: string
-          format: uuid
-        required: true
-      - name: expectedVersion
-        in: query
-        schema:
-          type: integer
-          format: int64
-          minimum: 1
-        required: true
-      - name: organization
         in: query
         schema:
           type: string
@@ -17426,6 +17008,10 @@ components:
           type: string
           maxLength: 1000
           description: 退回补正时必填
+        filingNumber:
+          type: string
+          maxLength: 80
+          description: 管理端终审通过无编号的运营者首报时必填。
         expectedVersion:
           type: integer
           format: int64
@@ -17524,7 +17110,6 @@ components:
       type: object
       additionalProperties: false
       required:
-      - number
       - systemName
       - assessmentOrg
       - level
@@ -17532,6 +17117,8 @@ components:
         classificationAssessment: {$ref: "#/components/schemas/ClassificationInput"}
         number:
           type: string
+          deprecated: true
+          description: 兼容旧客户端，运营者传入的值不作为备案编号。
         systemName:
           type: string
         assessmentOrg:
@@ -17548,7 +17135,6 @@ components:
       type: object
       additionalProperties: false
       required:
-      - number
       - systemName
       - assessmentOrg
       - level
@@ -17557,6 +17143,8 @@ components:
         classificationAssessment: {$ref: "#/components/schemas/ClassificationInput"}
         number:
           type: string
+          deprecated: true
+          description: 兼容旧客户端，运营者传入的值不作为备案编号。
         systemName:
           type: string
         assessmentOrg:
@@ -17670,7 +17258,6 @@ components:
       type: object
       additionalProperties: false
       required:
-      - number
       - systemName
       - organizationName
       - assessmentOrg
@@ -17680,6 +17267,7 @@ components:
         classificationAssessment: {$ref: "#/components/schemas/ClassificationInput"}
         number:
           type: string
+          description: 通常必填。运营者首报待分配编号时省略，正式编号随后在终审中分配。
         systemName:
           type: string
         organizationName:

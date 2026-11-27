@@ -112,7 +112,8 @@ const retestObserverSQL = `($1='operator' AND w.resource='hazards' AND w.status=
 const taskMarksSQL = taskClockSQL + `
 	SELECT w.*, w.audience<>$1 AS monitor
 	FROM workflow_tasks w
-	WHERE ` + currentAssigneeSQL + ` OR ` + retestObserverSQL + taskDatesSQL
+	WHERE ($1 <> 'operator' OR w.resource <> 'implementations')
+	AND (` + currentAssigneeSQL + ` OR ` + retestObserverSQL + `)` + taskDatesSQL
 
 const taskDatesSQL = `
 ), dated AS (

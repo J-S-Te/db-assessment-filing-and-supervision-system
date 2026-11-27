@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import AsyncState from './AsyncState.vue'
+import DirectoryPicker from './DirectoryPicker.vue'
 import { api, errorText, isAbort, ApiError } from '../lib/api'
 import { levels, risks, type CaseDetail } from '../lib/domain'
 import {
@@ -169,9 +170,9 @@ function correctionBody(record: EditableBusinessRecord) {
     const organizationName = fields.organizationName.trim()
     const level = fields.level
     const assessmentOrg = fields.assessmentOrg.trim()
-    if (number && systemName && organizationName && assessmentOrg && level) return {
-      number, systemName, level, assessmentOrg, expectedVersion,
-      ...(!operator.value ? { organizationName } : {}),
+    if ((operator.value || number) && systemName && organizationName && assessmentOrg && level) return {
+      systemName, level, assessmentOrg, expectedVersion,
+      ...(!operator.value ? { number, organizationName } : {}),
     }
     return
   }
@@ -212,7 +213,9 @@ onScopeDispose(() => request?.abort())
       <form @submit.prevent="save">
         <fieldset class="form-grid" :disabled="disabled">
           <template v-if="record.resource === 'filings'">
-            <label class="field"><span>备案编号</span><input v-model="fields.number" required maxlength="80"></label>
+            <label v-if="!operator" class="field">
+              <span>备案编号</span><input v-model="fields.number" required maxlength="80">
+            </label>
             <label class="field"><span>系统名称</span><input v-model="fields.systemName" required maxlength="200"></label>
             <label v-if="!operator" class="field"><span>所属单位</span><input v-model="fields.organizationName" required maxlength="200"></label>
             <label v-if="operator && record.detail.status === 'draft'" class="field"><span>测评机构</span>
@@ -229,14 +232,21 @@ onScopeDispose(() => request?.abort())
             <label class="field wide"><span>申请理由</span>
               <textarea v-model="fields.reason" rows="4" maxlength="1000" required />
             </label>
-            <label v-for="field in editableFields" :key="field" class="field">
-              <span>{{ filingFields[field] }}</span>
-              <small v-if="original" class="muted">原值 {{ displayFilingValue(field, original[field]) }}</small>
-              <select v-if="field === 'level'" v-model="fields[field]" required>
-                <option v-for="(label, key) in levels" :key="key" :value="key">{{ label }}</option>
-              </select>
-              <input v-else v-model="fields[field]" maxlength="200" required>
-            </label>
+            <template v-for="field in editableFields" :key="field">
+              <div v-if="operator && field === 'assessmentOrg'" class="field">
+                <DirectoryPicker v-model="fields.assessmentOrg" kind="institution" label="测评机构"
+                  :initial-label="fields.assessmentOrg" required :disabled="disabled" />
+                <small v-if="original" class="muted">原值 {{ original.assessmentOrg }}</small>
+              </div>
+              <label v-else class="field">
+                <span>{{ filingFields[field] }}</span>
+                <small v-if="original" class="muted">原值 {{ displayFilingValue(field, original[field]) }}</small>
+                <select v-if="field === 'level'" v-model="fields[field]" required>
+                  <option v-for="(label, key) in levels" :key="key" :value="key">{{ label }}</option>
+                </select>
+                <input v-else v-model="fields[field]" maxlength="200" required>
+              </label>
+            </template>
           </template>
 
           <template v-else-if="record.resource === 'implementations'">
