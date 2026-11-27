@@ -75,7 +75,15 @@ export interface Precheck {
   checkSource?: 'deepseek' | 'local_rules'
   fallbackReason?: string
   failure?: string
-  progressStage?: 'materials' | 'deepseek' | 'local_rules' | 'fallback'
+  progressStage?: 'materials' | 'deepseek' | 'deepseek_summary' | 'local_rules' | 'fallback'
+  materialReviewTotal?: number
+  materialReviews?: {
+    attachmentId: string
+    fileName: string
+    status: 'reviewed' | 'unreadable' | 'failed'
+    failedChecks?: number
+    manualChecks?: number
+  }[]
   recommendation?: {
     action: 'correct' | 'manual_review' | 'pass'
     missingMaterials?: string[]

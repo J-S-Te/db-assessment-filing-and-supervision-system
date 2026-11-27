@@ -54,7 +54,8 @@ func recommendReview(job Job) *Recommendation {
 	switch {
 	case len(recommendation.MissingMaterials) > 0 || len(recommendation.FailedChecks) > 0:
 		recommendation.Action = "correct"
-	case recommendation.Incomplete || len(recommendation.ManualChecks) > 0:
+	case recommendation.Incomplete || len(recommendation.ManualChecks) > 0 ||
+		job.MaterialReviewTotal > 0 && job.Source != "deepseek":
 		recommendation.Action = "manual_review"
 	}
 	return recommendation
