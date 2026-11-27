@@ -9,14 +9,61 @@ defineProps<{ loginState: 'idle' | 'checking' | 'success' | 'error' }>()
 const tilt = useTemplateRef('tilt')
 const orbit = useTemplateRef('orbit')
 const impact = useTemplateRef('impact')
+const shieldButton = useTemplateRef('shieldButton')
 const pulse = ref(0)
 const impactDuration = 500
+const resetDuration = 360
 const defaultPitch = 3
 const defaultYaw = -24
 const pitch = ref(defaultPitch)
 const yaw = ref(defaultYaw)
 let drag: { pointerId: number; x: number; y: number } | undefined
 let dragged = false
+let restoreAfterMouseDrag = false
+let resetFrame = 0
+
+/**
+ * 用途 取消盾牌复位动画，使下一次交互可从当前姿态接管。
+ * 参数 无。
+ * 返回值 无。
+ */
+function cancelPoseReset() {
+  cancelAnimationFrame(resetFrame)
+  resetFrame = 0
+}
+
+/**
+ * 用途 鼠标完成拖动并离开盾牌时，沿最短角度缓动回初始姿态。
+ * 参数 无。
+ * 返回值 无。
+ */
+function resetDraggedPose() {
+  if (drag || !restoreAfterMouseDrag) return
+  restoreAfterMouseDrag = false
+  tilt.value?.style.removeProperty('--tilt-x')
+  tilt.value?.style.removeProperty('--tilt-y')
+  const startPitch = pitch.value
+  const startYaw = yaw.value
+  const targetYaw = defaultYaw + 360 * Math.round((startYaw - defaultYaw) / 360)
+  const started = performance.now()
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  /**
+   * 用途 计算当前复位帧的横向旋转与俯仰角。
+   * 参数 time 为浏览器给出的帧时间。
+   * 返回值 无。
+   */
+  const applyFrame = (time: number) => {
+    const progress = Math.max(0, Math.min(1, (time - started) / resetDuration))
+    const remaining = (1 - progress) ** 3
+    pitch.value = defaultPitch + (startPitch - defaultPitch) * remaining
+    yaw.value = progress < 1 ? targetYaw + (startYaw - targetYaw) * remaining : defaultYaw
+    resetFrame = progress < 1 ? requestAnimationFrame(applyFrame) : 0
+  }
+
+  if (reduced) applyFrame(started + resetDuration)
+  else resetFrame = requestAnimationFrame(applyFrame)
+}
 
 /**
  * 用途 根据鼠标相对视口中心的位置调整盾牌透视，合成倾角上限为 12 度。
@@ -24,7 +71,7 @@ let dragged = false
  * 返回值 无。
  */
 function followPointer(event: MouseEvent) {
-  if (drag) return
+  if (drag || resetFrame) return
   const x = 2 * event.clientX / window.innerWidth - 1
   const y = 2 * event.clientY / window.innerHeight - 1
   const angle = 12 / Math.max(1, Math.hypot(x, y))
@@ -42,6 +89,7 @@ function resetPointer(event: Event) {
   tilt.value?.style.removeProperty('--tilt-x')
   tilt.value?.style.removeProperty('--tilt-y')
   setOrbitSpeed(1)
+  resetDraggedPose()
 }
 
 /**
@@ -54,12 +102,24 @@ function setOrbitSpeed(rate: number) {
 }
 
 /**
+ * 用途 鼠标移出盾牌时恢复围栏转速，结束拖动后才复位盾牌姿态。
+ * 参数 无。
+ * 返回值 无。
+ */
+function leaveShield() {
+  setOrbitSpeed(1)
+  resetDraggedPose()
+}
+
+/**
  * 用途 记录按下位置并捕获指针，让拖动越过盾牌边沿后仍能连续旋转。
  * 参数 event 为盾牌上鼠标或触屏的按下事件。
  * 返回值 无。
  */
 function startDrag(event: PointerEvent) {
   if (drag || !event.isPrimary || event.button !== 0) return
+  if (event.pointerType === 'mouse' && resetFrame) restoreAfterMouseDrag = true
+  cancelPoseReset()
   const target = event.currentTarget as HTMLButtonElement
   target.setPointerCapture(event.pointerId)
   drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
@@ -83,6 +143,7 @@ function moveDrag(event: PointerEvent) {
   if (!dragged && Math.hypot(x, y) < 5) return
 
   dragged = true
+  restoreAfterMouseDrag = event.pointerType === 'mouse'
   yaw.value += x * 1.1
   pitch.value = Math.max(-60, Math.min(60, pitch.value - y * .45))
   drag.x = event.clientX
@@ -90,12 +151,18 @@ function moveDrag(event: PointerEvent) {
 }
 
 /**
- * 用途 在释放或取消拖动时保留当前观察角度并结束本次手势。
+ * 用途 结束拖动手势，鼠标已经移出盾牌时触发复位。
  * 参数 event 为指针释放、取消或发现主键已松开的移动事件。
  * 返回值 无。
  */
 function endDrag(event: PointerEvent) {
-  if (drag?.pointerId === event.pointerId) drag = undefined
+  if (drag?.pointerId !== event.pointerId) return
+  drag = undefined
+  if (!restoreAfterMouseDrag) return
+
+  // 释放指针捕获之前，事件目标可能仍是按钮，用实际指针位置判断。
+  const hit = document.elementFromPoint(event.clientX, event.clientY)
+  if (!shieldButton.value?.contains(hit)) resetDraggedPose()
 }
 
 /**
@@ -147,6 +214,8 @@ function rotateWithKeyboard(event: KeyboardEvent) {
       break
     default: return
   }
+  cancelPoseReset()
+  restoreAfterMouseDrag = false
   event.preventDefault()
 }
 
@@ -160,6 +229,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  cancelPoseReset()
   window.removeEventListener('mousemove', followPointer)
   window.removeEventListener('pointermove', moveDrag)
   window.removeEventListener('pointerup', endDrag)
@@ -177,9 +247,9 @@ onUnmounted(() => {
       <img class="security-base-glow" :src="baseArt" alt="" width="1122" height="1402">
       <div class="security-grid" aria-hidden="true"></div>
       <div class="security-flow" aria-hidden="true"><i></i><i></i><i></i></div>
-      <button class="security-core" type="button" aria-label="旋转或激活安防盾牌"
+      <button ref="shieldButton" class="security-core" type="button" aria-label="旋转或激活安防盾牌"
         aria-describedby="security-controls"
-        @mouseenter="setOrbitSpeed(1.4)" @mouseleave="setOrbitSpeed(1)"
+        @mouseenter="setOrbitSpeed(1.4)" @mouseleave="leaveShield"
         @pointerdown="startDrag"
         @keydown="rotateWithKeyboard" @click="activate">
         <span class="security-float" aria-hidden="true">
