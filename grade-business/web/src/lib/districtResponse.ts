@@ -1,15 +1,23 @@
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from 'vue'
 import { api } from './api'
 import type { AlertCounts } from './alerts'
-import { dashboardPath, type DashboardAlert, type DashboardStatistics, type DashboardSystemRisk } from './dashboard'
+import {
+  dashboardPath, type DashboardAlert, type DashboardComparison, type DashboardDutySummary,
+  type DashboardRiskIndex, type DashboardRiskLevel, type DashboardStatistics, type DashboardSystemRisk,
+} from './dashboard'
 import type { DashboardAnalytics } from './dashboardAnalytics'
 import type { DistrictCounts, DistrictRiskRow, DistrictRiskSummary } from './dashboardGeo'
 import type { Risk } from './domain'
 import type { HazardStatus } from './hazards'
 import { refreshBusinessOnFocus } from './scopedBusiness'
 
-export type ResponseCounts = DistrictCounts & { overdue: number }
-type ResponseRow = DistrictRiskRow & { overdue: number }
+export type ResponseCounts = DistrictCounts & { overdue: number; pendingRetest: number }
+type ResponseRow = DistrictRiskRow & {
+  overdue: number
+  pendingRetest: number
+  riskIndex: number
+  riskLevel: DashboardRiskLevel
+}
 export type ResponseSummary = Omit<DistrictRiskSummary, 'items' | 'withoutDistrict'> & {
   items: ResponseRow[]
   withoutDistrict: ResponseCounts
@@ -23,8 +31,11 @@ export type DistrictTask = {
 export type DistrictResponse = {
   district: string | null
   counts: ResponseCounts & {
-    pendingRetest: number; pendingReview: number; pendingPlanReview: number; pendingAlerts: number
+    pendingReview: number; pendingPlanReview: number; pendingAlerts: number
   }
+  risk: DashboardRiskIndex
+  duty: DashboardDutySummary
+  comparison: DashboardComparison
   tasks: DistrictTask[]
   highRiskSystems: DashboardSystemRisk[]; alerts: DashboardAlert[]
   statistics?: Omit<DashboardStatistics, 'highRiskSystems'>

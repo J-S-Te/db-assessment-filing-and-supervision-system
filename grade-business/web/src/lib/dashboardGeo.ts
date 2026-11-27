@@ -26,6 +26,14 @@ export type DistrictRiskSummary = {
 }
 export type DistrictMetric = 'all' | 'high' | 'medium' | 'low'
 type Intensity = 'unmatched' | 'zero' | 'light' | 'medium' | 'strong'
+export type DistrictPoint = [number, number]
+export type DistrictRing = DistrictPoint[]
+export type DistrictOutline = {
+  district: string
+  /** 区县面按多边形、环、顶点三层组织。 */
+  rings: DistrictRing[][]
+  label: DistrictPoint
+}
 
 /**
  * 用途 读取并验证本地导入的 WGS84 区县多边形。
@@ -65,13 +73,9 @@ export function readDistrictBoundaries(source: string): DistrictBoundary[] {
 export function projectDistrictBoundaries(
   boundaries: readonly DistrictBoundary[], allowed?: readonly string[],
 ): DistrictPath[] {
-  const visible = allowed ? boundaries.filter(row => allowed.includes(row.district)) : boundaries
+  const visible = visibleBoundaries(boundaries, allowed)
   if (!visible.length) return []
-  const geometry = { type: 'GeometryCollection' as const, geometries: visible.map(row => row.geometry) }
-  const viewport = geoIdentity().reflectY(true).fitExtent(
-    [[mapPadding, mapPadding], [mapWidth - mapPadding, mapHeight - mapPadding]], geometry,
-  )
-  const draw = geoPath(viewport).digits(2)
+  const draw = geoPath(districtViewport(visible)).digits(2)
   return visible.map(({ district, geometry }) => {
     const polygons = geometry.coordinates.map(coordinates => ({ type: 'Polygon' as const, coordinates }))
     // 沿海区县可能有多个岛屿，将标签放在面积最大的多边形上。
@@ -79,6 +83,59 @@ export function projectDistrictBoundaries(
       ? polygon : largest)
     return { district, path: draw(geometry) ?? '', label: draw.centroid(mainArea) }
   })
+}
+
+/**
+ * 用途 将区县边界投影为可直接参与三维计算的环坐标。
+ * 参数 boundaries 为校验通过的 WGS84 区县面，allowed 为会话允许展示的区县。
+ * 返回值 各区县的投影后环坐标与标签坐标；无边界时返回空列表。
+ */
+export function projectDistrictOutlines(
+  boundaries: readonly DistrictBoundary[], allowed?: readonly string[],
+): DistrictOutline[] {
+  const visible = visibleBoundaries(boundaries, allowed)
+  if (!visible.length) return []
+  const viewport = districtViewport(visible)
+  const draw = geoPath(viewport).digits(3)
+  const project = (point: DistrictPoint): DistrictPoint => {
+    const projected = viewport(point) ?? point
+    return [Math.round(projected[0] * 100) / 100, Math.round(projected[1] * 100) / 100]
+  }
+  return visible.map(({ district, geometry }) => {
+    const polygons = geometry.coordinates.map(coordinates => ({ type: 'Polygon' as const, coordinates }))
+    const mainArea = polygons.reduce((largest, polygon) => draw.area(polygon) > draw.area(largest)
+      ? polygon : largest)
+    const centroid = draw.centroid(mainArea)
+    return {
+      district,
+      rings: geometry.coordinates.map(polygon => polygon.map(ring => ring.map(project))),
+      label: [Math.round(centroid[0] * 100) / 100, Math.round(centroid[1] * 100) / 100],
+    }
+  })
+}
+
+/**
+ * 用途 计算展示用区县等比适配到视口的投影器。
+ * 参数 visible 为允许展示的区县边界。
+ * 返回值 与平面视图一致的投影器。
+ */
+function districtViewport(visible: readonly DistrictBoundary[]) {
+  const geometry = {
+    type: 'GeometryCollection' as const,
+    geometries: visible.map(row => row.geometry),
+  }
+  return geoIdentity().reflectY(true).fitExtent(
+    [[mapPadding, mapPadding], [mapWidth - mapPadding, mapHeight - mapPadding]], geometry,
+  )
+}
+
+/**
+ * 用途 按会话范围筛选可展示的区县边界。
+ * 参数 boundaries 为校验通过的 WGS84 区县面，allowed 为会话允许展示的区县。
+ * 返回值 允许展示的区县边界。
+ */
+function visibleBoundaries(boundaries: readonly DistrictBoundary[], allowed?: readonly string[]) {
+  return allowed ? boundaries.filter(row => allowed.includes(row.district)) : [...boundaries]
 }
 
 /**

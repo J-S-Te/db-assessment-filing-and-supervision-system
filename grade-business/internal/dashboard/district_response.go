@@ -36,6 +36,9 @@ type districtAlert struct {
 type districtResponse struct {
 	District        *string              `json:"district"`
 	Counts          districtWorkCounts   `json:"counts"`
+	Risk            districtRiskIndex    `json:"risk"`
+	Duty            districtDutySummary  `json:"duty"`
+	Comparison      dashboardComparison  `json:"comparison"`
 	Tasks           []districtTask       `json:"tasks"`
 	HighRiskSystems []systemRisk         `json:"highRiskSystems"`
 	Alerts          []districtAlert      `json:"alerts"`
@@ -46,13 +49,12 @@ type districtResponse struct {
 
 type districtWorkCounts struct {
 	districtResponseCounts
-	PendingRetest     int64 `json:"pendingRetest"`
 	PendingReview     int64 `json:"pendingReview"`
 	PendingPlanReview int64 `json:"pendingPlanReview"`
 	PendingAlerts     int64 `json:"pendingAlerts"`
 }
 
-const districtResponseSQL = `
+var districtResponseSQL = `
 WITH scoped_filings AS (
 	SELECT f.id,f.system_name,f.organization_name
 	FROM business_cases f ` + filingDistrictJoinSQL + `
@@ -84,6 +86,17 @@ WITH scoped_filings AS (
 		 WHERE p.status='pending_review') AS "pendingPlanReview",
 		(SELECT count(*) FROM scoped_alerts WHERE status='pending') AS "pendingAlerts"
 	FROM open_items
+), district_scores AS (
+	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
+	       count(*) FILTER (WHERE h.deadline<` + districtBusinessDaySQL + `) AS overdue,
+	       count(*) FILTER (WHERE h.severity='high') AS high,
+	       count(*) FILTER (WHERE h.status='pending_retest') AS "pendingRetest"
+	FROM hazard_items h JOIN hazard_context hc ON hc.id=h.id
+	JOIN business_cases f ON f.id=hc.filing_id AND f.kind='filing'
+	` + filingDistrictJoinSQL + `
+	WHERE h.status NOT IN ('pending_dispatch','closed')
+	  AND ` + eligibleIndustrySQL + ` AND ` + scopedFilingDistrictSQL + `
+	GROUP BY 1
 ), tasks AS (
 	SELECT * FROM open_items WHERE overdue OR severity='high' OR status IN ('pending_retest','pending_review')
 	ORDER BY overdue DESC,severity_order,deadline,id LIMIT 6
@@ -105,7 +118,11 @@ SELECT to_jsonb(counts),
 		FROM ranked_systems),'[]'::jsonb),
 	COALESCE((SELECT jsonb_agg(jsonb_build_object('id',id,'type',kind,'severity',severity,
 		'systemName',system_name,'organizationName',organization_name,'status',status,'triggeredAt',triggered_at)
-		ORDER BY triggered_at DESC,id DESC) FROM recent_alerts),'[]'::jsonb)
+		ORDER BY triggered_at DESC,id DESC) FROM recent_alerts),'[]'::jsonb),
+	(SELECT district FROM district_scores WHERE district<>''
+		ORDER BY ` + riskWeightedSQL("") + ` DESC,district LIMIT 1),
+	COALESCE((SELECT LEAST(100,` + riskWeightedSQL("") + `) FROM district_scores WHERE district<>''
+		ORDER BY ` + riskWeightedSQL("") + ` DESC,district LIMIT 1),0)
 FROM counts
 `
 
@@ -114,9 +131,19 @@ FROM counts
 // 返回值 校验范围后查询区县数据的 HTTP 处理器。
 func handleDistrictResponse(pool *pgxpool.Pool, windows workflowreminders.Windows) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		district, valid := responseDistrict(r.URL.RawQuery)
+		values, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid_input", "请选择全域或一个有效的区县范围。")
+			return
+		}
+		district, valid := responseDistrict(values)
 		if !valid {
 			httpx.Error(w, http.StatusBadRequest, "invalid_input", "请选择全域或一个有效的区县范围。")
+			return
+		}
+		windowDays, valid := comparisonWindowFromValues(values)
+		if !valid {
+			httpx.Error(w, http.StatusBadRequest, "invalid_input", "对比窗口天数须为 1 至 365。")
 			return
 		}
 		district, scope, authorized := resolveDistrictScope(r.Context(), district)
@@ -125,8 +152,7 @@ func handleDistrictResponse(pool *pgxpool.Pool, windows workflowreminders.Window
 			return
 		}
 		result := districtResponse{District: district}
-		err := readDistrictResponse(r.Context(), pool, &result, scope, windows)
-		if err != nil {
+		if err := readDistrictResponse(r.Context(), pool, &result, scope, windows, windowDays); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal_error", "暂时无法读取区县处置态势。")
 			return
 		}
@@ -138,10 +164,18 @@ func handleDistrictResponse(pool *pgxpool.Pool, windows workflowreminders.Window
 // 参数 ctx 控制读取，pool 为数据库，result 为响应，scope 为授权区县，windows 为审核时限。
 // 返回值 任一查询失败时的错误。
 func readDistrictResponse(ctx context.Context, pool *pgxpool.Pool, result *districtResponse,
-	scope districtScope, windows workflowreminders.Windows,
+	scope districtScope, windows workflowreminders.Windows, windowDays int,
 ) error {
 	if scope.aliases == nil {
-		return scanDistrictDetails(ctx, pool, result, scope)
+		if err := scanDistrictDetails(ctx, pool, result, scope); err != nil {
+			return err
+		}
+		comparison, err := readComparison(ctx, pool, scope, windowDays)
+		if err != nil {
+			return err
+		}
+		result.Comparison = comparison
+		return nil
 	}
 	options := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
 	return pgx.BeginTxFunc(ctx, pool, options, func(tx pgx.Tx) error {
@@ -160,7 +194,12 @@ func readDistrictResponse(ctx context.Context, pool *pgxpool.Pool, result *distr
 		if err != nil {
 			return err
 		}
+		comparison, err := readComparison(ctx, tx, scope, windowDays)
+		if err != nil {
+			return err
+		}
 		result.Statistics, result.Overview, result.Analytics = &stats.dashboardStatistics, &overview, &analysis
+		result.Comparison = comparison
 		return nil
 	})
 }
@@ -169,25 +208,43 @@ func readDistrictResponse(ctx context.Context, pool *pgxpool.Pool, result *distr
 // 参数 ctx 控制读取，db 为数据库或事务，result 保存查询结果，scope 为授权区县。
 // 返回值 查询或解码错误。
 func scanDistrictDetails(ctx context.Context, db dashboardQueryer, result *districtResponse, scope districtScope) error {
-	return db.QueryRow(ctx, districtResponseSQL, scope.aliases, scope.requireUnit).
-		Scan(&result.Counts, &result.Tasks, &result.HighRiskSystems, &result.Alerts)
+	var topDistrict *string
+	var topIndex int64
+	err := db.QueryRow(ctx, districtResponseSQL, scope.aliases, scope.requireUnit).
+		Scan(&result.Counts, &result.Tasks, &result.HighRiskSystems, &result.Alerts, &topDistrict, &topIndex)
+	if err != nil {
+		return err
+	}
+	result.Risk = buildRiskIndex(result.Counts.Overdue, result.Counts.High, result.Counts.PendingRetest)
+	top := ""
+	if topDistrict != nil {
+		top = *topDistrict
+	}
+	result.Duty = buildDutySummary(result.Counts, result.Risk, top, topIndex)
+	return nil
 }
 
 // responseDistrict 校验互斥的全域与区县参数，区县空值表示未归区。
-// 参数 raw 为未经解码的 URL 查询串。
+// 参数 values 为已解析的请求查询参数，对比窗口参数不计入范围校验。
 // 返回值 全域为 nil，其他有效范围为区县名指针，同时返回查询有效性。
-func responseDistrict(raw string) (*string, bool) {
-	values, err := url.ParseQuery(raw)
-	if err != nil || len(values) != 1 {
+func responseDistrict(values url.Values) (*string, bool) {
+	scoped := url.Values{}
+	for key, list := range values {
+		if key == comparisonWindowParam {
+			continue
+		}
+		scoped[key] = list
+	}
+	if len(scoped) != 1 {
 		return nil, false
 	}
-	if scope := values["scope"]; len(scope) == 1 && scope[0] == "all" {
+	if scope := scoped["scope"]; len(scope) == 1 && scope[0] == "all" {
 		return nil, true
 	}
-	if len(values["district"]) != 1 {
+	if len(scoped["district"]) != 1 {
 		return nil, false
 	}
-	district := values["district"][0]
+	district := scoped["district"][0]
 	if !validClassificationText(district, 200) {
 		return nil, false
 	}
