@@ -1,0 +1,20 @@
+name: grade-business-release
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grade_business
+      POSTGRES_USER: grade_business
+      POSTGRES_PASSWORD: ${GRADE_RELEASE_DB_PASSWORD:?需要首次部署生成的数据库口令}
+    ports:
+      - "127.0.0.1:${GRADE_RELEASE_DB_PORT:-15445}:5432"
+    volumes:
+      - business-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U grade_business -d grade_business]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+volumes:
+  business-data:

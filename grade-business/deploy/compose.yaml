@@ -1,0 +1,19 @@
+name: grade-business-local
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: grade_business_test
+      POSTGRES_USER: grade_business
+      POSTGRES_PASSWORD: ${GRADE_BUSINESS_DB_PASSWORD:?请通过测试配置提供数据库口令}
+    ports:
+      - "127.0.0.1:${GRADE_BUSINESS_DB_PORT:-15444}:5432"
+    volumes:
+      - business-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD, pg_isready, -U, grade_business, -d, grade_business_test]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+volumes:
+  business-data:

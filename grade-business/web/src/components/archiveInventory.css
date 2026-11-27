@@ -1,0 +1,7 @@
+.archive-inventory-form { display: grid; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line, #dce4ee); }
+.archive-inventory-form h3 { font-size: 1rem; }
+.archive-inventory-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr)); gap: 14px; padding: 0; border: 0; }
+.archive-inventory-wide { grid-column: 1 / -1; }
+.archive-inventory-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.archive-inventory-identity { overflow-wrap: anywhere; min-width: 130px; max-width: 390px; }
+.archive-inventory-caption { padding: 0 16px 12px; }

@@ -1,0 +1,2097 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网络安全等级保护智能体 · 管理端原型（V2 新导航 · M1–M7）</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="screen.css">
+</head>
+<body>
+<div class="app">
+  <!-- ===== 侧边导航（V2 新导航 · 管理端 M1–M7） ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__brand">
+      <span class="logo">等</span>
+      <div>等级保护智能体<small>管理端 · V2 导航</small></div>
+    </div>
+    <nav class="sidebar__nav">
+      <div class="nav-group-title">业务监管</div>
+      <a class="nav-item active" data-page="workbench"><span class="ico">▦</span><span class="label">M1 工作台</span></a>
+      <a class="nav-item" data-page="grade"><span class="ico">▤</span><span class="label">M2 等级保护</span></a>
+      <a class="nav-item" data-page="archive"><span class="ico">◫</span><span class="label">M3 全息档案</span></a>
+      <a class="nav-item" data-page="monitor"><span class="ico">⚠</span><span class="label">M4 监测预警</span></a>
+      <div class="nav-group-title">智能与治理</div>
+      <a class="nav-item" data-page="agent"><span class="ico">✦</span><span class="label">M5 智能体</span></a>
+      <a class="nav-item" data-page="screen"><span class="ico">◉</span><span class="label">M6 指挥驾驶舱</span></a>
+      <a class="nav-item" data-page="sys"><span class="ico">⚙</span><span class="label">M7 系统管理</span></a>
+    </nav>
+    <div class="sidebar__foot">江州市公安局网安支队 · 监管工作台</div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ===== 主区 ===== -->
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-btn" id="menuBtn">☰</button>
+      <div class="crumb" id="crumb">工作台</div>
+      <div class="spacer"></div>
+      <div class="gb" onclick="goto('flow')">⤢ 流程示意</div>
+      <div class="bell" onclick="goto('msg')" title="消息中心">🔔<span class="dot" id="msgDot">5</span></div>
+      <div class="who-wrap">
+        <div class="avatar" id="avatarBtn" title="账号菜单">监</div>
+        <div class="adv-drop" id="advDrop">
+          <div class="di" onclick="closeAdv();goto('sys')">◍ 个人中心</div>
+          <div class="di" onclick="closeAdv();gotoTab('sys','s-tab-4')">⚙ 账号与密码</div>
+          <div class="di" onclick="closeAdv();goto('msg')">✉ 消息中心</div>
+          <div class="sep"></div>
+          <div class="di danger" onclick="closeAdv();toast('已退出登录（演示）')">⏻ 退出登录</div>
+        </div>
+      </div>
+      <div class="who"><b>网安支队管理员</b>市/区县监管</div>
+    </header>
+
+    <main class="content">
+
+      <!-- ============ M1 工作台 ============ -->
+      <section class="page active" id="p-workbench">
+        <div class="page-head">
+          <div><h1>工作台</h1><p>态势总览 · 待我审核 · 临期提醒 · 快捷入口</p></div>
+          <button class="btn btn-primary" onclick="goto('screen')">＋ 打开指挥驾驶舱</button>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card"><span class="bar b-blue"></span><div class="n">1,286</div><div class="l">备案总数</div><div class="sub">本年新增 118</div></div>
+          <div class="stat-card"><span class="bar b-teal"></span><div class="n">342</div><div class="l">实施报备中</div><div class="sub">待监管复核 41</div></div>
+          <div class="stat-card"><span class="bar b-warn"></span><div class="n">56</div><div class="l">测评待审核</div><div class="sub">初审 33 / 终审 23</div></div>
+          <div class="stat-card"><span class="bar b-purple"></span><div class="n">17</div><div class="l">活跃预警</div><div class="sub">高危 4 · 中危 9</div></div>
+        </div>
+        <div class="kpi-grid">
+          <div class="card card-pad">
+            <div class="section-title" style="justify-content:space-between">待我审核（5 类待监管处理）
+              <span class="muted" style="font-weight:400;font-size:12px">按剩余时限升序</span></div>
+            <div class="table-wrap" style="border:none">
+              <table class="tbl tbl-compact tbl-fit">
+                <thead><tr><th>待办事项</th><th>上下文说明</th><th>剩余时限</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="badge b-back">整改规划审核</span></td><td>市三甲医院 HIS 系统 · 整改规划 V2.0</td><td>剩 1 天</td><td class="ops"><span class="link" onclick="gotoTab('grade','g-tab-4')">直达处理</span></td></tr>
+                  <tr><td><span class="badge b-warn">备案初审</span></td><td>江州银行核心业务系统 · 初次备案</td><td>剩 2 天</td><td class="ops"><span class="link" onclick="gotoTab('grade','g-tab-1')">直达处理</span></td></tr>
+                  <tr><td><span class="badge b-blue">测评报告终审</span></td><td>江州市医保局结算系统 · <span class="gc">S3A3G3</span></td><td>剩 3 天</td><td class="ops"><span class="link" onclick="gotoTab('grade','g-tab-3')">直达处理</span></td></tr>
+                  <tr><td><span class="badge b-info">实施报备复核</span></td><td>市水务集团调度平台 · 换机构复测</td><td>剩 5 天</td><td class="ops"><span class="link" onclick="gotoTab('grade','g-tab-2')">直达处理</span></td></tr>
+                  <tr><td><span class="badge b-purple">备案注销审核</span></td><td>市自然资源局门户网站 · 系统下线</td><td>剩 6 天</td><td class="ops"><span class="link" onclick="gotoTab('grade','g-tab-1')">直达处理</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card card-pad">
+            <div class="section-title">关键指标</div>
+            <div class="row-2" style="margin-bottom:14px">
+              <div><div class="mini-num" style="color:var(--c-success)">87%</div><div class="muted" style="font-size:12px">整改完成率 · 环比 <span style="color:var(--c-success)">+3.2%</span></div></div>
+              <div><div class="mini-num" style="color:var(--c-primary-700)">86%</div><div class="muted" style="font-size:12px">等保覆盖率</div></div>
+            </div>
+            <div class="section-title">临期提醒</div>
+            <div class="task-list">
+              <div class="task"><span class="pri b-warn"></span><div class="body"><div class="t">已到期 3 项</div><div class="m">备案 2 / 测评 1</div></div></div>
+              <div class="task"><span class="pri b-blue"></span><div class="body"><div class="t">10 日内到期 9 项</div><div class="m">含 6 项备案初审</div></div></div>
+              <div class="task"><span class="pri b-teal"></span><div class="body"><div class="t">30 日内到期 21 项</div><div class="m">备案 13 / 测评 8</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card card-pad" style="margin-top:16px">
+          <div class="section-title">快捷入口</div>
+          <div class="quick-grid">
+            <div class="quick" onclick="goto('grade')"><span class="qi">▤</span><span>等级保护审核</span></div>
+            <div class="quick" onclick="goto('archive')"><span class="qi">◫</span><span>全息档案</span></div>
+            <div class="quick" onclick="goto('monitor')"><span class="qi">⚠</span><span>监测预警</span></div>
+            <div class="quick" onclick="goto('agent')"><span class="qi">✦</span><span>智能体</span></div>
+            <div class="quick" onclick="goto('screen')"><span class="qi">◉</span><span>驾驶舱</span></div>
+            <div class="quick" onclick="goto('sys')"><span class="qi">⚙</span><span>系统管理</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ M2 等级保护 ============ -->
+      <section class="page" id="p-grade">
+        <div class="page-head"><div><h1>等级保护</h1><p>备案 · 实施 · 测评 · 整改规划 —— 四类业务共用同一套审核状态机与留痕组件（K-005）</p></div></div>
+        <div class="tabs" id="tabs-grade">
+          <button class="tab active" data-tab="g-tab-1">备案管理<span class="cnt">1,286</span></button>
+          <button class="tab" data-tab="g-tab-2">实施管理<span class="cnt">342</span></button>
+          <button class="tab" data-tab="g-tab-3">测评管理<span class="cnt">56</span></button>
+          <button class="tab" data-tab="g-tab-4">整改规划审核<span class="cnt">14</span></button>
+        </div>
+
+        <!-- 备案管理 -->
+        <div class="tab-pane active" id="g-tab-1">
+          <div class="toolbar toolbar-split">
+            <div class="tb-row">
+              <div class="seg-views" id="filingViews" style="margin-bottom:0">
+                <button class="active" data-view="全部" onclick="setFilingView(this)">全部<span class="cnt">1,286</span></button>
+                <button data-view="变更" onclick="setFilingView(this)">变更<span class="cnt">128</span></button>
+                <button data-view="注销" onclick="setFilingView(this)">注销<span class="cnt">36</span></button>
+              </div>
+              <select class="select" id="filingStatus" style="width:132px">
+                <option>全部状态</option><option>系统预审中</option><option>初审中</option><option>终审中</option><option>终审通过</option><option>退回补正</option>
+              </select>
+              <input class="input" id="filingKw" placeholder="系统 / 单位 / 备案编号" style="width:210px">
+              <button class="btn btn-primary" onclick="toast('已按条件查询')">查询</button>
+              <button class="btn" onclick="resetFilingFilters()">重置</button>
+            </div>
+            <div class="tb-row">
+              <button class="btn btn-primary" onclick="openModal('m-grade-filing-add')">＋ 备案录入</button>
+              <button class="btn" onclick="openModal('m-grade-filing-extract')">✦ AI 抽取</button>
+              <button class="btn btn-dashed" onclick="openModal('m-grade-filing-import')">导入历史材料</button>
+              <button class="btn" onclick="openModal('m-grade-filing-preview')">智能预审</button>
+              <span class="sp"></span>
+              <div class="colset">
+                <button class="btn btn-sm" onclick="toggleColset(event)">⚙ 列设置</button>
+                <div class="colset__panel" id="colsetPanel">
+                  <div class="hd">显示列</div>
+                  <label><input type="checkbox" checked onchange="toggleCol(0,this.checked)"> 系统名称</label>
+                  <label><input type="checkbox" checked onchange="toggleCol(1,this.checked)"> 所属单位</label>
+                  <label><input type="checkbox" checked onchange="toggleCol(2,this.checked)"> 测评机构</label>
+                  <label><input type="checkbox" checked onchange="toggleCol(3,this.checked)"> 备案编号</label>
+                  <label><input type="checkbox" checked onchange="toggleCol(4,this.checked)"> 定级</label>
+                  <label><input type="checkbox" checked onchange="toggleCol(5,this.checked)"> 审核流转</label>
+                </div>
+              </div>
+              <button class="btn btn-sm" onclick="refreshFiling(this)"><span class="spin">⟳</span> 刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="tbl" id="filingTable">
+              <thead><tr><th>系统名称</th><th>所属单位</th><th>测评机构</th><th>备案编号</th><th>定级</th><th>审核流转</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr data-view="变更"><td>江州市医保局结算系统 <span class="badge b-gray">变更</span></td><td>江州市医疗保障局</td><td>江州信安测评</td><td class="code">JZ-2026-0186</td><td><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></td><td><span class="badge b-pass">终审通过</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-filing-detail')">详情</span><span class="link" onclick="openModal('m-grade-filing-audit')">终审</span></td></tr>
+                <tr data-view="常规"><td>江州银行核心业务系统</td><td>江州银行股份有限公司</td><td>浙江信安测评</td><td class="code">JZ-2026-0179</td><td><span class="gc">S4A4G4</span><span class="badge b-gray">第四级</span></td><td><span class="badge b-wait">初审中</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-filing-detail')">详情</span><span class="link" onclick="openModal('m-grade-filing-preview')">预审</span><span class="link" onclick="openModal('m-grade-filing-audit')">初审</span><span class="link" onclick="openModal('m-grade-filing-audit')">终审</span><span class="link" onclick="openModal('m-grade-filing-audit')">补正</span></td></tr>
+                <tr data-view="常规"><td>市水务集团调度平台</td><td>江州市水务集团</td><td>江州信安测评</td><td class="code">JZ-2026-0171</td><td><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></td><td><span class="badge b-gray">系统预审中</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-filing-detail')">详情</span><span class="link" onclick="openModal('m-grade-filing-preview')">预审</span><span class="link" onclick="openModal('m-grade-filing-audit')">补正</span></td></tr>
+                <tr data-view="注销"><td>市自然资源局门户网站 <span class="badge b-gray">注销</span></td><td>江州市自然资源局</td><td>浙江信安测评</td><td class="code">JZ-2026-0164</td><td><span class="gc">S2A2G2</span><span class="badge b-gray">第二级</span></td><td><span class="badge b-back">退回补正</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-filing-detail')">详情</span><span class="link" onclick="openModal('m-grade-filing-audit')">初审</span><span class="link" onclick="openModal('m-grade-filing-audit')">补正</span></td></tr>
+                <tr data-view="常规"><td>市三甲医院 HIS 系统</td><td>江州市第一人民医院</td><td>江州信安测评</td><td class="code">JZ-2026-0158</td><td><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></td><td><span class="badge b-pass">终审通过</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-filing-detail')">详情</span></td></tr>
+              </tbody>
+            </table>
+            <div class="empty" id="filingEmpty" style="display:none">该视图下暂无备案记录</div>
+          </div>
+          <div class="pager"><span id="filingCount">共 1,286 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">65</span><span class="pg">›</span></div>
+        </div>
+
+        <!-- 实施管理 -->
+        <div class="tab-pane" id="g-tab-2">
+          <div class="toolbar toolbar-split">
+            <div class="tb-row">
+              <div class="seg-views" id="implViews" style="margin-bottom:0">
+                <button class="active" data-impl="报备中" onclick="setImplView(this)">实施报备<span class="cnt">3</span></button>
+                <button data-impl="记录" onclick="setImplView(this)">实施记录<span class="cnt">286</span></button>
+                <button data-impl="变更" onclick="setImplView(this)">变更记录<span class="cnt">42</span></button>
+                <button data-impl="归档" onclick="setImplView(this)">已归档<span class="cnt">11</span></button>
+              </div>
+              <select class="select" style="width:132px"><option>全部状态</option><option>报备中</option><option>监管复核</option><option>已完成</option><option>已归档</option></select>
+              <input class="input" placeholder="系统 / 单位 / 备案编号" style="width:200px">
+              <button class="btn btn-primary" onclick="toast('已按条件查询')">查询</button>
+              <button class="btn" onclick="toast('已重置实施查询条件')">重置</button>
+            </div>
+            <div class="tb-row">
+              <button class="btn btn-primary" onclick="openModal('m-grade-impl-add')">＋ 实施报备录入</button>
+              <button class="btn" onclick="openModal('m-grade-impl-preaudit')">✦ AI 预审</button>
+              <button class="btn" onclick="toast('已导出实施台账（含实施周期与变更次数）')">导出台账</button>
+              <span class="sp"></span>
+              <button class="btn btn-sm" onclick="toast('实施台账已刷新')"><span class="spin">⟳</span> 刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="tbl" id="implTable" style="min-width:1040px">
+              <thead><tr><th>系统名称</th><th>所属单位</th><th>测评机构</th><th>报备类型</th><th>实施周期</th><th>提交时间</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr data-impl="报备中"><td>市水务集团调度平台</td><td>江州市水务集团</td><td>杭州安安检测</td><td>换机构复测</td><td>2026-08-20 ~ 2026-09-10</td><td>2026-08-20</td><td><span class="badge b-wait">监管复核</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="openModal('m-grade-impl-preaudit')">AI 预审</span><span class="link" onclick="toast('已复核通过')">复核</span></td></tr>
+                <tr data-impl="报备中"><td>江州银行核心业务系统</td><td>江州银行股份有限公司</td><td>浙江信安测评</td><td>变更报备</td><td>2026-08-28 ~ 2026-09-30</td><td>2026-08-28</td><td><span class="badge b-blue">报备中</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="openModal('m-grade-impl-preaudit')">AI 预审</span><span class="link" onclick="toast('已撤销报备，变更次数已回退 1 次')">撤销</span></td></tr>
+                <tr data-impl="报备中"><td>市三甲医院 HIS 系统</td><td>江州市第一人民医院</td><td>江州信安测评</td><td>变更报备</td><td>2026-09-01 ~ 2026-09-25</td><td>2026-09-01</td><td><span class="badge b-blue">报备中</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="openModal('m-grade-impl-preaudit')">AI 预审</span><span class="link" onclick="toast('已撤销报备，变更次数已回退 1 次')">撤销</span></td></tr>
+                <tr data-impl="记录"><td>市自然资源局门户网站</td><td>江州市自然资源局</td><td>杭州安安检测</td><td>常规报备</td><td>2026-07-15 ~ 2026-08-05</td><td>2026-07-15</td><td><span class="badge b-pass">已完成</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="toast('已导出实施记录 PDF')">记录</span></td></tr>
+                <tr data-impl="记录"><td>江州市医保局结算系统</td><td>江州市医疗保障局</td><td>江州信安测评</td><td>常规报备</td><td>2026-06-10 ~ 2026-06-30</td><td>2026-06-10</td><td><span class="badge b-pass">已完成</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="toast('已导出实施记录 PDF')">记录</span></td></tr>
+                <tr data-impl="变更"><td>市三甲医院 HIS 系统</td><td>江州市第一人民医院</td><td>江州信安测评</td><td>变更报备（第 1 次）</td><td>2026-05-12 ~ 2026-06-02</td><td>2026-05-12</td><td><span class="badge b-pass">已完成</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="toast('变更前后对照已生成')">变更对照</span></td></tr>
+                <tr data-impl="变更"><td>江州银行核心业务系统</td><td>江州银行股份有限公司</td><td>浙江信安测评</td><td>变更报备（第 1 次）</td><td>2026-04-01 ~ 2026-04-20</td><td>2026-04-01</td><td><span class="badge b-pass">已完成</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span><span class="link" onclick="toast('变更前后对照已生成')">变更对照</span></td></tr>
+                <tr data-impl="归档"><td>市政务外网（已迁移）</td><td>江州市大数据局</td><td>杭州安安检测</td><td>常规报备</td><td>2025-03-01 ~ 2025-03-28</td><td>2025-03-01</td><td><span class="badge b-gray">已归档</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-impl-detail')">详情</span></td></tr>
+              </tbody>
+            </table>
+            <div class="empty" id="implEmpty" style="display:none">该视图下暂无实施记录</div>
+          </div>
+          <div class="pager"><span id="implCount">共 3 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">…</span><span class="pg">18</span><span class="pg">›</span></div>
+        </div>
+
+        <!-- 测评管理 -->
+        <div class="tab-pane" id="g-tab-3">
+          <div class="toolbar toolbar-split">
+            <div class="tb-row">
+              <select class="select" style="width:132px"><option>全部状态</option><option>待初审</option><option>终审中</option><option>已通过</option><option>已退回</option></select>
+              <select class="select" style="width:120px"><option>全部风险</option><option>高风险</option><option>中风险</option><option>低风险</option></select>
+              <input class="input" placeholder="报告编号 / 系统 / 机构" style="width:200px">
+              <button class="btn btn-primary" onclick="toast('已按条件查询')">查询</button>
+              <button class="btn" onclick="toast('已重置测评查询条件')">重置</button>
+            </div>
+            <div class="tb-row">
+              <button class="btn btn-primary" onclick="openModal('m-grade-report-upload')">＋ 上传测评报告</button>
+              <button class="btn" onclick="openModal('m-grade-report-feedback')">审核意见反馈</button>
+              <button class="btn" onclick="openModal('m-grade-report-compare')">⇄ 历史报告对比</button>
+              <button class="btn" onclick="toast('已导出测评报告清单（56 条，含风险级别与审核状态）')">⤓ 导出</button>
+              <span class="sp"></span>
+              <button class="btn btn-sm" onclick="toast('测评清单已刷新')"><span class="spin">⟳</span> 刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="tbl" style="min-width:1000px">
+              <thead><tr><th>报告编号</th><th>系统名称</th><th>测评机构</th><th>提交时间</th><th>风险级别</th><th>审核状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td class="code">BG-2026-0098</td><td>江州市医保局结算系统</td><td>杭州安安检测</td><td>2026-09-02</td><td><span class="badge b-warn">中风险</span></td><td><span class="badge b-wait">终审中</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-report-detail')">详情</span><span class="link" onclick="openModal('m-grade-report-feedback')">意见反馈</span><span class="link" onclick="openModal('m-grade-report-compare')">历史对比</span><span class="link" onclick="toast('已通过终审')">终审</span></td></tr>
+                <tr><td class="code">BG-2026-0097</td><td>市三甲医院 HIS 系统</td><td>浙江信安测评</td><td>2026-08-30</td><td><span class="badge b-back">高风险</span></td><td><span class="badge b-wait">初审中</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-report-detail')">详情</span><span class="link" onclick="openModal('m-grade-report-feedback')">意见反馈</span><span class="link" onclick="openModal('m-grade-report-compare')">历史对比</span><span class="link" onclick="toast('已通过初审')">初审</span></td></tr>
+                <tr><td class="code">BG-2026-0095</td><td>市水务集团调度平台</td><td>杭州安安检测</td><td>2026-08-25</td><td><span class="badge b-pass">低风险</span></td><td><span class="badge b-pass">已通过</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-report-detail')">详情</span><span class="link" onclick="openModal('m-grade-report-feedback')">意见反馈</span><span class="link" onclick="openModal('m-grade-report-compare')">历史对比</span></td></tr>
+                <tr><td class="code">BG-2026-0093</td><td>市自然资源局门户网站</td><td>浙江信安测评</td><td>2026-08-18</td><td><span class="badge b-warn">中风险</span></td><td><span class="badge b-back">已退回</span></td><td class="ops"><span class="link" onclick="openModal('m-grade-report-detail')">详情</span><span class="link" onclick="openModal('m-grade-report-feedback')">意见反馈</span><span class="link" onclick="openModal('m-grade-report-compare')">历史对比</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager"><span>共 56 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">›</span></div>
+        </div>
+
+        <!-- 整改规划审核（网络运营者上报 → 监管审核 → 意见回传） -->
+        <div class="tab-pane" id="g-tab-4">
+          <div class="stat-grid" style="margin-bottom:16px">
+            <div class="stat-card"><span class="bar b-warn"></span><div class="n">14</div><div class="l">待审核</div><div class="sub">承诺 3 个工作日内反馈</div></div>
+            <div class="stat-card"><span class="bar b-purple"></span><div class="n">5</div><div class="l">已退回补正</div><div class="sub">待运营者重新提交</div></div>
+            <div class="stat-card"><span class="bar b-blue"></span><div class="n">3</div><div class="l">10 日内到期</div><div class="sub">整改期限临期提醒</div></div>
+            <div class="stat-card"><span class="bar b-teal"></span><div class="n">87%</div><div class="l">一次通过率</div><div class="sub">近 90 日整改规划</div></div>
+          </div>
+          <div class="toolbar">
+            <div class="left"><button class="btn btn-primary" onclick="openModal('m-grade-plan-audit')">审核整改规划</button>
+              <button class="btn" onclick="toast('已向 19 家单位发出整改催办通知')">批量催办</button>
+              <button class="btn" onclick="toast('已导出整改规划台账')">导出台账</button></div>
+            <div class="right">
+              <select class="select"><option>全部状态</option><option>待审核</option><option>退回补正</option><option>审核通过</option></select>
+              <select class="select"><option>全部整改期限</option><option>已逾期</option><option>10 日内到期</option><option>30 日内到期</option></select>
+              <input class="input" placeholder="系统 / 单位 / 备案编号">
+              <button class="btn btn-primary">查询</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="tbl">
+              <thead><tr><th>备案编号</th><th>系统 / 单位</th><th>版本 · 提交时间</th><th>风险项</th><th>整改期限</th><th>审核状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="code">JZ-2026-0158</td>
+                  <td>市三甲医院 HIS 系统<br><span class="muted">江州市第一人民医院</span></td>
+                  <td>V2.0<br><span class="muted">2026-09-12 10:24</span></td>
+                  <td style="white-space:nowrap"><span class="badge b-back">高 1</span> <span class="badge b-warn">中 3</span></td>
+                  <td>2026-10-31</td>
+                  <td><span class="badge b-wait">待审核</span></td>
+                  <td class="ops"><span class="link" onclick="openModal('m-grade-plan-detail')">详情</span><span class="link" onclick="openModal('m-grade-plan-audit')">进入审核</span><span class="link" onclick="toast('已同步至 M3.3 隐患管理整改台账')">同步台账</span></td>
+                </tr>
+                <tr>
+                  <td class="code">JZ-2026-0179</td>
+                  <td>江州银行核心业务系统<br><span class="muted">江州银行股份有限公司</span></td>
+                  <td>V1.0<br><span class="muted">2026-09-11 15:08</span></td>
+                  <td style="white-space:nowrap"><span class="badge b-warn">中 2</span></td>
+                  <td>2026-09-20</td>
+                  <td><span class="badge b-wait">待审核</span></td>
+                  <td class="ops"><span class="link" onclick="openModal('m-grade-plan-detail')">详情</span><span class="link" onclick="openModal('m-grade-plan-audit')">进入审核</span><span class="link" onclick="toast('已同步至 M3.3 隐患管理整改台账')">同步台账</span></td>
+                </tr>
+                <tr>
+                  <td class="code">JZ-2026-0158</td>
+                  <td>市三甲医院 HIS 系统<br><span class="muted">江州市第一人民医院</span></td>
+                  <td>V1.0<br><span class="muted">2026-09-10 16:05</span></td>
+                  <td style="white-space:nowrap"><span class="badge b-back">高 1</span></td>
+                  <td>2026-10-31</td>
+                  <td><span class="badge b-back">退回补正</span></td>
+                  <td class="ops"><span class="link" onclick="openModal('m-grade-plan-detail')">详情</span><span class="link" onclick="openModal('m-grade-plan-audit')">进入审核</span><span class="link" onclick="toast('已同步至 M3.3 隐患管理整改台账')">同步台账</span></td>
+                </tr>
+                <tr>
+                  <td class="code">JZ-2026-0186</td>
+                  <td>江州市医保局结算系统<br><span class="muted">江州市医疗保障局</span></td>
+                  <td>V1.0<br><span class="muted">2026-08-28 09:12</span></td>
+                  <td style="white-space:nowrap"><span class="badge b-warn">中 3</span></td>
+                  <td>2026-09-30</td>
+                  <td><span class="badge b-pass">审核通过</span></td>
+                  <td class="ops"><span class="link" onclick="openModal('m-grade-plan-detail')">详情</span><span class="link" onclick="openModal('m-grade-plan-audit')">进入审核</span><span class="link" onclick="toast('已同步至 M3.3 隐患管理整改台账')">同步台账</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager"><span>共 14 条 · 每页 7 条</span><span class="pg active">1</span><span class="pg">2</span></div>
+          <div class="hint" style="margin-top:10px">上报方为<strong>网络运营者</strong>（用户端 U3 · 整改规划上传），非测评机构；审核通过后自动同步至 M3.3 隐患管理生成整改台账，审核意见与退回补正要求实时回传用户端。</div>
+        </div>
+      </section>
+
+      <!-- ============ M3 全息档案 ============ -->
+      <section class="page" id="p-archive">
+        <div class="page-head"><div><h1>全息档案</h1><p>单位 · 系统资产 · 隐患 · 人员 全息画像</p></div></div>
+        <div class="tabs" id="tabs-archive">
+          <button class="tab active" data-tab="a-tab-1">单位档案<span class="cnt">421</span></button>
+          <button class="tab" data-tab="a-tab-2">系统资产<span class="cnt">2,041</span></button>
+          <button class="tab" data-tab="a-tab-3">隐患管理<span class="cnt">312</span></button>
+          <button class="tab" data-tab="a-tab-4">人员管理<span class="cnt">674</span></button>
+        </div>
+
+        <div class="tab-pane active" id="a-tab-1">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="a1-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">单位档案<span class="cnt">421</span></button>
+            <button class="tab" data-tab="a1-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">供应商档案<span class="cnt">68</span></button>
+            <button class="tab" data-tab="a1-p3" style="border:1px solid var(--c-border-strong);border-radius:8px">机构管理<span class="cnt">14</span></button>
+          </div>
+
+          <div class="sub-pane active" id="a1-p1">
+            <div class="toolbar toolbar-split">
+              <div class="tb-row">
+                <input class="input" placeholder="单位名称 / 统一社会信用代码" style="width:230px">
+                <select class="select" style="width:124px"><option>全部类型</option><option>党政机关</option><option>事业单位</option><option>企业</option></select>
+                <select class="select" style="width:124px"><option>全部区县</option><option>市本级</option><option>江城区</option><option>开发区</option></select>
+                <button class="btn btn-primary" onclick="toast('已按条件查询')">查询</button>
+                <button class="btn" onclick="toast('已重置单位查询条件')">重置</button>
+              </div>
+              <div class="tb-row">
+                <button class="btn btn-primary" onclick="openModal('m-archive-unit-add')">＋ 新增单位</button>
+                <button class="btn" onclick="openModal('m-archive-unit-merge')">⇄ 单位合并</button>
+                <span class="sp"></span>
+                <button class="btn btn-sm" onclick="toast('单位档案已刷新')"><span class="spin">⟳</span> 刷新</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:1020px">
+                <thead><tr><th>单位名称</th><th>类型</th><th>所属区县</th><th>系统数</th><th>最近测评</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>江州市医疗保障局</td><td>党政机关</td><td>市本级</td><td>12</td><td>2026-09-02</td><td><span class="badge b-pass">正常</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-unit-detail')">全息画像</span><span class="link" onclick="openModal('m-archive-unit-add')">编辑</span><span class="link" onclick="openModal('m-archive-unit-merge')">合并</span></td></tr>
+                  <tr><td>江州市第一人民医院</td><td>事业单位</td><td>江城区</td><td>5</td><td>2026-08-30</td><td><span class="badge b-wait">待整改</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-unit-detail')">全息画像</span><span class="link" onclick="openModal('m-archive-unit-add')">编辑</span><span class="link" onclick="openModal('m-archive-unit-merge')">合并</span></td></tr>
+                  <tr><td>江州银行股份有限公司</td><td>企业</td><td>开发区</td><td>9</td><td>2026-06-12</td><td><span class="badge b-pass">正常</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-unit-detail')">全息画像</span><span class="link" onclick="openModal('m-archive-unit-add')">编辑</span><span class="link" onclick="openModal('m-archive-unit-merge')">合并</span></td></tr>
+                  <tr><td>江州市水务集团</td><td>企业</td><td>滨江区</td><td>6</td><td>2026-07-18</td><td><span class="badge b-pass">正常</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-unit-detail')">全息画像</span><span class="link" onclick="openModal('m-archive-unit-add')">编辑</span><span class="link" onclick="openModal('m-archive-unit-merge')">合并</span></td></tr>
+                  <tr><td>江州市自然资源局</td><td>党政机关</td><td>市本级</td><td>8</td><td>2026-08-18</td><td><span class="badge b-warn">待复测</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-unit-detail')">全息画像</span><span class="link" onclick="openModal('m-archive-unit-add')">编辑</span><span class="link" onclick="openModal('m-archive-unit-merge')">合并</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 421 家 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">22</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a1-p2">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-supplier-add')">＋ 登记供应商</button></div>
+              <div class="right"><input class="input" placeholder="供应商名称 / 服务类型"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:960px">
+                <thead><tr><th>供应商名称</th><th>服务类型</th><th>服务单位</th><th>合作起始</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>江州云服科技有限公司</td><td>云平台服务</td><td>江州市医疗保障局</td><td>2024-03-01</td><td><span class="badge b-pass">合作中</span></td><td class="ops"><span class="link" onclick="toast('已打开供应商详情')">详情</span><span class="link" onclick="openModal('m-archive-supplier-add')">编辑</span></td></tr>
+                  <tr><td>浙江安恒信息技术</td><td>安全运维</td><td>江州银行股份有限公司</td><td>2025-01-15</td><td><span class="badge b-pass">合作中</span></td><td class="ops"><span class="link" onclick="toast('已打开供应商详情')">详情</span><span class="link" onclick="openModal('m-archive-supplier-add')">编辑</span></td></tr>
+                  <tr><td>杭州安安检测</td><td>等级测评</td><td>江州市水务集团</td><td>2023-06-20</td><td><span class="badge b-gray">已终止</span></td><td class="ops"><span class="link" onclick="toast('已打开供应商详情')">详情</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 68 家 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">4</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a1-p3">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-org-add')">＋ 登记测评机构</button>
+              <button class="btn" onclick="toast('已导出机构资质台账')">导出资质台账</button></div>
+              <div class="right"><select class="select"><option>全部资质</option><option>甲级</option><option>乙级</option></select><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:980px">
+                <thead><tr><th>机构名称</th><th>资质等级</th><th>测评师</th><th>资质有效期</th><th>在测系统</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>杭州安安检测技术有限公司</td><td><span class="badge b-info">甲级</span></td><td>18</td><td>2027-05-31</td><td>32</td><td><span class="badge b-pass">有效</span></td><td class="ops"><span class="link" onclick="toast('已打开机构资质详情')">详情</span><span class="link" onclick="openModal('m-archive-org-add')">编辑</span><span class="link" onclick="toast('已发起资质年审提醒')">年审</span></td></tr>
+                  <tr><td>浙江信安测评有限公司</td><td><span class="badge b-info">甲级</span></td><td>14</td><td>2026-12-31</td><td>21</td><td><span class="badge b-warn">临期 38 天</span></td><td class="ops"><span class="link" onclick="toast('已打开机构资质详情')">详情</span><span class="link" onclick="openModal('m-archive-org-add')">编辑</span><span class="link" onclick="toast('已发起资质年审提醒')">年审</span></td></tr>
+                  <tr><td>江州信安测评中心</td><td><span class="badge b-gray">乙级</span></td><td>7</td><td>2028-03-31</td><td>9</td><td><span class="badge b-pass">有效</span></td><td class="ops"><span class="link" onclick="toast('已打开机构资质详情')">详情</span><span class="link" onclick="openModal('m-archive-org-add')">编辑</span><span class="link" onclick="toast('已发起资质年审提醒')">年审</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 14 家 · 每页 20 条</span><span class="sp"></span><span class="pg active">1</span></div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="a-tab-2">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="a2-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">系统资产<span class="cnt">2,041</span></button>
+            <button class="tab" data-tab="a2-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">IP 资产<span class="cnt">8,612</span></button>
+            <button class="tab" data-tab="a2-p3" style="border:1px solid var(--c-border-strong);border-radius:8px">域名资产<span class="cnt">346</span></button>
+            <button class="tab" data-tab="a2-p4" style="border:1px solid var(--c-border-strong);border-radius:8px">云平台<span class="cnt">27</span></button>
+            <button class="tab" data-tab="a2-p5" style="border:1px solid var(--c-border-strong);border-radius:8px">大数据平台<span class="cnt">9</span></button>
+          </div>
+
+          <div class="sub-pane active" id="a2-p1">
+            <div class="toolbar toolbar-split">
+              <div class="tb-row">
+                <input class="input" placeholder="系统名称 / 单位" style="width:210px">
+                <select class="select" style="width:120px"><option>全部级别</option><option>第二级</option><option>第三级</option><option>第四级</option></select>
+                <select class="select" style="width:120px"><option>全部状态</option><option>合规</option><option>风险</option><option>待复测</option></select>
+                <button class="btn btn-primary" onclick="toast('已按条件查询')">查询</button>
+              </div>
+              <div class="tb-row">
+                <button class="btn btn-primary" onclick="openModal('m-archive-sys-add')">＋ 登记系统</button>
+                <button class="btn btn-dashed" onclick="openModal('m-archive-asset-add')">＋ 资产登记（IP/域名/云/大数据）</button>
+                <span class="sp"></span>
+                <button class="btn btn-sm" onclick="toast('资产台账已刷新')"><span class="spin">⟳</span> 刷新</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:1060px">
+                <thead><tr><th>系统名称</th><th>所属单位</th><th>等保级别</th><th>资产数</th><th>最新测评</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>江州市医保局结算系统</td><td>江州市医疗保障局</td><td><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></td><td>128</td><td>2026-09-02</td><td><span class="badge b-pass">合规</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-sys-detail')">详情</span><span class="link" onclick="openModal('m-archive-sys-add')">编辑</span><span class="link" onclick="openModal('m-archive-asset-add')">资产登记</span></td></tr>
+                  <tr><td>市三甲医院 HIS 系统</td><td>江州市第一人民医院</td><td><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></td><td>43</td><td>2026-08-30</td><td><span class="badge b-warn">风险</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-sys-detail')">详情</span><span class="link" onclick="openModal('m-archive-sys-add')">编辑</span><span class="link" onclick="openModal('m-archive-asset-add')">资产登记</span></td></tr>
+                  <tr><td>江州银行核心业务系统</td><td>江州银行股份有限公司</td><td><span class="gc">S4A4G4</span><span class="badge b-gray">第四级</span></td><td>96</td><td>2026-06-12</td><td><span class="badge b-pass">合规</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-sys-detail')">详情</span><span class="link" onclick="openModal('m-archive-sys-add')">编辑</span><span class="link" onclick="openModal('m-archive-asset-add')">资产登记</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 2,041 个系统 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">103</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a2-p2">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-asset-add')">＋ 登记 IP</button>
+              <button class="btn" onclick="toast('已导入资产测绘结果（新增 62 个 IP）')">导入测绘结果</button></div>
+              <div class="right"><input class="input" placeholder="IP / 归属系统"><select class="select"><option>全部用途</option><option>Web 服务</option><option>数据库</option><option>运维管理</option></select><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:1040px">
+                <thead><tr><th>IP 地址</th><th>归属系统</th><th>所属单位</th><th>用途</th><th>开放端口</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td class="code">10.20.8.11</td><td>江州市医保局结算系统</td><td>江州市医疗保障局</td><td>Web 服务</td><td>443 / 8443</td><td><span class="badge b-pass">在用</span></td><td class="ops"><span class="link" onclick="toast('已打开 IP 资产详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span><span class="link" onclick="toast('已发起端口复核')">端口复核</span></td></tr>
+                  <tr><td class="code">10.20.8.24</td><td>市三甲医院 HIS 系统</td><td>江州市第一人民医院</td><td>数据库</td><td>1521</td><td><span class="badge b-warn">待核实</span></td><td class="ops"><span class="link" onclick="toast('已打开 IP 资产详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span><span class="link" onclick="toast('已发起端口复核')">端口复核</span></td></tr>
+                  <tr><td class="code">10.21.6.0/24</td><td>江州银行核心业务系统</td><td>江州银行股份有限公司</td><td>网段</td><td>—</td><td><span class="badge b-pass">在用</span></td><td class="ops"><span class="link" onclick="toast('已打开 IP 资产详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span><span class="link" onclick="toast('已发起端口复核')">端口复核</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 8,612 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">431</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a2-p3">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-asset-add')">＋ 登记域名</button></div>
+              <div class="right"><input class="input" placeholder="域名 / 归属系统"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:1000px">
+                <thead><tr><th>域名</th><th>归属系统</th><th>所属单位</th><th>解析 IP</th><th>ICP 备案号</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td class="code">ybj.jiangzhou.gov.cn</td><td>江州市医保局结算系统</td><td>江州市医疗保障局</td><td class="code">10.20.8.11</td><td>浙ICP备2023001234号</td><td><span class="badge b-pass">在用</span></td><td class="ops"><span class="link" onclick="toast('已打开域名详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                  <tr><td class="code">his.jzdyrmyy.cn</td><td>市三甲医院 HIS 系统</td><td>江州市第一人民医院</td><td class="code">10.20.8.24</td><td>浙ICP备2019008765号</td><td><span class="badge b-warn">证书 30 天内到期</span></td><td class="ops"><span class="link" onclick="toast('已打开域名详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                  <tr><td class="code">ebank.jzbank.com</td><td>江州银行核心业务系统</td><td>江州银行股份有限公司</td><td class="code">10.21.6.10</td><td>浙ICP备2015011223号</td><td><span class="badge b-pass">在用</span></td><td class="ops"><span class="link" onclick="toast('已打开域名详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 346 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">…</span><span class="pg">18</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a2-p4">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-asset-add')">＋ 登记云平台</button></div>
+              <div class="right"><input class="input" placeholder="平台名称 / 服务商"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:980px">
+                <thead><tr><th>平台名称</th><th>服务商</th><th>承载系统</th><th>所属单位</th><th>等保级别</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>江州政务云</td><td>江州云服科技</td><td>12 个</td><td>江州市大数据局</td><td><span class="gc">S3A3G3</span></td><td><span class="badge b-pass">已备案</span></td><td class="ops"><span class="link" onclick="toast('已打开云平台详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                  <tr><td>医保专有云</td><td>江州云服科技</td><td>3 个</td><td>江州市医疗保障局</td><td><span class="gc">S3A3G3</span></td><td><span class="badge b-pass">已备案</span></td><td class="ops"><span class="link" onclick="toast('已打开云平台详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                  <tr><td>金融行业云</td><td>华东云谷</td><td>5 个</td><td>江州银行股份有限公司</td><td><span class="gc">S3A3G3</span></td><td><span class="badge b-warn">待备案</span></td><td class="ops"><span class="link" onclick="toast('已打开云平台详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 27 条 · 每页 20 条</span><span class="sp"></span><span class="pg active">1</span><span class="pg">2</span></div>
+          </div>
+
+          <div class="sub-pane" id="a2-p5">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-asset-add')">＋ 登记大数据平台</button></div>
+              <div class="right"><input class="input" placeholder="平台名称 / 承载系统"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:980px">
+                <thead><tr><th>平台名称</th><th>数据规模</th><th>承载系统</th><th>所属单位</th><th>等保级别</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>江州公共数据平台</td><td>1.8 TB</td><td>4 个</td><td>江州市大数据局</td><td><span class="gc">S3A3G3</span></td><td><span class="badge b-pass">已备案</span></td><td class="ops"><span class="link" onclick="toast('已打开大数据平台详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                  <tr><td>医保结算数据仓</td><td>620 GB</td><td>2 个</td><td>江州市医疗保障局</td><td><span class="gc">S3A3G3</span></td><td><span class="badge b-pass">已备案</span></td><td class="ops"><span class="link" onclick="toast('已打开大数据平台详情')">详情</span><span class="link" onclick="openModal('m-archive-asset-add')">编辑</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 9 条 · 每页 20 条</span><span class="sp"></span><span class="pg active">1</span></div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="a-tab-3">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="a3-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">系统漏洞台账<span class="cnt">312</span></button>
+            <button class="tab" data-tab="a3-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">重大风险台账<span class="cnt">23</span></button>
+          </div>
+
+          <div class="sub-pane active" id="a3-p1">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-vuln-add')">＋ 登记漏洞</button>
+              <button class="btn" onclick="toast('已导出漏洞台账（312 条）')">导出台账</button></div>
+              <div class="right"><select class="select"><option>全部等级</option><option>高</option><option>中</option><option>低</option></select>
+                <select class="select"><option>全部状态</option><option>整改中</option><option>待复测</option><option>已闭环</option></select>
+                <input class="input" placeholder="系统 / 漏洞名称"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:1040px">
+                <thead><tr><th>系统</th><th>漏洞</th><th>等级</th><th>发现时间</th><th>整改期限</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>市三甲医院 HIS</td><td>SQL 注入</td><td><span class="badge b-back">高</span></td><td>2026-08-30</td><td>2026-09-20</td><td><span class="badge b-wait">整改中</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-vuln-detail')">详情</span><span class="link" onclick="toast('已提交复测申请，转入待复测')">提交复测</span></td></tr>
+                  <tr><td>医保局结算系统</td><td>越权访问</td><td><span class="badge b-warn">中</span></td><td>2026-08-28</td><td>2026-09-15</td><td><span class="badge b-info">待复测</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-vuln-detail')">详情</span><span class="link" onclick="toast('复测通过，已闭环')">复测</span></td></tr>
+                  <tr><td>市水务集团调度平台</td><td>弱口令策略缺失</td><td><span class="badge b-warn">中</span></td><td>2026-07-18</td><td>2026-08-10</td><td><span class="badge b-pass">已闭环</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-vuln-detail')">详情</span><span class="link" onclick="toast('已导出复测报告')">复测报告</span></td></tr>
+                  <tr><td>江州银行核心业务系统</td><td>日志留存不足 6 个月</td><td><span class="badge b-blue">低</span></td><td>2026-09-02</td><td>2026-09-30</td><td><span class="badge b-wait">整改中</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-vuln-detail')">详情</span><span class="link" onclick="toast('已提交复测申请，转入待复测')">提交复测</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 312 条 · 整改中 41 / 待复测 17 / 已闭环 254</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">…</span><span class="pg">16</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a3-p2">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="toast('已新建重大风险登记')">＋ 登记重大风险</button></div>
+              <div class="right"><select class="select"><option>全部状态</option><option>待处置</option><option>处置中</option><option>已闭环</option></select><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:1000px">
+                <thead><tr><th>系统</th><th>风险描述</th><th>等级</th><th>状态</th><th>处置人</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>市三甲医院 HIS</td><td>核心数据未加密传输</td><td><span class="badge b-back">高</span></td><td><span class="badge b-wait">待处置</span></td><td class="muted">—</td><td class="ops"><span class="link" onclick="toast('已转处置工单')">处置</span><span class="link" onclick="toast('已关闭该风险，留痕已归档')">关闭</span></td></tr>
+                  <tr><td>江州银行核心业务系统</td><td>边界防护缺失</td><td><span class="badge b-warn">中</span></td><td><span class="badge b-info">处置中</span></td><td>李华</td><td class="ops"><span class="link" onclick="toast('已转处置工单')">处置</span><span class="link" onclick="toast('已关闭该风险，留痕已归档')">关闭</span></td></tr>
+                  <tr><td>市自然资源局门户网站</td><td>对外暴露管理后台</td><td><span class="badge b-warn">中</span></td><td><span class="badge b-pass">已闭环</span></td><td>王强</td><td class="ops"><span class="link" onclick="toast('已打开处置留痕')">留痕</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 23 条 · 待处置 6 / 处置中 5 / 已闭环 12</span><span class="sp"></span><span class="pg active">1</span><span class="pg">2</span></div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="a-tab-4">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="a4-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">人员档案<span class="cnt">674</span></button>
+            <button class="tab" data-tab="a4-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">测评师管理<span class="cnt">52</span></button>
+          </div>
+
+          <div class="sub-pane active" id="a4-p1">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-archive-person-add')">＋ 新增人员</button></div>
+              <div class="right"><input class="input" placeholder="姓名 / 单位"><select class="select"><option>全部角色</option><option>系统管理员</option><option>安全责任人</option><option>安全管理员</option></select><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:900px">
+                <thead><tr><th>姓名</th><th>单位</th><th>角色</th><th>联系电话</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>张明</td><td>江州市医疗保障局</td><td>系统管理员</td><td>138****2210</td><td><span class="badge b-pass">在职</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-person-add')">编辑</span><span class="link" onclick="toast('已停用该人员账号')">停用</span></td></tr>
+                  <tr><td>李华</td><td>江州银行股份有限公司</td><td>安全责任人</td><td>139****8871</td><td><span class="badge b-pass">在职</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-person-add')">编辑</span><span class="link" onclick="toast('已停用该人员账号')">停用</span></td></tr>
+                  <tr><td>张敏</td><td>江州市第一人民医院</td><td>安全管理员</td><td>137****4412</td><td><span class="badge b-pass">在职</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-person-add')">编辑</span><span class="link" onclick="toast('已停用该人员账号')">停用</span></td></tr>
+                  <tr><td>周涛</td><td>江州市水务集团</td><td>系统管理员</td><td>136****0093</td><td><span class="badge b-gray">已停用</span></td><td class="ops"><span class="link" onclick="openModal('m-archive-person-add')">编辑</span><span class="link" onclick="toast('已启用该人员账号')">启用</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 674 人 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">34</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="sub-pane" id="a4-p2">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="toast('已新增测评师登记')">＋ 登记测评师</button></div>
+              <div class="right"><select class="select"><option>全部机构</option><option>杭州安安检测</option><option>浙江信安测评</option><option>江州信安测评中心</option></select><input class="input" placeholder="姓名 / 证书编号"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap">
+              <table class="tbl" style="min-width:940px">
+                <thead><tr><th>姓名</th><th>机构</th><th>资质</th><th>证书编号</th><th>在测任务</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>王强</td><td>杭州安安检测</td><td>高级测评师</td><td class="code">CR-2021-0231</td><td>3</td><td class="ops"><span class="link" onclick="toast('已打开测评师档案')">编辑</span><span class="link" onclick="gotoTab('grade','g-tab-3')">任务</span></td></tr>
+                  <tr><td>陈静</td><td>浙江信安测评</td><td>中级测评师</td><td class="code">CR-2022-0455</td><td>2</td><td class="ops"><span class="link" onclick="toast('已打开测评师档案')">编辑</span><span class="link" onclick="gotoTab('grade','g-tab-3')">任务</span></td></tr>
+                  <tr><td>刘洋</td><td>江州信安测评中心</td><td>中级测评师</td><td class="code">CR-2023-1120</td><td>1</td><td class="ops"><span class="link" onclick="toast('已打开测评师档案')">编辑</span><span class="link" onclick="gotoTab('grade','g-tab-3')">任务</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager"><span>共 52 人 · 每页 20 条</span><span class="sp"></span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ M4 监测预警 ============ -->
+      <section class="page" id="p-monitor">
+        <div class="page-head"><div><h1>监测预警</h1><p>预警中心 · 信息发布</p></div>
+          <button class="btn btn-primary" onclick="openModal('m-monitor-rule')">＋ 预警规则</button></div>
+        <div class="tabs" id="tabs-monitor">
+          <button class="tab active" data-tab="m-tab-1">预警中心<span class="cnt">17</span></button>
+          <button class="tab" data-tab="m-tab-2">信息发布<span class="cnt">9</span></button>
+        </div>
+        <div class="tab-pane active" id="m-tab-1">
+          <div class="toolbar"><div class="right"><select class="select"><option>全部级别</option><option>高危</option><option>中危</option><option>低危</option></select><select class="select"><option>全部状态</option><option>待处理</option><option>处理中</option><option>已关闭</option></select><button class="btn btn-primary">查询</button></div></div>
+          <div class="table-wrap">
+            <table class="tbl"><thead><tr><th>级别</th><th>类型</th><th>对象</th><th>触发时间</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td><span class="badge b-back">高危</span></td><td>漏洞利用</td><td>市三甲医院 HIS 系统</td><td>2026-09-09 08:12</td><td><span class="badge b-wait">待处理</span></td><td class="ops"><span class="link" onclick="openModal('m-monitor-alarm-detail')">处置</span><span class="link" onclick="toast('预警已关闭，处置留痕已归档')">关闭</span></td></tr>
+                <tr><td><span class="badge b-warn">中危</span></td><td>备案超期</td><td>江州银行核心业务系统</td><td>2026-09-08 14:30</td><td><span class="badge b-info">处理中</span></td><td class="ops"><span class="link" onclick="openModal('m-monitor-alarm-detail')">处置</span><span class="link" onclick="toast('预警已关闭，处置留痕已归档')">关闭</span></td></tr>
+                <tr><td><span class="badge b-blue">低危</span></td><td>资产变更</td><td>江州市医保局结算系统</td><td>2026-09-07 09:05</td><td><span class="badge b-pass">已关闭</span></td><td class="ops"><span class="link" onclick="openModal('m-monitor-alarm-detail')">详情</span></td></tr>
+              </tbody>            </table>
+          </div>
+          <div class="pager"><span>共 17 条活跃预警 · 待处理 6 / 处理中 4 / 已关闭 7</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">›</span></div>
+          <div class="card card-pad" style="margin-top:16px">
+            <div class="section-title">主动监测与告警 · 推送配置</div>
+            <div class="row-3">
+              <div class="up-card"><div class="uh">资产测绘对接</div><span class="badge b-pass">已连接</span><div class="hint">对接测绘平台，每小时同步</div></div>
+              <div class="up-card"><div class="uh">漏扫对接</div><span class="badge b-pass">已连接</span><div class="hint">对接漏洞扫描系统</div></div>
+              <div class="up-card"><div class="uh">推送渠道</div><span class="badge b-info">平台/短信/邮件</span><div class="hint"><span class="link" onclick="openModal('m-monitor-rule')">配置</span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-pane" id="m-tab-2">
+          <div class="toolbar"><div class="left">
+            <button class="btn btn-primary" onclick="openPublish('通知通报')">＋ 发布通报</button>
+            <button class="btn" onclick="openPublish('安全预警公告')">＋ 安全预警公告</button>
+            <button class="btn" onclick="openPublish('通知公告')">＋ 通知公告</button></div>
+            <div class="right"><select class="select"><option>全部类型</option><option>通知通报</option><option>安全预警公告</option><option>通知公告</option></select><button class="btn btn-primary">查询</button></div></div>
+          <div class="table-wrap">
+            <table class="tbl"><thead><tr><th>标题</th><th>类型</th><th>发布单位</th><th>发布时间</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>关于开展2026年等保测评专项检查的通知</td><td><span class="badge b-info">通知通报</span></td><td>市网安支队</td><td>2026-09-05</td><td><span class="badge b-pass">已发布</span></td><td class="ops"><span class="link" onclick="openPublish('通知通报')">查看</span><span class="link" onclick="openPublish('通知通报')">编辑</span><span class="link" onclick="toast('已撤回该通报，状态置为「已撤回」')">撤回</span></td></tr>
+                <tr><td>关于Exchange高危漏洞的安全预警</td><td><span class="badge b-back">安全预警公告</span></td><td>省厅</td><td>2026-09-03</td><td><span class="badge b-pass">已发布</span></td><td class="ops"><span class="link" onclick="openPublish('安全预警公告')">查看</span><span class="link" onclick="openPublish('安全预警公告')">编辑</span><span class="link" onclick="toast('已撤回该公告，状态置为「已撤回」')">撤回</span></td></tr>
+                <tr><td>测评机构资质年审工作安排</td><td><span class="badge b-blue">通知公告</span></td><td>市网安支队</td><td>2026-08-28</td><td><span class="badge b-pass">已发布</span></td><td class="ops"><span class="link" onclick="openPublish('通知公告')">查看</span><span class="link" onclick="openPublish('通知公告')">编辑</span><span class="link" onclick="toast('已撤回该公告，状态置为「已撤回」')">撤回</span></td></tr>
+                <tr><td>国庆期间网络安全保障工作提示（旧版）</td><td><span class="badge b-info">通知通报</span></td><td>市网安支队</td><td>2026-08-20</td><td><span class="badge b-gray">已撤回</span></td><td class="ops"><span class="link" onclick="openPublish('通知通报')">查看</span></td></tr>
+              </tbody></table>
+          </div>
+          <div class="pager"><span>共 46 条</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span></div>
+        </div>
+      </section>
+
+      <!-- ============ M5 智能体 ============ -->
+      <section class="page" id="p-agent">
+        <div class="page-head"><div><h1>智能体</h1><p>AI 对话 · 知识库 · 数据中心（平台化 + 嵌入式）</p></div></div>
+        <div class="tabs" id="tabs-agent">
+          <button class="tab active" data-tab="ag-tab-1">AI 对话</button>
+          <button class="tab" data-tab="ag-tab-2">知识库</button>
+          <button class="tab" data-tab="ag-tab-3">数据中心</button>
+        </div>
+        <div class="tab-pane active" id="ag-tab-1">
+          <div class="agent-wrap">
+            <div class="card card-pad agent-side">
+              <div class="section-title">会话</div>
+              <div class="task-list">
+                <div class="task"><div class="body"><div class="t">医保局结算系统合规分析</div><div class="m">今日 09:10 · 6 轮</div></div><span class="link" onclick="toast('已切换会话')">切换</span></div>
+                <div class="task"><div class="body"><div class="t">HIS系统风险研判</div><div class="m">昨日 16:42 · 4 轮</div></div><span class="link" onclick="toast('已切换会话')">切换</span></div>
+                <div class="task"><div class="body"><div class="t">实施报备材料抽取</div><div class="m">09-01 · 2 轮</div></div><span class="link" onclick="toast('已切换会话')">切换</span></div>
+                <div class="task" style="cursor:pointer" onclick="toast('已新建会话')"><div class="body"><div class="t">＋ 新建会话</div></div></div>
+              </div>
+              <div class="hint" style="margin-top:10px">会话按单位 / 系统归档，可回溯引用原文。</div>
+            </div>
+
+            <div class="card card-pad agent-chat">
+              <div class="section-title">AI 对话 <span class="badge b-info" style="font-weight:400">已接入知识库 1,284 条</span></div>
+              <div class="chat" id="agentChat">
+                <div class="bubble bot">您好，我是等级保护智能体。可帮您查询备案进度、比对合规条款、抽取报告要素。请问需要什么？</div>
+                <div class="bubble me">医保局结算系统最近一次测评风险等级是多少？</div>
+                <div class="bubble bot">江州市医保局结算系统（<span class="gc">S3A3G3</span>）最近测评（2026-09-02）综合风险：<b>中风险</b>。共发现中危漏洞 3 项、低危 5 项，均已整改闭环。高风险项 0。</div>
+                <div class="bubble me">帮我把这份实施报备材料的关键字段抽出来，对照备案库看看有没有不一致</div>
+                <div class="bubble bot">
+                  已解析《市三甲医院 HIS 系统实施报备材料.pdf》（12 页），抽取字段 12 项，其中 <b>3 项与备案库不一致</b>：
+                  <div class="struct-tbl">
+                    <table class="tbl tbl-compact">
+                      <thead><tr><th>字段</th><th>抽取值</th><th>备案库</th><th>结论</th></tr></thead>
+                      <tbody>
+                        <tr><td>系统名称</td><td>市三甲医院 HIS 系统</td><td>市三甲医院 HIS 系统</td><td><span class="badge b-pass">一致</span></td></tr>
+                        <tr><td>等保定级</td><td>S3A3G3</td><td>S3A3G3</td><td><span class="badge b-pass">一致</span></td></tr>
+                        <tr><td>测评机构</td><td>浙江信安测评</td><td>江州信安测评</td><td><span class="badge b-back">不一致</span></td></tr>
+                        <tr><td>网络地址段</td><td>10.20.8.0/24</td><td>10.21.6.0/24</td><td><span class="badge b-back">不一致</span></td></tr>
+                        <tr><td>安全责任人</td><td>张敏</td><td>—</td><td><span class="badge b-warn">待补录</span></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="acts">
+                    <span class="link" onclick="toast('已回填 12 项字段至实施报备表单，3 项差异待人工确认')">↳ 回填业务表单</span>
+                    <span class="link" onclick="toast('已基于该结果继续追问：请说明测评机构不一致的处理建议')">↳ 继续追问</span>
+                    <span class="link" onclick="openRawDoc('report')">↳ 查看原件定位</span>
+                  </div>
+                </div>
+              </div>
+              <div class="chat-input">
+                <button class="btn" onclick="toast('已选择文件：支持 PDF / Word / Excel，自动解析')">↑ 上传文件</button>
+                <input class="input" placeholder="输入问题，或上传材料后直接提问…">
+                <button class="btn btn-primary" onclick="toast('已发送')">发送</button>
+              </div>
+              <div class="hint" style="margin-top:8px">支持 PDF / Word / Excel 自动解析，单文件 ≤ 20 MB；回答内嵌结构化结果，可一键回填业务表单并保留引用来源。</div>
+            </div>
+          </div>
+
+          <div class="card card-pad" style="margin-top:16px">
+            <div class="section-title">常用模板</div>
+            <div class="template-grid tg-3">
+              <div class="tpl" onclick="toast('已套用模板：备案进度查询')"><div class="tt">备案进度查询</div><div class="td">按单位 / 系统查询备案状态与当前审核节点</div></div>
+              <div class="tpl" onclick="toast('已套用模板：合规条款比对')"><div class="tt">合规条款比对</div><div class="td">测评报告条款 vs GB/T 22239-2019 逐项比对</div></div>
+              <div class="tpl" onclick="toast('已套用模板：风险研判')"><div class="tt">风险研判</div><div class="td">多源数据综合研判风险等级与影响面</div></div>
+              <div class="tpl" onclick="toast('已套用模板：整改建议生成')"><div class="tt">整改建议生成</div><div class="td">按漏洞清单生成整改建议与处置优先级</div></div>
+              <div class="tpl tpl-ai" id="tplMonthly" onclick="genMonthlyReport()" title="点击生成 2026 年 9 月监管月报"><div class="tt">月报摘要</div><div class="td">自动生成监管月报（含 KPI 与趋势）</div></div>
+              <div class="tpl" onclick="toast('已套用模板：预警研判')"><div class="tt">预警研判</div><div class="td">关联资产、漏洞与历史预警做上下文分析</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-pane" id="ag-tab-2">
+          <div class="toolbar toolbar-split">
+            <div class="tb-row">
+              <select class="select" style="width:126px"><option>全部分类</option><option>法规</option><option>标准</option><option>漏洞库</option><option>案例库</option></select>
+              <select class="select" style="width:126px"><option>全部来源</option><option>全国人大</option><option>国标委</option><option>CNVD</option><option>支队沉淀</option></select>
+              <input class="input" placeholder="全文检索：法规 / 标准 / 漏洞 / 案例" style="width:260px">
+              <button class="btn btn-primary" onclick="toast('已按分类与关键词检索')">检索</button>
+              <button class="btn" onclick="toast('已重置知识库筛选')">重置</button>
+            </div>
+            <div class="tb-row">
+              <button class="btn btn-primary" onclick="openModal('m-agent-kb-detail')">＋ 新增知识</button>
+              <button class="btn" onclick="toast('已批量导入知识文件（支持 PDF / Word / Markdown）')">批量导入</button>
+              <span class="sp"></span>
+              <button class="btn btn-sm" onclick="toast('知识库索引已刷新')"><span class="spin">⟳</span> 刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="tbl" style="min-width:940px">
+              <thead><tr><th>分类</th><th>名称</th><th>来源</th><th>标签</th><th>更新时间</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td><span class="badge b-info">法规</span></td><td>网络安全法</td><td>全国人大</td><td><span class="badge b-gray">基础法规</span> <span class="badge b-gray">现行</span></td><td>2017-06-01</td><td class="ops"><span class="link" onclick="openModal('m-agent-kb-detail')">查看</span><span class="link" onclick="openModal('m-agent-kb-tag')">标签</span><span class="link" onclick="openModal('m-agent-kb-detail')">编辑</span></td></tr>
+                <tr><td><span class="badge b-purple">标准</span></td><td>GB/T 22239-2019 基本要求</td><td>国标委</td><td><span class="badge b-gray">等保 2.0</span></td><td>2019-05-10</td><td class="ops"><span class="link" onclick="openModal('m-agent-kb-detail')">查看</span><span class="link" onclick="openModal('m-agent-kb-tag')">标签</span><span class="link" onclick="openModal('m-agent-kb-detail')">编辑</span></td></tr>
+                <tr><td><span class="badge b-warn">漏洞库</span></td><td>CVE-2026-1234</td><td>CNVD</td><td><span class="badge b-gray">高危</span> <span class="badge b-gray">Exchange</span></td><td>2026-09-01</td><td class="ops"><span class="link" onclick="openModal('m-agent-kb-detail')">查看</span><span class="link" onclick="openModal('m-agent-kb-tag')">标签</span><span class="link" onclick="openModal('m-agent-kb-detail')">编辑</span></td></tr>
+                <tr><td><span class="badge b-teal">案例库</span></td><td>政务云等保合规案例</td><td>支队沉淀</td><td><span class="badge b-gray">政务云</span></td><td>2026-08-20</td><td class="ops"><span class="link" onclick="openModal('m-agent-kb-detail')">查看</span><span class="link" onclick="openModal('m-agent-kb-tag')">标签</span><span class="link" onclick="openModal('m-agent-kb-detail')">编辑</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager"><span>共 1,284 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">65</span><span class="pg">›</span></div>
+          <div class="card card-pad" style="margin-top:16px">
+            <div class="section-title">知识库 · 智能互动落点</div>
+            <div class="hint" style="margin:0">知识库不单独造问答入口：AI 对话提问时按「分类 + 标签 + 语义」召回本库内容，回答末尾保留来源引用；驳回意见、整改建议等审核场景也会引用对应法规条款。</div>
+          </div>
+        </div>
+        <div class="tab-pane" id="ag-tab-3">
+          <div class="toolbar toolbar-split">
+            <div class="tb-row">
+              <select class="select" style="width:132px"><option>全部数据类型</option><option>备案数据</option><option>测评报告</option><option>资产测绘</option><option>隐患数据</option></select>
+              <select class="select" style="width:128px"><option>全部来源</option><option>机构端上报</option><option>测绘平台</option><option>漏扫对接</option><option>人工录入</option></select>
+              <input class="input" placeholder="数据源名称 / 表名" style="width:200px">
+              <button class="btn btn-primary" onclick="toast('已按类型与来源查询')">查询</button>
+              <button class="btn" onclick="toast('已重置数据中心筛选')">重置</button>
+            </div>
+            <div class="tb-row">
+              <button class="btn btn-primary" onclick="openModal('m-agent-data-add')">＋ 数据接入</button>
+              <button class="btn" onclick="openModal('m-agent-data-clean')">✦ 清洗任务</button>
+              <span class="sp"></span>
+              <button class="btn btn-sm" onclick="toast('数据源状态已刷新')"><span class="spin">⟳</span> 刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="tbl" style="min-width:1000px">
+              <thead><tr><th>数据类型</th><th>来源</th><th>记录数</th><th>状态</th><th>最近更新</th><th>质量</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>备案数据</td><td>机构端上报</td><td>1,286</td><td><span class="badge b-pass">正常</span></td><td>2026-09-09</td><td><span class="badge b-pass">优</span></td><td class="ops"><span class="link" onclick="openModal('m-agent-data-view')">查看</span><span class="link" onclick="openModal('m-agent-data-clean')">清洗</span></td></tr>
+                <tr><td>测评报告</td><td>机构端上报</td><td>56</td><td><span class="badge b-pass">正常</span></td><td>2026-09-09</td><td><span class="badge b-warn">需清洗</span></td><td class="ops"><span class="link" onclick="openModal('m-agent-data-view')">查看</span><span class="link" onclick="openModal('m-agent-data-clean')">清洗</span></td></tr>
+                <tr><td>资产测绘</td><td>测绘平台</td><td>8,612</td><td><span class="badge b-pass">正常</span></td><td>2026-09-09 08:00</td><td><span class="badge b-pass">优</span></td><td class="ops"><span class="link" onclick="openModal('m-agent-data-view')">查看</span><span class="link" onclick="openModal('m-agent-data-clean')">清洗</span></td></tr>
+                <tr><td>隐患数据</td><td>漏扫对接</td><td>312</td><td><span class="badge b-warn">延迟 2 小时</span></td><td>2026-09-09 06:12</td><td><span class="badge b-back">异常 3 条</span></td><td class="ops"><span class="link" onclick="openModal('m-agent-data-view')">查看</span><span class="link" onclick="openModal('m-agent-data-clean')">清洗</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager"><span>共 126 条 · 每页 20 条</span><span class="sp"></span><span class="pg">‹</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">…</span><span class="pg">7</span><span class="pg">›</span></div>
+
+          <div class="card card-pad" style="margin-top:16px">
+            <div class="section-title">数据资源目录</div>
+            <div class="row-3">
+              <div class="up-card"><div class="uh">单位档案</div><div class="mini-num">421</div><div class="hint">已授权 6 个角色</div></div>
+              <div class="up-card"><div class="uh">系统资产</div><div class="mini-num">2,041</div><div class="hint">已授权 5 个角色</div></div>
+              <div class="up-card"><div class="uh">隐患数据</div><div class="mini-num">312</div><div class="hint">已授权 4 个角色</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ M6 指挥驾驶舱（大屏） ============ -->
+      <section class="page screen-page" id="p-screen">
+        <div class="page-head">
+          <div><h1>指挥驾驶舱</h1><p>态势总览 · 风险分析 · 实时预警 · 统计分析</p></div>
+          <button class="btn btn-primary" onclick="toast('已切换全屏')">⛶ 全屏</button>
+        </div>
+        <div class="screen-tabs" id="screenTabs">
+          <button class="stab active" data-tab="s-pane-1">态势总览</button>
+          <button class="stab" data-tab="s-pane-2">风险分析</button>
+          <button class="stab" data-tab="s-pane-3">实时预警</button>
+          <button class="stab" data-tab="s-pane-4">统计分析</button>
+        </div>
+
+        <div class="screen-pane active" id="s-pane-1">
+          <div class="screen-kpi">
+            <div class="k"><span class="accent a-blue"></span><div class="n">1,286</div><div class="l">备案总数</div><div class="sub">本年 +118</div></div>
+            <div class="k"><span class="accent a-teal"></span><div class="n">2,041</div><div class="l">系统资产</div><div class="sub">覆盖 421 单位</div></div>
+            <div class="k"><span class="accent a-warn"></span><div class="n">56</div><div class="l">测评待审</div><div class="sub">初审33/终审23</div></div>
+            <div class="k"><span class="accent a-red"></span><div class="n">17</div><div class="l">活跃预警</div><div class="sub">高危4/中危9</div></div>
+            <div class="k"><span class="accent a-purple"></span><div class="n">87%</div><div class="l">整改完成率</div><div class="sub">环比 +3.2%</div></div>
+          </div>
+
+          <div class="screen-gis-row">
+            <div class="screen-card">
+              <div class="gis-head">
+                <div class="gh-l"><h3>区域风险热力（GIS 底图 + 热力叠加）</h3></div>
+                <div class="gis-layers">
+                  <label><input type="checkbox" checked> 底图</label>
+                  <label><input type="checkbox" checked> 热力</label>
+                  <label><input type="checkbox" checked> 风险点位</label>
+                  <label><input type="checkbox"> 边界</label>
+                </div>
+              </div>
+              <div class="gis-canvas">
+                <svg viewBox="0 0 660 400" role="img" aria-label="江州市区域风险热力图">
+                  <defs>
+                    <radialGradient id="hgRed"><stop offset="0%" stop-color="#FF6B6B" stop-opacity=".62"/><stop offset="55%" stop-color="#FF6B6B" stop-opacity=".26"/><stop offset="100%" stop-color="#FF6B6B" stop-opacity="0"/></radialGradient>
+                    <radialGradient id="hgWarn"><stop offset="0%" stop-color="#F2B347" stop-opacity=".55"/><stop offset="55%" stop-color="#F2B347" stop-opacity=".22"/><stop offset="100%" stop-color="#F2B347" stop-opacity="0"/></radialGradient>
+                    <radialGradient id="hgBlue"><stop offset="0%" stop-color="#3B9EFF" stop-opacity=".40"/><stop offset="60%" stop-color="#3B9EFF" stop-opacity=".16"/><stop offset="100%" stop-color="#3B9EFF" stop-opacity="0"/></radialGradient>
+                    <pattern id="gisGrid" width="22" height="22" patternUnits="userSpaceOnUse">
+                      <path d="M22 0H0V22" fill="none" stroke="rgba(59,158,255,.10)" stroke-width="1"/>
+                    </pattern>
+                  </defs>
+                  <rect x="0" y="0" width="660" height="400" fill="url(#gisGrid)"/>
+                  <g stroke="rgba(59,158,255,.38)" stroke-width="1.2" fill="rgba(46,125,201,.10)">
+                    <polygon points="18,22 172,14 186,104 30,126"/>
+                    <polygon points="186,14 336,10 344,120 186,104"/>
+                    <polygon points="344,10 470,18 486,124 344,120"/>
+                    <polygon points="486,18 646,30 640,138 486,124"/>
+                    <polygon points="30,126 186,104 202,252 44,266"/>
+                    <polygon points="202,120 352,124 366,268 202,252"/>
+                    <polygon points="486,124 640,138 620,282 486,268"/>
+                    <polygon points="44,266 202,252 232,372 78,384"/>
+                    <polygon points="232,268 366,268 402,382 232,372"/>
+                    <polygon points="402,282 620,282 596,378 402,382"/>
+                  </g>
+                  <g>
+                    <circle cx="566" cy="86" r="86" fill="url(#hgRed)"/>
+                    <circle cx="470" cy="212" r="70" fill="url(#hgRed)"/>
+                    <circle cx="262" cy="62" r="64" fill="url(#hgWarn)"/>
+                    <circle cx="120" cy="188" r="62" fill="url(#hgWarn)"/>
+                    <circle cx="292" cy="196" r="56" fill="url(#hgBlue)"/>
+                    <circle cx="152" cy="316" r="52" fill="url(#hgBlue)"/>
+                  </g>
+                  <g fill="#FF6B6B">
+                    <circle cx="566" cy="86" r="4.5"/><circle cx="470" cy="212" r="4"/>
+                  </g>
+                  <g fill="#F2B347">
+                    <circle cx="262" cy="62" r="3.6"/><circle cx="120" cy="188" r="3.6"/><circle cx="520" cy="180" r="3.2"/>
+                  </g>
+                  <g fill="#3B9EFF">
+                    <circle cx="292" cy="196" r="3"/><circle cx="152" cy="316" r="3"/><circle cx="392" cy="320" r="2.8"/>
+                  </g>
+                  <g class="dname" text-anchor="middle">
+                    <text x="100" y="70">临安</text><text x="262" y="64">余杭</text><text x="412" y="70">拱墅</text><text x="566" y="92">市本级</text>
+                    <text x="118" y="196">江城</text><text x="284" y="196">滨江</text><text x="552" y="212">开发区</text>
+                    <text x="156" y="322">富阳</text><text x="304" y="330">西湖</text><text x="510" y="330">上城</text>
+                  </g>
+                </svg>
+                <div class="gis-legend">
+                  <div class="lg-row"><span class="dot" style="background:#FF6B6B"></span>高风险 4 区</div>
+                  <div class="lg-row"><span class="dot" style="background:#F2B347"></span>中风险 5 区</div>
+                  <div class="lg-row"><span class="dot" style="background:#3B9EFF"></span>低风险 6 区</div>
+                  <div class="lg-row" style="color:#6E85A0">数据更新 2026-11-23</div>
+                </div>
+                <div class="gis-scale">底图 天地图 · 独立 GIS 服务 · 0 — 5 — 10 km</div>
+              </div>
+            </div>
+
+            <div class="screen-card">
+              <h3>实时预警滚动</h3>
+              <div class="alarm-list">
+                <div class="alarm r"><div><div class="t">市三甲医院 HIS 漏洞利用</div><div class="m">高危 · 待处理 · 定位 市本级</div><div class="tm">08:12</div></div></div>
+                <div class="alarm w"><div><div class="t">江州银行核心业务系统 备案超期</div><div class="m">中危 · 处理中 · 开发区</div><div class="tm">昨日</div></div></div>
+                <div class="alarm i"><div><div class="t">医保局结算系统 资产变更</div><div class="m">低危 · 已关闭 · 江城</div><div class="tm">09-07</div></div></div>
+                <div class="alarm w"><div><div class="t">水务集团 测评超期</div><div class="m">中危 · 待处理 · 滨江</div><div class="tm">09-06</div></div></div>
+              </div>
+              <div class="hint" style="color:#7E93B0;margin-top:10px">点击预警可在上图定位对应区域（演示）</div>
+            </div>
+          </div>
+
+          <div class="screen-grid" style="grid-template-columns:1fr 1fr">
+            <div class="screen-card">
+              <h3>备案完成情况</h3>
+              <div class="donut-row">
+                <div class="donut"><div class="center"><div><div class="big">86%</div><div class="sm">覆盖率</div></div></div></div>
+                <div class="legend">
+                  <div class="li"><span class="dotc" style="background:#3B9EFF"></span>已备案 68%</div>
+                  <div class="li"><span class="dotc" style="background:#22C3A6"></span>测评中 18%</div>
+                  <div class="li"><span class="dotc" style="background:#F2B347"></span>待备案 9%</div>
+                  <div class="li"><span class="dotc" style="background:#FF6B6B"></span>超期 5%</div>
+                </div>
+              </div>
+            </div>
+            <div class="screen-card">
+              <h3>数据分类统计</h3>
+              <div class="bar-list">
+                <div class="bar-item"><div class="bl"><span>备案数据</span><b>1,286</b></div><div class="bar-track"><div class="bar-fill" style="width:86%"></div></div></div>
+                <div class="bar-item"><div class="bl"><span>系统资产</span><b>2,041</b></div><div class="bar-track"><div class="bar-fill teal" style="width:100%"></div></div></div>
+                <div class="bar-item"><div class="bl"><span>隐患数据</span><b>312</b></div><div class="bar-track"><div class="bar-fill warn" style="width:34%"></div></div></div>
+                <div class="bar-item"><div class="bl"><span>活跃预警</span><b>17</b></div><div class="bar-track"><div class="bar-fill red" style="width:9%"></div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen-pane" id="s-pane-2">
+          <div class="screen-grid">
+            <div class="screen-card">
+              <h3>高风险系统分布（TOP10）</h3>
+              <div class="top-row">
+                <div class="top-item"><span class="rk rk1">1</span><span class="nm">市三甲医院 HIS 系统</span><span class="ct">5</span></div>
+                <div class="top-item"><span class="rk rk2">2</span><span class="nm">江州银行核心业务系统</span><span class="ct">4</span></div>
+                <div class="top-item"><span class="rk rk3">3</span><span class="nm">市水务集团调度平台</span><span class="ct">3</span></div>
+                <div class="top-item"><span class="rk rk4">4</span><span class="nm">市自然资源局门户网站</span><span class="ct">2</span></div>
+                <div class="top-item"><span class="rk rk5">5</span><span class="nm">医保局结算系统</span><span class="ct">2</span></div>
+              </div>
+            </div>
+            <div class="screen-card">
+              <h3>漏洞等级分布</h3>
+              <div class="donut-row">
+                <div class="donut" style="background:conic-gradient(#FF6B6B 0 22%,#F2B347 22% 55%,#3B9EFF 55% 100%)"><div class="center"><div><div class="big">312</div><div class="sm">漏洞</div></div></div></div>
+                <div class="legend">
+                  <div class="li"><span class="dotc" style="background:#FF6B6B"></span>高危 22%</div>
+                  <div class="li"><span class="dotc" style="background:#F2B347"></span>中危 33%</div>
+                  <div class="li"><span class="dotc" style="background:#3B9EFF"></span>低危 45%</div>
+                </div>
+              </div>
+            </div>
+            <div class="screen-card">
+              <h3>区域风险热力</h3>
+              <div class="heat">
+                <div class="cell h3">市本</div><div class="cell h2">江城</div><div class="cell h1">开发</div><div class="cell h2">滨江</div><div class="cell h0">萧山</div><div class="cell h1">余杭</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen-pane" id="s-pane-3">
+          <div class="screen-card">
+            <h3>实时预警滚动（全量）</h3>
+            <div class="alarm-list" style="max-height:none">
+              <div class="alarm r"><div><div class="t">市三甲医院 HIS 漏洞利用</div><div class="m">高危 · 待处理 · 资产测绘联动</div><div class="tm">08:12</div></div></div>
+              <div class="alarm w"><div><div class="t">江州银行核心业务系统 备案超期</div><div class="m">中危 · 处理中</div><div class="tm">昨日 14:30</div></div></div>
+              <div class="alarm w"><div><div class="t">水务集团 测评超期</div><div class="m">中危 · 待处理</div><div class="tm">09-06</div></div></div>
+              <div class="alarm i"><div><div class="t">医保局结算系统 资产变更</div><div class="m">低危 · 已关闭</div><div class="tm">09-07 09:05</div></div></div>
+              <div class="alarm r"><div><div class="t">开发区某企业 勒索特征</div><div class="m">高危 · 待处置</div><div class="tm">09-05 22:40</div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen-pane" id="s-pane-4">
+          <div class="screen-foot">
+            <div class="screen-card"><div class="big">1,286</div><div class="sm">备案数据（本年 +118）</div></div>
+            <div class="screen-card"><div class="big">86%</div><div class="sm">等保覆盖率（环比 +2%）</div></div>
+            <div class="screen-card"><div class="big">87%</div><div class="sm">整改完成率（环比 +3.2%）</div></div>
+          </div>
+          <div class="screen-card" style="margin-top:16px">
+            <h3>安全状况分析</h3>
+            <div class="row-3">
+              <div class="up-card"><div class="uh">通过率</div><div class="mini-num" style="color:#22C3A6">94%</div><div class="hint">测评一次通过率</div></div>
+              <div class="up-card"><div class="uh">超期率</div><div class="mini-num" style="color:#FF6B6B">5%</div><div class="hint">备案/测评超期</div></div>
+              <div class="up-card"><div class="uh">预警处置率</div><div class="mini-num" style="color:#3B9EFF">88%</div><div class="hint">7 日内闭环</div></div>
+            </div>
+          </div>
+          <div class="screen-card" style="margin-top:16px">
+            <h3>流程示意（监管视角）</h3>
+            <div class="mini-flow">
+              <span class="mf-node">① 定级</span><span class="mf-ar">→</span>
+              <span class="mf-node" style="border-color:#2E7DC9;background:rgba(46,125,201,.32)">② 备案</span><span class="mf-ar">→</span>
+              <span class="mf-node">③ 实施</span><span class="mf-ar">→</span>
+              <span class="mf-node">④ 测评</span><span class="mf-ar">→</span>
+              <span class="mf-node">⑤ 整改规划</span><span class="mf-ar">→</span>
+              <span class="mf-node">⑥ 整改闭环</span><span class="mf-ar">→</span>
+              <span class="mf-node">⑦ 持续监测</span>
+            </div>
+            <div class="hint" style="color:#7E93B0;margin-top:12px">当前积压环节：整改规划审核 14 项；全流程平均流转 6.4 天。</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ M7 系统管理 ============ -->
+      <section class="page" id="p-sys">
+        <div class="page-head"><div><h1>系统管理</h1><p>组织与权限 · 基础配置 · 运维审计 · 个人中心</p></div></div>
+        <div class="tabs" id="tabs-sys">
+          <button class="tab active" data-tab="s-tab-1">组织与权限</button>
+          <button class="tab" data-tab="s-tab-2">基础配置</button>
+          <button class="tab" data-tab="s-tab-3">运维审计</button>
+          <button class="tab" data-tab="s-tab-4">个人中心</button>
+        </div>
+
+        <!-- 组织与权限 -->
+        <div class="tab-pane active" id="s-tab-1">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="s1-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">用户管理</button>
+            <button class="tab" data-tab="s1-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">机构用户</button>
+            <button class="tab" data-tab="s1-p3" style="border:1px solid var(--c-border-strong);border-radius:8px">部门管理</button>
+            <button class="tab" data-tab="s1-p4" style="border:1px solid var(--c-border-strong);border-radius:8px">角色权限</button>
+          </div>
+          <div class="sub-pane active" id="s1-p1">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-sys-user-add')">＋ 新增用户</button></div>
+              <div class="right"><input class="input" placeholder="姓名/账号"><button class="btn btn-primary">查询</button></div></div>
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>姓名</th><th>部门</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody><tr><td>zhangp</td><td>张平</td><td>监管一处</td><td><span class="badge b-info">监管员</span></td><td><span class="badge b-pass">启用</span></td><td class="ops"><span class="link" onclick="toast('已编辑')">编辑</span><span class="link" onclick="toast('已停用')">停用</span><span class="link" onclick="openModal('m-sys-pwd-reset')">重置密码</span></td></tr>
+              <tr><td>liuj</td><td>刘静</td><td>监管二处</td><td><span class="badge b-info">监管员</span></td><td><span class="badge b-pass">启用</span></td><td class="ops"><span class="link" onclick="toast('已编辑')">编辑</span><span class="link" onclick="toast('已停用')">停用</span><span class="link" onclick="openModal('m-sys-pwd-reset')">重置密码</span></td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s1-p2">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>机构账号</th><th>机构名称</th><th>资质</th><th>状态</th></tr></thead>
+              <tbody><tr><td>aajc</td><td>杭州安安检测</td><td><span class="badge b-pass">有效</span></td><td><span class="badge b-pass">启用</span></td></tr>
+              <tr><td>xajc</td><td>浙江信安测评</td><td><span class="badge b-pass">有效</span></td><td><span class="badge b-pass">启用</span></td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s1-p3">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>部门</th><th>上级</th><th>人数</th></tr></thead>
+              <tbody><tr><td>监管一处</td><td>支队</td><td>8</td></tr><tr><td>监管二处</td><td>支队</td><td>6</td></tr><tr><td>江城区网安</td><td>区县公安局</td><td>4</td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s1-p4">
+            <div class="toolbar"><div class="left"><button class="btn btn-primary" onclick="openModal('m-sys-role-add')">＋ 角色</button></div></div>
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>角色</th><th>权限范围</th><th>人数</th><th>操作</th></tr></thead>
+              <tbody><tr><td>超级管理员</td><td>全部</td><td>2</td><td class="ops"><span class="link" onclick="toast('已配置权限')">权限</span></td></tr>
+              <tr><td>监管员</td><td>备案/实施/测评审核</td><td>14</td><td class="ops"><span class="link" onclick="toast('已配置权限')">权限</span></td></tr>
+              <tr><td>机构用户</td><td>机构端业务</td><td>36</td><td class="ops"><span class="link" onclick="toast('已配置权限')">权限</span></td></tr>
+              <tr><td>测评师</td><td>只读+上报</td><td>52</td><td class="ops"><span class="link" onclick="toast('已配置权限')">权限</span></td></tr></tbody></table></div>
+          </div>
+        </div>
+
+        <!-- 基础配置 -->
+        <div class="tab-pane" id="s-tab-2">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="s2-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">字段字典</button>
+            <button class="tab" data-tab="s2-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">标签管理</button>
+            <button class="tab" data-tab="s2-p3" style="border:1px solid var(--c-border-strong);border-radius:8px">机房列表</button>
+            <button class="tab" data-tab="s2-p4" style="border:1px solid var(--c-border-strong);border-radius:8px">收藏管理</button>
+          </div>
+          <div class="sub-pane active" id="s2-p1">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>字典项</th><th>分类</th><th>值</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>安全保护等级</td><td>系统</td><td>第一级 / 第二级 / 第三级 / 第四级 / 第五级</td><td class="ops"><span class="link" onclick="toast('已打开字典项编辑')">编辑</span></td></tr>
+                <tr><td>备案状态</td><td>备案</td><td>待初审 / 初审中 / 终审通过</td><td class="ops"><span class="link" onclick="toast('已打开字典项编辑')">编辑</span></td></tr>
+                <tr><td>隐患等级</td><td>隐患</td><td>高 / 中 / 低</td><td class="ops"><span class="link" onclick="toast('已打开字典项编辑')">编辑</span></td></tr>
+                <tr><td>报告风险级别</td><td>测评</td><td>高风险 / 中风险 / 低风险</td><td class="ops"><span class="link" onclick="toast('已打开字典项编辑')">编辑</span></td></tr>
+                <tr><td>单位类型</td><td>单位</td><td>党政机关 / 事业单位 / 企业</td><td class="ops"><span class="link" onclick="toast('已打开字典项编辑')">编辑</span></td></tr>
+              </tbody></table></div>
+            <div class="hint" style="margin-top:10px">字典取值与线框图口径一致：安全保护等级为「一~五级」；备案状态为「待初审 / 初审中 / 终审通过」；隐患等级为「高 / 中 / 低」。</div>
+          </div>
+          <div class="sub-pane" id="s2-p2">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>标签</th><th>颜色</th><th>使用数</th></tr></thead>
+              <tbody><tr><td>重点保护</td><td><span class="badge b-back">红</span></td><td>42</td></tr><tr><td>关基</td><td><span class="badge b-warn">橙</span></td><td>18</td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s2-p3">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>机房</th><th>单位</th><th>位置</th></tr></thead>
+              <tbody><tr><td>政务云机房A</td><td>江州市医疗保障局</td><td>市本级</td></tr><tr><td>医院数据中心</td><td>江州市第一人民医院</td><td>江城区</td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s2-p4">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>收藏名</th><th>类型</th><th>创建人</th></tr></thead>
+              <tbody><tr><td>高危系统清单</td><td>单位</td><td>张平</td></tr><tr><td>本月待审</td><td>报告</td><td>刘静</td></tr></tbody></table></div>
+          </div>
+        </div>
+
+        <!-- 运维审计 -->
+        <div class="tab-pane" id="s-tab-3">
+          <div class="seg-group" style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="tab active" data-tab="s3-p1" style="border:1px solid var(--c-border-strong);border-radius:8px">登录日志</button>
+            <button class="tab" data-tab="s3-p2" style="border:1px solid var(--c-border-strong);border-radius:8px">操作日志</button>
+            <button class="tab" data-tab="s3-p3" style="border:1px solid var(--c-border-strong);border-radius:8px">短信列表</button>
+          </div>
+          <div class="sub-pane active" id="s3-p1">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>IP</th><th>时间</th><th>结果</th></tr></thead>
+              <tbody><tr><td>zhangp</td><td>10.12.3.4</td><td>2026-09-09 08:50</td><td><span class="badge b-pass">成功</span></td></tr><tr><td>liuj</td><td>10.12.3.9</td><td>2026-09-09 09:02</td><td><span class="badge b-pass">成功</span></td></tr><tr><td>unknown</td><td>203.0.113.7</td><td>2026-09-08 23:11</td><td><span class="badge b-back">失败</span></td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s3-p2">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>操作</th><th>对象</th><th>时间</th></tr></thead>
+              <tbody><tr><td>zhangp</td><td>备案初审通过</td><td class="code">JZ-2026-0158</td><td>2026-09-09 10:21</td></tr><tr><td>liuj</td><td>报告退回</td><td class="code">BG-2026-0097</td><td>2026-09-09 11:05</td></tr></tbody></table></div>
+          </div>
+          <div class="sub-pane" id="s3-p3">
+            <div class="table-wrap"><table class="tbl"><thead><tr><th>接收人</th><th>内容</th><th>状态</th><th>时间</th></tr></thead>
+              <tbody><tr><td>机构管理员</td><td>备案超期提醒</td><td><span class="badge b-pass">已送达</span></td><td>2026-09-08 14:31</td></tr><tr><td>测评师</td><td>报告退回通知</td><td><span class="badge b-pass">已送达</span></td><td>2026-09-09 11:06</td></tr></tbody></table></div>
+          </div>
+        </div>
+
+        <!-- 个人中心 -->
+        <div class="tab-pane" id="s-tab-4">
+          <div class="card card-pad" style="max-width:640px">
+            <div class="section-title">个人信息</div>
+            <div class="form-grid">
+              <div class="form-item"><label>姓名</label><input class="input" value="张平"></div>
+              <div class="form-item"><label>账号</label><input class="input" value="zhangp" disabled></div>
+              <div class="form-item"><label>部门</label><input class="input" value="监管一处"></div>
+              <div class="form-item"><label>手机号</label><input class="input" value="138****0012"></div>
+              <div class="form-item full"><label>修改密码</label><input class="input" placeholder="输入新密码"></div>
+            </div>
+            <div style="margin-top:14px"><button class="btn btn-primary" onclick="toast('已保存')">保存</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 消息中心（顶栏铃铛入口 · 三端同构） ============ -->
+      <section class="page" id="p-msg">
+        <div class="page-head">
+          <div><h1>消息中心</h1><p>预警通知 · 待办提醒 · 系统消息 · 信息发布回执</p></div>
+          <button class="btn" onclick="markAllRead()">全部标为已读</button>
+        </div>
+        <div class="seg-views" id="msgViews">
+          <button class="active" data-msg="全部" onclick="setMsgView(this)">全部<span class="cnt">7</span></button>
+          <button data-msg="未读" onclick="setMsgView(this)">未读<span class="cnt">5</span></button>
+          <button data-msg="预警" onclick="setMsgView(this)">预警</button>
+          <button data-msg="待办" onclick="setMsgView(this)">待办</button>
+        </div>
+        <div class="card">
+          <div class="msg-list" id="msgList">
+            <div class="msg-item unread" data-msg="预警" onclick="readMsg(this);goto('monitor')">
+              <span class="mi-ic danger">⚠</span>
+              <div class="mi-b"><div class="mi-t">市三甲医院 HIS 系统 · 漏洞利用<span class="msg-dot"></span></div>
+                <div class="mi-m">高危预警，来源：漏扫对接。请及时处置并留痕。</div></div>
+              <div class="mi-tm">今日 08:12</div>
+            </div>
+            <div class="msg-item unread" data-msg="待办" onclick="readMsg(this);gotoTab('grade','g-tab-4')">
+              <span class="mi-ic warn">✎</span>
+              <div class="mi-b"><div class="mi-t">整改规划 V2.0 待审核<span class="msg-dot"></span></div>
+                <div class="mi-m">市三甲医院 HIS 系统 · 剩余时限 1 天，承诺 3 个工作日内反馈。</div></div>
+              <div class="mi-tm">今日 09:30</div>
+            </div>
+            <div class="msg-item unread" data-msg="待办" onclick="readMsg(this);gotoTab('grade','g-tab-1')">
+              <span class="mi-ic warn">✎</span>
+              <div class="mi-b"><div class="mi-t">备案初审临期提醒<span class="msg-dot"></span></div>
+                <div class="mi-m">江州银行核心业务系统初次备案，剩余 2 天。</div></div>
+              <div class="mi-tm">今日 09:05</div>
+            </div>
+            <div class="msg-item unread" data-msg="待办" onclick="readMsg(this);gotoTab('grade','g-tab-3')">
+              <span class="mi-ic">▤</span>
+              <div class="mi-b"><div class="mi-t">测评报告 BG-2026-0097 待初审<span class="msg-dot"></span></div>
+                <div class="mi-m">浙江信安测评已提交，AI 预审标注高风险 1 项。</div></div>
+              <div class="mi-tm">昨日 15:20</div>
+            </div>
+            <div class="msg-item unread" data-msg="待办" onclick="readMsg(this);gotoTab('grade','g-tab-2')">
+              <span class="mi-ic">▤</span>
+              <div class="mi-b"><div class="mi-t">机构端提交实施报备补充材料<span class="msg-dot"></span></div>
+                <div class="mi-m">市水务集团调度平台 · 换机构复测材料已补充，待监管复核。</div></div>
+              <div class="mi-tm">昨日 11:42</div>
+            </div>
+            <div class="msg-item" data-msg="系统" onclick="readMsg(this);gotoTab('monitor','m-tab-2')">
+              <span class="mi-ic teal">◎</span>
+              <div class="mi-b"><div class="mi-t">《关于开展2026年等保测评专项检查的通知》已发布</div>
+                <div class="mi-m">发布对象：全部单位与机构；已推送站内消息 421 条。</div></div>
+              <div class="mi-tm">09-05</div>
+            </div>
+            <div class="msg-item" data-msg="预警" onclick="readMsg(this);gotoTab('monitor','m-tab-2')">
+              <span class="mi-ic danger">⚠</span>
+              <div class="mi-b"><div class="mi-t">Exchange 高危漏洞安全预警公告已发布</div>
+                <div class="mi-m">影响面覆盖 12 个系统，要求 10-10 前完成排查上报。</div></div>
+              <div class="mi-tm">09-03</div>
+            </div>
+          </div>
+          <div class="empty" id="msgEmpty" style="display:none">暂无该类消息</div>
+        </div>
+        <div class="hint" style="margin-top:12px">消息中心与机构端 I7、用户端 U4 同构；预警类消息由 M4.1 预警规则推送，待办类消息由审核状态机变更触发。</div>
+      </section>
+
+      <!-- ============ 全局：流程示意 ============ -->
+      <section class="page" id="p-flow">
+        <div class="page-head"><div><h1>流程示意</h1><p>备案 → 实施 → 测评 → 整改规划审核 全流程（监管视角）</p></div></div>
+        <div class="card card-pad">
+          <div class="section-title">等级保护全流程</div>
+          <div class="flow">
+            <div class="step"><span class="node cur">① 系统定级</span></div><span class="arrow">→</span>
+            <div class="step"><span class="node">② 备案（预审→初审→终审）</span></div><span class="arrow">→</span>
+            <div class="step"><span class="node">③ 实施报备</span></div><span class="arrow">→</span>
+            <div class="step"><span class="node">④ 测评（机构测→监管审）</span></div><span class="arrow">→</span>
+            <div class="step"><span class="node">⑤ 整改规划审核（运营者报→监管审）</span></div><span class="arrow">→</span>
+            <div class="step"><span class="node">⑥ 整改闭环</span></div><span class="arrow">→</span>
+            <div class="step"><span class="node">⑦ 持续监测</span></div>
+          </div>
+          <div class="hint" style="margin-top:14px">监管侧负责 ② 备案终审、④ 测评终审、⑤ 整改规划审核与 ⑦ 监测预警；机构侧负责材料上报、实施与测评执行；运营者侧负责定级、整改规划编制上报与整改实施。三端共用同一审核状态机。</div>
+          <div class="role-cards">
+            <div class="card card-pad role-card">
+              <div class="rh"><span class="ri">监</span>监管职责（网安支队）</div>
+              <ul>
+                <li>备案终审：核验定级合理性、材料完整性与一致性</li>
+                <li>测评终审：确认风险项闭环与报告结论</li>
+                <li>整改规划审核：3 个工作日内反馈，退回须写明补正要求</li>
+                <li>监测预警：规则配置、预警处置与关闭留痕</li>
+                <li>监督检查：专项检查、通报发布与整改催办</li>
+              </ul>
+              <div class="rm">对外承诺：备案 10 个工作日、测评 10 个工作日、整改规划 3 个工作日内反馈。</div>
+            </div>
+            <div class="card card-pad role-card inst">
+              <div class="rh"><span class="ri">机</span>机构 / 运营者职责</div>
+              <ul>
+                <li>运营者：系统定级、备案申报、整改规划编制与整改实施</li>
+                <li>运营者：变更 / 注销 / 撤销报备，变更次数受上限约束</li>
+                <li>测评机构：实施报备、测评执行、报告与 9 类材料上报</li>
+                <li>测评机构：测评师登记与资质维护，配合监管核查</li>
+                <li>双方：材料真实完整，原件留存备查不少于 6 个月</li>
+              </ul>
+              <div class="rm">材料退回后须在补正时限内重新提交，逾期转入督办。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============ 模态框 ============ -->
+<!-- 导入历史材料（M-014：批量导入存量备案） -->
+<div class="modal-mask" id="m-grade-filing-import"><div class="modal">
+  <div class="modal__head"><h3>导入历史材料（批量）</h3><button class="modal__close" onclick="closeModal('m-grade-filing-import')">×</button></div>
+  <div class="modal__body">
+    <div class="hint" style="margin:0 0 14px">支持 ZIP 包或整目录多选；按「单位 + 系统 + 备案编号」三元组匹配，已存在的备案不覆盖，转入比对流程并保留历史留痕。</div>
+    <div class="form-grid">
+      <div class="form-item"><label>导入范围</label><select class="select"><option>全量历史材料</option><option>仅缺失材料</option><option>指定年份</option></select></div>
+      <div class="form-item"><label>默认测评机构</label><select class="select"><option>按材料识别，识别失败时使用</option><option>江州信安测评</option><option>浙江信安测评</option></select></div>
+      <div class="form-item"><label>编号冲突策略</label><select class="select"><option>跳过已存在</option><option>以本次材料为准（留痕）</option><option>生成待确认任务</option></select></div>
+      <div class="form-item"><label>导入后状态</label><select class="select"><option>系统预审中</option><option>暂存草稿</option></select></div>
+      <div class="form-item full"><label>材料包</label><div class="upload" onclick="toast('已选择 128 个备案包，正在预检')">＋ 点击或拖拽上传 ZIP / 多文件（单包 ≤ 200 MB）</div>
+        <div class="hint">包内目录建议按「单位 / 系统 / 材料类型」组织，AI 抽取依赖该层级识别归属。</div></div>
+    </div>
+    <div class="audit-sec">预检结果（演示）</div>
+    <div class="audit-row"><span class="dot-s"></span>识别备案包<span class="tm">128 个</span></div>
+    <div class="audit-row"><span class="dot-s"></span>可直接导入<span class="tm">96 个</span></div>
+    <div class="audit-row"><span class="dot-s hi"></span>需人工确认（材料缺项 / 字段冲突）<span class="tm warn">24 个</span></div>
+    <div class="audit-row"><span class="dot-s hi"></span>备案编号重复<span class="tm warn">8 个</span></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-filing-import')">取消</button><button class="btn btn-primary" onclick="closeModal('m-grade-filing-import');toast('已导入 96 条，24 条转为待确认任务')">开始导入</button></div>
+</div></div>
+
+<!-- 备案录入 -->
+<div class="modal-mask" id="m-grade-filing-add"><div class="modal">
+  <div class="modal__head"><h3>备案录入（AI 自动化录入）</h3><button class="modal__close" onclick="closeModal('m-grade-filing-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>系统名称 <span class="req">*</span></label><input class="input" placeholder="如 江州市医保局结算系统"></div>
+    <div class="form-item"><label>所属单位 <span class="req">*</span></label><input class="input" placeholder="单位名称联想"></div>
+    <div class="form-item"><label>备案编号 <span class="req">*</span></label><input class="input" placeholder="自动生成或手工录入，唯一性校验"></div>
+    <div class="form-item"><label>安全保护等级 <span class="req">*</span></label><select class="select"><option>第二级</option><option>第三级</option><option>第四级</option></select></div>
+    <div class="form-item"><label>测评机构</label><select class="select"><option>杭州安安检测</option><option>浙江信安测评</option></select></div>
+    <div class="form-item"><label>定级组合（S/A/G）</label><input class="input" value="S3A3G3" placeholder="由定级报告解析"></div>
+    <div class="form-item full"><label>材料上传（ZIP / 自动结构化）</label><div class="upload" onclick="closeModal('m-grade-filing-add');openModal('m-grade-filing-extract')">＋ 点击或拖拽上传，AI 自动抽取字段</div>
+      <div class="hint">抽取结果需人工确认：每个字段标注来源与置信度，可采纳 / 修正 / 忽略。</div></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-filing-add')">取消</button><button class="btn" onclick="closeModal('m-grade-filing-add');openModal('m-grade-filing-extract')">✦ AI 抽取</button><button class="btn btn-primary" onclick="closeModal('m-grade-filing-add');toast('已提交 AI 预审')">提交并预审</button></div>
+</div></div>
+
+<!-- AI 抽取结果确认（M-013：字段 / 来源 / 置信度，逐项采纳·修正·忽略） -->
+<div class="modal-mask" id="m-grade-filing-extract"><div class="modal" style="width:760px">
+  <div class="modal__head"><h3>AI 抽取结果确认</h3><button class="modal__close" onclick="closeModal('m-grade-filing-extract')">×</button></div>
+  <div class="modal__body">
+    <div class="hint" style="margin:0 0 12px">已解析《备案表.docx》《定级报告.pdf》，共抽取 4 个字段。逐项确认后方可回填表单，缺失项自动进入补充清单。</div>
+    <div class="table-wrap" style="border:none">
+      <table class="tbl tbl-compact tbl-fit">
+        <thead><tr><th>字段</th><th>抽取值</th><th>来源</th><th>置信度</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td>系统名称</td><td>江州市医保局结算系统</td><td>备案表 p1</td><td><span class="conf-bar"><i style="width:98%"></i></span>98%</td><td class="mini-ops"><span class="link" onclick="toast('已采纳该系统名称')">采纳</span><span class="link" onclick="toast('请修正后重新确认')">修正</span><span class="link" onclick="toast('已忽略，转为手工填写')">忽略</span></td></tr>
+          <tr><td>安全保护等级</td><td><span class="badge b-warn">S3A3G3</span></td><td>定级报告 p2</td><td><span class="conf-bar"><i class="mid" style="width:76%"></i></span>76%</td><td class="mini-ops"><span class="link" onclick="toast('已采纳 S3A3G3')">采纳</span><span class="link" onclick="toast('请修正后重新确认')">修正</span><span class="link" onclick="toast('已忽略，转为手工填写')">忽略</span></td></tr>
+          <tr><td>备案编号</td><td class="code">JZ-2026-0186</td><td>备案表 p1</td><td><span class="conf-bar"><i style="width:99%"></i></span>99%</td><td class="mini-ops"><span class="link" onclick="toast('已采纳该备案编号')">采纳</span><span class="link" onclick="toast('请修正后重新确认')">修正</span><span class="link" onclick="toast('已忽略，转为手工填写')">忽略</span></td></tr>
+          <tr><td>所属单位</td><td class="muted">— 未识别</td><td class="muted">—</td><td class="muted">—</td><td class="mini-ops"><span class="link" onclick="toast('已加入补充清单，请在表单中手工填写')">补充</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="audit-sec">补充清单（1 项）</div>
+    <div class="audit-row"><span class="dot-s hi"></span>所属单位未识别，需手工补录<span class="tm warn">阻断回填</span></div>
+    <div class="audit-sec">置信度说明</div>
+    <div class="hint" style="margin:0">≥ 90% 建议直接采纳；70%~90% 建议核对原文后采纳；&lt; 70% 须人工确认。来源页码可点击定位原文（演示态）。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-filing-extract');openModal('m-grade-filing-add')">返回录入</button><button class="btn btn-primary" onclick="closeModal('m-grade-filing-extract');openModal('m-grade-filing-add');toast('4 个字段已回填表单，1 项待补充')">确认回填表单</button></div>
+</div></div>
+
+<!-- 备案详情 -->
+<div class="modal-mask" id="m-grade-filing-detail"><div class="modal">
+  <div class="modal__head"><h3>备案详情 · JZ-2026-0158</h3><button class="modal__close" onclick="closeModal('m-grade-filing-detail')">×</button></div>
+  <div class="modal__body">
+    <div class="detail-head"><span class="title">市三甲医院 HIS 系统</span><span class="badge b-wait">初审中</span></div>
+    <dl class="dl">
+      <dt>责任单位</dt><dd>江州市第一人民医院</dd><dt>等保定级</dt><dd><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></dd>
+      <dt>测评机构</dt><dd>浙江信安测评</dd><dt>备案编号</dt><dd class="code">JZ-2026-0158</dd>
+      <dt>提交时间</dt><dd>2026-08-30</dd><dt>AI 预审</dt><dd><span class="badge b-pass">通过 · 疑点 2</span></dd>
+    </dl>
+    <div class="section-title" style="margin-top:16px">已上传材料 <span class="badge b-gray">4 份 · 共 7 页</span></div>
+    <div class="mat-list">
+      <div class="mat-row">
+        <div class="mt-ic pdf">PDF</div>
+        <div class="mt-b"><div class="mt-n">定级报告.pdf</div><div class="mt-m">3 页 · 2.4 MB · 江州信安测评 2026-08-30 09:12</div></div>
+        <div class="mt-ops"><span class="link" onclick="openRawDoc('report')">查看原件</span><span class="link" onclick="rawDownload('定级报告.pdf')">下载</span></div>
+      </div>
+      <div class="mat-row">
+        <div class="mt-ic doc">DOC</div>
+        <div class="mt-b"><div class="mt-n">备案表.docx</div><div class="mt-m">1 页 · 186 KB · 江州信安测评 2026-08-30 09:14</div></div>
+        <div class="mt-ops"><span class="link" onclick="openRawDoc('form')">查看原件</span><span class="link" onclick="rawDownload('备案表.docx')">下载</span></div>
+      </div>
+      <div class="mat-row">
+        <div class="mt-ic pdf">PDF</div>
+        <div class="mt-b"><div class="mt-n">专家评审意见.pdf</div><div class="mt-m">1 页 · 612 KB · 江州信安测评 2026-08-30 09:15</div></div>
+        <div class="mt-ops"><span class="link" onclick="openRawDoc('review')">查看原件</span><span class="link" onclick="rawDownload('专家评审意见.pdf')">下载</span></div>
+      </div>
+      <div class="mat-row">
+        <div class="mt-ic img">PNG</div>
+        <div class="mt-b"><div class="mt-n">网络拓扑图.png <span class="badge b-warn">AI 疑点</span></div><div class="mt-m">1 页 · 1.1 MB · 江州信安测评 2026-08-30 09:16 · 与资产清单 IP 段不符</div></div>
+        <div class="mt-ops"><span class="link" onclick="openRawDoc('topo','ip')">查看原件</span><span class="link" onclick="rawDownload('网络拓扑图.png')">下载</span></div>
+      </div>
+    </div>
+    <div class="hint">查看原件将记录查看人、时间与页码，可用于审计追溯；扫描件为只读，不支持编辑。</div>
+    <div class="section-title" style="margin-top:18px">审核流转</div>
+    <div class="timeline" id="filingTl">
+      <div class="tl-item"><div class="tl-t">机构上报</div><div class="tl-m">2026-08-30 已完成材料提交</div></div>
+      <div class="tl-item"><div class="tl-t">系统预审（AI）</div><div class="tl-m">2026-08-30 通过，标注疑点 2 项</div></div>
+      <div class="tl-item"><div class="tl-t">监管初审</div><div class="tl-m">进行中 · 待确认定级合理性</div></div>
+      <div class="tl-item"><div class="tl-t">监管终审</div><div class="tl-m">待进行</div></div>
+    </div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-filing-detail');toast('已导出本次审核的查看与下载留痕')">下载留痕</button><button class="btn" onclick="closeModal('m-grade-filing-detail')">关闭</button><button class="btn btn-primary" onclick="closeModal('m-grade-filing-detail');toast('已通过初审')">通过初审</button></div>
+</div></div>
+
+<!-- 原始材料查看器 -->
+<div class="modal-mask" id="m-grade-raw-viewer"><div class="modal modal--viewer">
+  <div class="modal__head">
+    <h3>原始材料 · <span id="rawHeadName">定级报告.pdf</span></h3>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="badge b-gray">只读 · 扫描件</span>
+      <span class="badge b-info">查看已留痕</span>
+      <button class="modal__close" onclick="closeRawDoc()">×</button>
+    </div>
+  </div>
+  <div class="modal__body">
+    <div class="raw-wrap">
+      <div class="raw-files" id="rawFiles"></div>
+      <div class="raw-stage">
+        <div class="raw-tool">
+          <span class="rt-name" id="rawToolName">定级报告.pdf</span>
+          <span class="rt-sp"></span>
+          <button class="rb" id="rawPrev" onclick="rawPage(-1)">‹ 上一页</button>
+          <span class="rt-pg"><span id="rawPg">1</span> / <span id="rawPgTotal">3</span></span>
+          <button class="rb" id="rawNext" onclick="rawPage(1)">下一页 ›</button>
+          <button class="rb" onclick="rawZoom(-1)">−</button>
+          <span class="rt-pg" id="rawZoomTxt">100%</span>
+          <button class="rb" onclick="rawZoom(1)">＋</button>
+          <button class="rb" onclick="rawFit()">适宽</button>
+          <button class="rb" onclick="rawDownload(null)">⤓ 下载原件</button>
+        </div>
+        <div class="raw-scroll" id="rawScroll"><div class="raw-page" id="rawPageBox"></div></div>
+      </div>
+      <div class="raw-side">
+        <div class="rs-h">AI 抽取字段 · 点击定位原文</div>
+        <div id="rawFields"></div>
+        <div class="rs-tip">抽取值与原件逐字段比对：黄色高亮为原文位置。置信度低于 80% 的字段建议人工复核。</div>
+      </div>
+    </div>
+  </div>
+  <div class="modal__foot">
+    <span class="hint" style="margin:0 auto 0 0" id="rawTrace">本次查看已记录：审核员 张×× · 2026-10-19 17:26 · 定级报告.pdf 第 1 页</span>
+    <button class="btn" onclick="closeRawDoc()">返回备案详情</button>
+    <button class="btn btn-primary" onclick="closeRawDoc();toast('已标记 4 份原件核验无误')">核验无误</button>
+  </div>
+</div></div>
+
+<!-- 备案智能预审（规则命中 → 疑点清单 → 预审结论 三段式） -->
+<div class="modal-mask" id="m-grade-filing-preview"><div class="modal">
+  <div class="modal__head"><h3>备案智能预审（AI 规则化）</h3><button class="modal__close" onclick="closeModal('m-grade-filing-preview')">×</button></div>
+  <div class="modal__body">
+    <div class="audit-sec">规则命中项（知识库比对）</div>
+    <div class="audit-row"><span class="dot-s hi"></span>材料完整性校验<span class="tm">命中 3 条</span></div>
+    <div class="audit-row"><span class="dot-s"></span>定级合理性校验<span class="tm">命中 1 条</span></div>
+    <div class="audit-row"><span class="dot-s"></span>网络拓扑与资产一致性校验<span class="tm">命中 2 条</span></div>
+
+    <div class="audit-sec">疑点清单</div>
+    <div class="audit-row"><span class="dot-s hi"></span>专家评审材料缺「专家签字页」<span class="tm warn">须补正</span></div>
+    <div class="audit-row"><span class="dot-s"></span>网络拓扑图 IP 段与资产清单不一致（172.16.8.0/24 vs 172.16.9.0/24）<span class="tm warn">须核实</span></div>
+    <div class="audit-row"><span class="dot-s"></span>安全管理制度版本偏旧（V1.2，现行 V2.0）<span class="tm">建议更新</span></div>
+
+    <div class="audit-sec">预审结论</div>
+    <div class="audit-concl"><span class="badge b-warn">建议：需补正</span><span style="font-size:12px;color:var(--c-text-2)">定级报告要素完整（建议维持 S3A3G3）；补齐签字页并核对拓扑后可提交初审。</span></div>
+
+    <div class="upload" style="margin-top:12px" onclick="toast('已补充材料')">＋ 补充缺失材料</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-filing-preview')">关闭</button><button class="btn" onclick="closeModal('m-grade-filing-preview');toast('补正要求已下发机构端')">下发补正</button><button class="btn btn-primary" onclick="closeModal('m-grade-filing-preview');toast('预审通过，已进入初审')">通过初审</button></div>
+</div></div>
+
+<!-- 备案审核（初审 / 终审复用同一组件） -->
+<div class="modal-mask" id="m-grade-filing-audit"><div class="modal">
+  <div class="modal__head"><h3>备案初审 / 终审</h3><button class="modal__close" onclick="closeModal('m-grade-filing-audit')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>审核结论 <span class="req">*</span></label><select class="select"><option>通过</option><option>退回补正</option><option>不予通过</option></select></div>
+    <div class="form-item"><label>下一节点</label><select class="select"><option>终审（市网安支队）</option><option>退回机构端补正</option><option>归档并同步全息档案</option></select></div>
+    <div class="form-item"><label>回传对象</label><select class="select"><option>机构端（测评机构）</option><option>用户端（网络运营者）</option><option>机构端 + 用户端</option></select></div>
+    <div class="form-item"><label>补正时限</label><select class="select"><option>5 个工作日</option><option>10 个工作日</option><option>15 个工作日</option></select></div>
+    <div class="form-item full"><label>审核意见</label><input class="input" placeholder="填写审核意见"></div>
+    <div class="form-item full"><label>退回原因（结论选「退回补正 / 不予通过」时必填）</label><input class="input" placeholder="如：专家签字页缺失、拓扑与资产清单不一致"></div>
+  </div>
+  <div class="hint" style="margin-top:12px">初审 / 终审复用同一组件，仅可用操作集与下一节点不同；退回补正后状态置「退回补正」并实时回传机构端。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-filing-audit')">取消</button><button class="btn" onclick="closeModal('m-grade-filing-audit');toast('已退回补正，补正要求已回传机构端')">退回补正</button><button class="btn btn-primary" onclick="closeModal('m-grade-filing-audit');toast('审核已提交')">通过</button></div>
+</div></div>
+
+<!-- 实施录入 -->
+<div class="modal-mask" id="m-grade-impl-add"><div class="modal" style="width:720px">
+  <div class="modal__head"><h3>实施报备录入</h3><button class="modal__close" onclick="closeModal('m-grade-impl-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>系统 <span class="req">*</span></label><select class="select"><option>市三甲医院 HIS 系统</option><option>江州银行核心业务系统</option><option>市水务集团调度平台</option></select></div>
+    <div class="form-item"><label>报备类型</label><select class="select" id="implAddType" onchange="syncImplNotice()"><option>常规报备</option><option selected>变更报备</option></select></div>
+    <div class="form-item"><label>报备人员 <span class="req">*</span></label><input class="input" value="张敏 · 安全管理员"></div>
+    <div class="form-item"><label>联系电话</label><input class="input" value="138****6721"></div>
+    <div class="form-item"><label>报备时间</label><input class="input" type="datetime-local" value="2026-09-01T09:30"></div>
+    <div class="form-item"><label>测评机构</label><select class="select"><option>江州信安测评</option><option>杭州安安检测</option></select></div>
+    <div class="form-item"><label>计划开始</label><input class="input" type="date" value="2026-09-01"></div>
+    <div class="form-item"><label>计划完成</label><input class="input" type="date" value="2026-09-25"></div>
+    <div class="form-item full"><label>实施计划与范围</label><input class="input" placeholder="实施内容、影响范围、停机窗口"></div>
+    <div class="form-item full" style="gap:8px">
+      <div class="notice notice-warn" id="implNotice">
+        <span class="ni">!</span>
+        <div><b>变更次数提示：</b>本系统本年度已提交 <b>1 次</b>变更报备，上限 <b>2 次</b>，剩余 <b>1 次</b>。本次提交后剩余 0 次，再次变更须先撤销当前报备。</div>
+      </div>
+      <div class="notice notice-info">
+        <span class="ni">i</span>
+        <div><b>撤销规则：</b>提交后 <b>24 小时内</b>且监管未受理，可由报备人自行撤销；监管复核通过后不可撤销，仅可提交变更报备。撤销不占用变更次数。</div>
+      </div>
+    </div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-impl-add')">取消</button><button class="btn" onclick="openModal('m-grade-impl-preaudit')">✦ AI 预审</button><button class="btn btn-primary" onclick="closeModal('m-grade-impl-add');toast('已提交监管复核，变更次数已扣减')">提交</button></div>
+</div></div>
+
+<!-- 实施详情 -->
+<div class="modal-mask" id="m-grade-impl-detail"><div class="modal">
+  <div class="modal__head"><h3>实施报备详情</h3><button class="modal__close" onclick="closeModal('m-grade-impl-detail')">×</button></div>
+  <div class="modal__body"><dl class="dl">
+    <dt>系统</dt><dd>市水务集团调度平台</dd><dt>单位</dt><dd>江州市水务集团</dd>
+    <dt>机构</dt><dd>杭州安安检测</dd><dt>类型</dt><dd>常规报备</dd>
+    <dt>状态</dt><dd><span class="badge b-wait">监管复核</span></dd><dt>变更剩余</dt><dd>2 次</dd>
+  </dl></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-impl-detail')">关闭</button><button class="btn btn-primary" onclick="closeModal('m-grade-impl-detail');toast('已复核通过')">复核通过</button></div>
+</div></div>
+
+<!-- 实施报备 AI 预审（M-035：对齐备案预审能力） -->
+<div class="modal-mask" id="m-grade-impl-preaudit"><div class="modal">
+  <div class="modal__head"><h3>实施报备 AI 预审</h3><button class="modal__close" onclick="closeModal('m-grade-impl-preaudit')">×</button></div>
+  <div class="modal__body">
+    <div class="detail-head"><span class="title">市水务集团调度平台 · 常规报备</span><span class="badge b-wait">监管复核</span></div>
+    <div class="audit-sec">报备项校验</div>
+    <div class="audit-row"><span class="dot-s"></span>实施范围与备案系统一致性<span class="tm">通过</span></div>
+    <div class="audit-row"><span class="dot-s"></span>实施计划起止时间合规性<span class="tm">通过</span></div>
+    <div class="audit-row"><span class="dot-s hi"></span>计划变更次数（第 2 次，上限 2 次）<span class="tm warn">已触顶</span></div>
+    <div class="audit-row"><span class="dot-s hi"></span>测评机构与在用机构资质一致性<span class="tm warn">须核实</span></div>
+    <div class="audit-sec">预审结论</div>
+    <div class="audit-concl"><span class="badge b-back">建议：需核实后复核</span><span style="font-size:12px;color:var(--c-text-2)">变更次数已达上限，如需再次变更须走撤销重报流程。</span></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-impl-preaudit')">关闭</button><button class="btn" onclick="closeModal('m-grade-impl-preaudit');toast('预审意见已留存，已通知机构补充说明')">留存意见</button><button class="btn btn-primary" onclick="closeModal('m-grade-impl-preaudit');toast('已复核通过')">复核通过</button></div>
+</div></div>
+
+<!-- 历史报告对比分析（M-051） -->
+<div class="modal-mask" id="m-grade-report-compare"><div class="modal" style="width:820px">
+  <div class="modal__head"><h3>历史报告对比分析</h3><button class="modal__close" onclick="closeModal('m-grade-report-compare')">×</button></div>
+  <div class="modal__body">
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
+      <div class="form-item"><label>对比系统</label><select class="select"><option>市三甲医院 HIS 系统</option><option>江州市医保局结算系统</option><option>江州银行核心业务系统</option></select></div>
+      <div class="form-item"><label>对比口径</label><select class="select"><option>相邻两期（默认）</option><option>指定两期</option><option>近三期趋势</option></select></div>
+    </div>
+    <div class="cmp-head">
+      <div class="cmp-side"><div class="cn">BG-2025-0042 · 上期</div><div class="cm">2025-08-20 · 杭州安安检测 · 高风险</div></div>
+      <div class="cmp-vs">对比</div>
+      <div class="cmp-side"><div class="cn">BG-2026-0097 · 本期</div><div class="cm">2026-08-30 · 浙江信安测评 · 高风险</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="tbl tbl-compact" style="min-width:640px">
+        <thead><tr><th>对比维度</th><th>上期</th><th>本期</th><th>变化</th></tr></thead>
+        <tbody>
+          <tr><td>高风险项</td><td>4 项</td><td>3 项</td><td><span class="down">↓ 1 项</span></td></tr>
+          <tr><td>中风险项</td><td>6 项</td><td>9 项</td><td><span class="up">↑ 3 项</span></td></tr>
+          <tr><td>低风险项</td><td>11 项</td><td>8 项</td><td><span class="down">↓ 3 项</span></td></tr>
+          <tr><td>符合项占比</td><td>82.4%</td><td>88.1%</td><td><span class="down">↑ 5.7 pt</span></td></tr>
+          <tr><td>测评机构</td><td>杭州安安检测</td><td>浙江信安测评</td><td><span class="badge b-gray">换机构</span></td></tr>
+          <tr><td>综合结论</td><td>基本符合</td><td>基本符合</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="section-title" style="margin-top:16px">新增风险项（本期新出现，上期未覆盖）</div>
+    <div class="audit-row"><span class="dot-s hi"></span>核心数据未加密传输（高风险）<span class="tm">新增</span></div>
+    <div class="audit-row"><span class="dot-s hi"></span>日志留存不足 6 个月（中风险）<span class="tm">新增</span></div>
+    <div class="audit-row"><span class="dot-s"></span>已闭环项：SQL 注入、弱口令策略<span class="tm">闭环</span></div>
+    <div class="notice notice-warn" style="margin-top:12px">
+      <span class="ni">!</span>
+      <div><b>趋势判断：</b>整体符合度提升 5.7 个百分点，但新增 1 项高风险且中风险净增 3 项，建议纳入下一轮重点核查。</div>
+    </div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-report-compare')">关闭</button><button class="btn" onclick="toast('已导出对比报告 PDF')">导出对比报告</button><button class="btn btn-primary" onclick="closeModal('m-grade-report-compare');toast('对比结论已写入审核意见')">写入审核意见</button></div>
+</div></div>
+
+<!-- 测评上传 -->
+<div class="modal-mask" id="m-grade-report-upload"><div class="modal">
+  <div class="modal__head"><h3>上传测评报告（9 类文件分区）</h3><button class="modal__close" onclick="closeModal('m-grade-report-upload')">×</button></div>
+  <div class="modal__body"><div class="up-grid">
+    <div class="up-card"><div class="uh">测评报告 <span class="req-star">*</span></div><div class="ufile">测评报告.pdf <span class="x" onclick="toast('已移除')">×</span></div></div>
+    <div class="up-card"><div class="uh">测评方案 <span class="req-star">*</span></div><div class="upload" style="padding:10px" onclick="toast('已选择')">＋ 上传</div></div>
+    <div class="up-card"><div class="uh">工具扫描结果 <span class="req-star">*</span></div><div class="upload" style="padding:10px" onclick="toast('已选择')">＋ 上传</div></div>
+    <div class="up-card"><div class="uh">渗透测试报告</div><div class="upload" style="padding:10px" onclick="toast('已选择')">＋ 上传</div></div>
+    <div class="up-card"><div class="uh">整改证据</div><div class="upload" style="padding:10px" onclick="toast('已选择')">＋ 上传</div></div>
+    <div class="up-card"><div class="uh">差距分析</div><div class="upload" style="padding:10px" onclick="toast('已选择')">＋ 上传</div></div>
+  </div>
+  <div class="hint">必传 3 项：测评报告、测评方案、工具扫描结果；其余为建议项。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-report-upload')">取消</button><button class="btn btn-primary" onclick="closeModal('m-grade-report-upload');toast('报告已上传，进入初审')">上传</button></div>
+</div></div>
+
+<!-- 测评详情（5 分区：基本信息 / AI 抽取 / 合规比对 / 审核留痕 / 附件） -->
+<div class="modal-mask" id="m-grade-report-detail"><div class="modal" style="width:760px">
+  <div class="modal__head"><h3>测评报告详情 · BG-2026-0098</h3><button class="modal__close" onclick="closeModal('m-grade-report-detail')">×</button></div>
+  <div class="modal__body">
+    <div class="detail-head"><span class="title">江州市医保局结算系统</span><span class="badge b-warn">中风险</span><span class="badge b-wait">终审中</span></div>
+    <div class="mtabs">
+      <button class="mtab active" data-mtab="rt-1">基本信息</button>
+      <button class="mtab" data-mtab="rt-2">AI 抽取</button>
+      <button class="mtab" data-mtab="rt-3">合规比对</button>
+      <button class="mtab" data-mtab="rt-4">审核留痕</button>
+      <button class="mtab" data-mtab="rt-5">附件</button>
+    </div>
+
+    <div class="mpane active" id="rt-1">
+      <dl class="dl">
+        <dt>报告编号</dt><dd>BG-2026-0098</dd>
+        <dt>系统级别</dt><dd><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></dd>
+        <dt>测评机构</dt><dd>杭州安安检测</dd>
+        <dt>测评结论</dt><dd>基本符合</dd>
+        <dt>测评周期</dt><dd>2026-07-20 ~ 2026-08-28（39 天）</dd>
+        <dt>提交时间</dt><dd>2026-09-02 10:14</dd>
+        <dt>关联备案</dt><dd class="code">JZ-2026-0186</dd>
+      </dl>
+    </div>
+
+    <div class="mpane" id="rt-2">
+      <div class="section-title">抽取项（资产 / 漏洞 / 风险 / 整改建议）</div>
+      <div class="table-wrap" style="border:none">
+        <table class="tbl tbl-compact tbl-fit">
+          <thead><tr><th>漏洞项</th><th>严重程度</th><th>AI 高亮</th><th>合规判定</th></tr></thead>
+          <tbody>
+            <tr><td>SQL 注入（查询接口）</td><td><span class="badge b-back">高</span></td><td><span class="badge b-back">高风险</span></td><td>不符合</td></tr>
+            <tr><td>审计日志留存不足 6 个月</td><td><span class="badge b-warn">中</span></td><td><span class="badge b-warn">中风险</span></td><td>部分符合</td></tr>
+            <tr><td>弱口令策略缺失</td><td><span class="badge b-warn">中</span></td><td><span class="badge b-warn">中风险</span></td><td>不符合</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section-title" style="margin-top:16px">风险定级建议</div>
+      <div class="audit-concl" style="background:var(--c-info-bg);border-color:#C9DDF3"><span class="badge b-info">AI 建议：三级（高）</span><span style="font-size:12px;color:var(--c-text-2)">依据：高危 3 · 中危 5 · 低危 2，核心业务数据未加密传输</span></div>
+    </div>
+
+    <div class="mpane" id="rt-3">
+      <div class="section-title">合规比对（vs GB/T 22239-2019）</div>
+      <div class="table-wrap" style="border:none">
+        <table class="tbl tbl-compact tbl-fit">
+          <thead><tr><th>控制类</th><th>控制项</th><th>符合</th><th>部分符合</th><th>不符合</th></tr></thead>
+          <tbody>
+            <tr><td>安全技术</td><td>10</td><td>8</td><td>2</td><td>0</td></tr>
+            <tr><td>安全管理</td><td>11</td><td>10</td><td>1</td><td>0</td></tr>
+            <tr><td>安全运维</td><td>6</td><td>4</td><td>2</td><td>0</td></tr>
+            <tr class="sum"><td>合计</td><td>27</td><td>22</td><td>5</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint">部分符合项已关联整改建议，可在「AI 抽取」分区查看逐条措施。</div>
+    </div>
+
+    <div class="mpane" id="rt-4">
+      <div class="timeline">
+        <div class="tl-item"><div class="tl-t">AI 自动提取完成</div><div class="tl-m">2026-09-02 10:20 · 智能体预审引擎，抽取 12 类要素</div></div>
+        <div class="tl-item"><div class="tl-t">人工初审确认</div><div class="tl-m">2026-09-03 15:20 · 区县网安 张××，逐项确认高危 3 项</div></div>
+        <div class="tl-item"><div class="tl-t">机构补正提交</div><div class="tl-m">2026-09-05 09:40 · 杭州安安检测，补充整改证据 2 份</div></div>
+        <div class="tl-item"><div class="tl-t">终审中</div><div class="tl-m">2026-09-06 至今 · 待市网安支队终审确认</div></div>
+      </div>
+    </div>
+
+    <div class="mpane" id="rt-5">
+      <div class="up-grid">
+        <div class="up-card"><div class="uh">测评报告 <span class="req-star">*</span></div><div class="ufile" onclick="toast('已打开预览（演示）')">测评报告.pdf <span class="x">预览</span></div></div>
+        <div class="up-card"><div class="uh">测评方案 <span class="req-star">*</span></div><div class="ufile" onclick="toast('已打开预览（演示）')">测评方案.docx <span class="x">预览</span></div></div>
+        <div class="up-card"><div class="uh">工具扫描结果 <span class="req-star">*</span></div><div class="ufile" onclick="toast('已打开预览（演示）')">漏扫结果.xlsx <span class="x">预览</span></div></div>
+        <div class="up-card"><div class="uh">整改证据 / 其他附件</div><div class="ufile" onclick="toast('已打开预览（演示）')">整改证据.zip <span class="x">预览</span></div></div>
+      </div>
+      <div class="hint">必传 3 项齐全；附件与报告正文版本一并留痕，可下载比对。</div>
+    </div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-report-detail')">关闭</button><button class="btn" onclick="closeModal('m-grade-report-detail');toast('已退回修改，意见回传机构端')">退回修改</button><button class="btn btn-primary" onclick="closeModal('m-grade-report-detail');toast('已通过终审')">通过终审</button></div>
+</div></div>
+
+<!-- 整改规划材料详情（运营者上报） -->
+<div class="modal-mask" id="m-grade-plan-detail"><div class="modal">
+  <div class="modal__head"><h3>整改规划材料详情 · JZ-2026-0158 V2.0</h3><button class="modal__close" onclick="closeModal('m-grade-plan-detail')">×</button></div>
+  <div class="modal__body">
+    <div class="detail-head"><span class="title">市三甲医院 HIS 系统</span><span class="badge b-wait">待审核</span><span class="badge b-back">高风险 1</span><span class="badge b-warn">中风险 3</span></div>
+    <dl class="dl">
+      <dt>上报方</dt><dd>江州市第一人民医院（网络运营者）· 信息科 王敏</dd>
+      <dt>备案编号</dt><dd>JZ-2026-0158 · <span class="gc">S3A3G3</span></dd>
+      <dt>关联测评报告</dt><dd>BG-2026-0097（2026-08-30 · 基本符合 · 高风险 1 / 中风险 3）</dd>
+      <dt>整改责任部门</dt><dd>信息科（牵头）· 运维组（配合）</dd>
+      <dt>整改期限</dt><dd>2026-10-31</dd>
+      <dt>整改目标</dt><dd>高风险项 100% 闭环，中风险项闭环率 ≥ 90%</dd>
+      <dt>提交记录</dt><dd>2026-09-12 10:24 提交 V2.0（V1.0 于 09-11 被退回补正）</dd>
+    </dl>
+    <div class="section-title" style="margin-top:14px">上报材料（3 项必传齐全）</div>
+    <div class="up-grid">
+      <div class="up-card"><div class="uh">整改规划方案（正文） <span class="req-star">*</span></div><div class="ufile" onclick="toast('已打开文件预览（演示）')">市三甲医院 HIS 系统整改规划V2.0.pdf <span class="x">预览</span></div></div>
+      <div class="up-card"><div class="uh">整改责任分工表 <span class="req-star">*</span></div><div class="ufile" onclick="toast('已打开文件预览（演示）')">整改责任分工表.xlsx <span class="x">预览</span></div></div>
+      <div class="up-card"><div class="uh">整改实施计划表（含时限） <span class="req-star">*</span></div><div class="ufile" onclick="toast('已打开文件预览（演示）')">整改实施计划表.xlsx <span class="x">预览</span></div></div>
+      <div class="up-card"><div class="uh">高风险项整改证据 / 其他附件</div><div class="ufile" style="color:var(--c-text-3)">尚未上传 · 复测前由运营者补交</div></div>
+    </div>
+    <div class="section-title" style="margin-top:14px">风险项 → 整改措施对照</div>
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-t">高危 · SQL 注入（HIS 查询接口）</div><div class="tl-m">参数化查询 + WAF 规则加固 · 承诺 2026-10-15 前完成，附回归测试说明</div></div>
+      <div class="tl-item"><div class="tl-t">中危 · 数据传输未加密</div><div class="tl-m">启用 TLS 1.2+ 全链路加密 · 承诺 2026-10-20</div></div>
+      <div class="tl-item"><div class="tl-t">中危 · 日志留存不足 6 个月</div><div class="tl-m">日志服务器扩容至 180 天留存 · 承诺 2026-10-31</div></div>
+    </div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-plan-detail')">关闭</button><button class="btn btn-primary" onclick="closeModal('m-grade-plan-detail');openModal('m-grade-plan-audit')">进入审核</button></div>
+</div></div>
+
+<!-- 整改规划审核（结论 + 意见回传） -->
+<div class="modal-mask" id="m-grade-plan-audit"><div class="modal">
+  <div class="modal__head"><h3>审核整改规划 · JZ-2026-0158 V2.0</h3><button class="modal__close" onclick="closeModal('m-grade-plan-audit')">×</button></div>
+  <div class="modal__body">
+    <div class="detail-head"><span class="title">市三甲医院 HIS 系统 · 整改规划 V2.0</span><span class="badge b-back">高风险 1</span><span class="badge b-warn">中风险 3</span></div>
+    <div class="form-grid">
+      <div class="form-item"><label>审核结论 <span class="req">*</span></label><select class="select"><option>审核通过</option><option>退回补正</option></select></div>
+      <div class="form-item"><label>整改期限确认</label><select class="select"><option>2026-10-31（维持原期限）</option><option>2026-10-15（要求提前）</option><option>放宽至 2026-11-30</option></select></div>
+      <div class="form-item full"><label>审核意见（回传网络运营者） <span class="req">*</span></label><input class="input" value="整改措施与风险项对应完整，同意按期实施；复测前须提交高风险项验证截图。" /></div>
+      <div class="form-item full"><label>补充要求 / 退回原因（选"退回补正"时必填）</label><input class="input" placeholder="如：缺高风险项整改证据与完成时限，请补充后重提" /></div>
+    </div>
+    <div class="section-title" style="margin-top:14px">审核留痕</div>
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-t">2026-09-12 10:24 · 运营者提交 V2.0</div><div class="tl-m">江州市第一人民医院 信息科 王敏</div></div>
+      <div class="tl-item"><div class="tl-t">2026-09-11 15:42 · 监管退回 V1.0</div><div class="tl-m">市局网安支队 监管员 014：缺实施计划表与高风险项完成时限</div></div>
+    </div>
+    <div class="hint" style="margin-top:12px">「审核通过」→ 自动同步 M3.3 隐患管理生成整改台账，并回传通过意见；「退回补正」→ 补正要求实时回传用户端 U3，运营者修订后可重新提交，历史版本留痕可比对。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-plan-audit')">取消</button><button class="btn btn-primary" onclick="closeModal('m-grade-plan-audit');toast('审核意见已回传网络运营者，整改台账已同步 M3.3')">提交审核结论</button></div>
+</div></div>
+
+<!-- 审核意见反馈 -->
+<div class="modal-mask" id="m-grade-report-feedback"><div class="modal">
+  <div class="modal__head"><h3>审核意见反馈（下发 / 机构补正）</h3><button class="modal__close" onclick="closeModal('m-grade-report-feedback')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>报告 <span class="req">*</span></label><select class="select"><option>BG-2026-0097 市三甲医院 HIS</option><option>BG-2026-0098 医保局结算系统</option></select></div>
+    <div class="form-item"><label>类型</label><select class="select"><option>退回补正</option><option>整改要求</option></select></div>
+    <div class="form-item full"><label>意见内容</label><input class="input" placeholder="如：高风险项未整改闭环，需补充证据"></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-grade-report-feedback')">取消</button><button class="btn btn-primary" onclick="closeModal('m-grade-report-feedback');toast('意见已下发机构')">下发</button></div>
+</div></div>
+
+<!-- 单位全息画像 -->
+<div class="modal-mask" id="m-archive-unit-detail"><div class="modal">
+  <div class="modal__head"><h3>单位全息画像 · 江州市第一人民医院</h3><button class="modal__close" onclick="closeModal('m-archive-unit-detail')">×</button></div>
+  <div class="modal__body">
+    <dl class="dl"><dt>类型</dt><dd>事业单位</dd><dt>所属区县</dt><dd>江城区</dd><dt>系统数</dt><dd>5</dd><dt>最近测评</dt><dd>2026-08-30</dd></dl>
+    <div class="section-title" style="margin-top:14px">安全事件 / 待整改</div>
+    <div class="timeline"><div class="tl-item"><div class="tl-t">高危漏洞 SQL 注入</div><div class="tl-m">整改中 · 时限 2026-09-15</div></div><div class="tl-item"><div class="tl-t">核心数据未加密传输</div><div class="tl-m">重大风险 · 处置中</div></div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-unit-detail')">关闭</button></div>
+</div></div>
+
+<!-- 系统详情 -->
+<div class="modal-mask" id="m-archive-sys-detail"><div class="modal">
+  <div class="modal__head"><h3>系统档案 · 市三甲医院 HIS 系统</h3><button class="modal__close" onclick="closeModal('m-archive-sys-detail')">×</button></div>
+  <div class="modal__body"><dl class="dl"><dt>所属单位</dt><dd>江州市第一人民医院</dd><dt>等保级别</dt><dd><span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span></dd><dt>资产数</dt><dd>43</dd><dt>状态</dt><dd><span class="badge b-warn">风险</span></dd></dl>
+    <div class="section-title" style="margin-top:14px">历次问题与整改</div>
+    <div class="timeline"><div class="tl-item"><div class="tl-t">2026-08 测评</div><div class="tl-m">发现高危 1 / 中危 3，整改中</div></div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-sys-detail')">关闭</button></div>
+</div></div>
+
+<!-- 漏洞详情 -->
+<div class="modal-mask" id="m-archive-vuln-detail"><div class="modal">
+  <div class="modal__head"><h3>漏洞详情 · SQL 注入</h3><button class="modal__close" onclick="closeModal('m-archive-vuln-detail')">×</button></div>
+  <div class="modal__body"><dl class="dl"><dt>系统</dt><dd>市三甲医院 HIS</dd><dt>等级</dt><dd><span class="badge b-back">高危</span></dd><dt>发现</dt><dd>2026-08-30</dd><dt>状态</dt><dd><span class="badge b-wait">整改中</span></dd></dl>
+    <div class="hint" style="margin-top:12px">整改建议：对输入参数实施预编译与白名单校验，部署 WAF 规则。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-vuln-detail')">关闭</button><button class="btn btn-primary" onclick="closeModal('m-archive-vuln-detail');toast('已确认闭环')">确认闭环</button></div>
+</div></div>
+
+<!-- 预警详情 -->
+<div class="modal-mask" id="m-monitor-alarm-detail"><div class="modal">
+  <div class="modal__head"><h3>预警处理 · 漏洞利用</h3><button class="modal__close" onclick="closeModal('m-monitor-alarm-detail')">×</button></div>
+  <div class="modal__body"><dl class="dl"><dt>对象</dt><dd>市三甲医院 HIS 系统</dd><dt>级别</dt><dd><span class="badge b-back">高危</span></dd><dt>触发</dt><dd>2026-09-09 08:12</dd><dt>来源</dt><dd>漏扫对接</dd></dl>
+    <div class="form-grid" style="margin-top:12px"><div class="form-item full"><label>处置说明</label><input class="input" placeholder="处置措施与结果"></div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-monitor-alarm-detail')">取消</button><button class="btn btn-primary" onclick="closeModal('m-monitor-alarm-detail');toast('预警已关闭')">关闭预警</button></div>
+</div></div>
+
+<!-- 预警规则 -->
+<div class="modal-mask" id="m-monitor-rule"><div class="modal">
+  <div class="modal__head"><h3>预警规则管理 / 推送配置</h3><button class="modal__close" onclick="closeModal('m-monitor-rule')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>规则名称</label><input class="input" placeholder="如 高危漏洞实时告警"></div>
+    <div class="form-item"><label>触发条件</label><select class="select"><option>高危漏洞出现</option><option>备案超期</option><option>资产变更</option></select></div>
+    <div class="form-item"><label>推送渠道</label><select class="select"><option>平台+短信+邮件</option><option>平台</option><option>短信</option></select></div>
+    <div class="form-item"><label>接收角色</label><select class="select"><option>监管员</option><option>机构管理员</option></select></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-monitor-rule')">取消</button><button class="btn btn-primary" onclick="closeModal('m-monitor-rule');toast('规则已保存')">保存</button></div>
+</div></div>
+
+<!-- 信息发布 · 通报 / 安全预警公告 / 通知公告 编辑（M-121~123） -->
+<div class="modal-mask" id="m-monitor-publish"><div class="modal" style="width:740px">
+  <div class="modal__head"><h3 id="pubTitle">发布通报</h3><button class="modal__close" onclick="closeModal('m-monitor-publish')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>信息类型 <span class="req">*</span></label>
+      <select class="select" id="pubType"><option>通知通报</option><option>安全预警公告</option><option>通知公告</option></select></div>
+    <div class="form-item"><label>发布单位 <span class="req">*</span></label><input class="input" value="江州市公安局网安支队"></div>
+    <div class="form-item full"><label>标题 <span class="req">*</span></label><input class="input" placeholder="如：关于开展 2026 年度等级保护测评专项检查的通知"></div>
+    <div class="form-item"><label>发布范围</label><select class="select"><option>全部单位与机构</option><option>仅备案单位</option><option>仅测评机构</option><option>指定单位（多选）</option></select></div>
+    <div class="form-item"><label>发布时间</label><input class="input" type="date" value="2026-10-19"></div>
+    <div class="form-item full"><label>正文（公文体裁）</label>
+      <textarea class="input" style="height:132px;padding:8px 10px;resize:vertical;line-height:1.7" placeholder="一、工作目标&#10;二、检查范围与内容&#10;三、时间安排&#10;四、工作要求"></textarea>
+      <div class="hint">支持引用 M4.1 预警条目自动生成「安全预警公告」正文；发布后同步推送站内消息。</div></div>
+    <div class="form-item full"><label>附件</label><div class="upload" onclick="toast('已选择附件')">＋ 上传附件（PDF / Word，可多选）</div></div>
+    <div class="form-item full" style="display:flex;gap:18px;align-items:center">
+      <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" checked> 置顶展示</label>
+      <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox"> 同时推送短信</label>
+    </div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-monitor-publish')">取消</button><button class="btn" onclick="closeModal('m-monitor-publish');toast('已保存为草稿')">保存草稿</button><button class="btn btn-primary" onclick="closeModal('m-monitor-publish');toast('已发布，站内消息已推送')">发布</button></div>
+</div></div>
+
+<!-- 新增 / 编辑单位（M-070） -->
+<div class="modal-mask" id="m-archive-unit-add"><div class="modal" style="width:720px">
+  <div class="modal__head"><h3>新增单位</h3><button class="modal__close" onclick="closeModal('m-archive-unit-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>单位名称 <span class="req">*</span></label><input class="input" placeholder="与营业执照 / 统一社会信用代码证一致"></div>
+    <div class="form-item"><label>统一社会信用代码 <span class="req">*</span></label><input class="input" placeholder="18 位"></div>
+    <div class="form-item"><label>单位类型</label><select class="select"><option>党政机关</option><option>事业单位</option><option>企业</option></select></div>
+    <div class="form-item"><label>所属区县</label><select class="select"><option>市本级</option><option>江城区</option><option>开发区</option><option>滨江区</option><option>富阳区</option></select></div>
+    <div class="form-item"><label>上级单位</label><input class="input" placeholder="选填，用于树形归集"></div>
+    <div class="form-item"><label>安全责任人</label><input class="input" placeholder="姓名"></div>
+    <div class="form-item"><label>联系电话</label><input class="input" placeholder="手机号 / 固话"></div>
+    <div class="form-item"><label>状态</label><select class="select"><option>正常</option><option>待核实</option><option>已停用</option></select></div>
+    <div class="form-item full"><label>地址</label><input class="input" placeholder="详细地址"></div>
+    <div class="form-item full"><label>备注</label><input class="input" placeholder="选填"></div>
+  </div>
+  <div class="notice notice-info" style="margin-top:12px"><span class="ni">i</span><div>同名或同信用代码的单位已存在时将提示合并，不重复建档。</div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-unit-add')">取消</button><button class="btn" onclick="toast('已保存，可继续新增')">保存并继续</button><button class="btn btn-primary" onclick="closeModal('m-archive-unit-add');toast('单位已建档')">保存</button></div>
+</div></div>
+
+<!-- 单位合并（M-075） -->
+<div class="modal-mask" id="m-archive-unit-merge"><div class="modal" style="width:760px">
+  <div class="modal__head"><h3>单位合并</h3><button class="modal__close" onclick="closeModal('m-archive-unit-merge')">×</button></div>
+  <div class="modal__body">
+    <div class="notice notice-danger"><span class="ni">!</span><div><b>合并不可撤销。</b>被合并单位的档案、系统、备案记录将迁至主单位并保留来源标记，原单位置为「已合并」。</div></div>
+    <div class="form-grid" style="margin-top:14px">
+      <div class="form-item full"><label>主单位（保留）<span class="req">*</span></label><select class="select"><option>江州市第一人民医院</option><option>江州市医疗保障局</option></select></div>
+      <div class="form-item full"><label>被合并单位（可多选）<span class="req">*</span></label>
+        <div class="up-grid" style="grid-template-columns:1fr">
+          <label class="up-card" style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" checked> <span>江州市第一人民医院（旧档） · 系统 2 个</span></label>
+          <label class="up-card" style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox"> <span>江州市人民医院 · 系统 1 个</span></label>
+        </div>
+      </div>
+      <div class="form-item"><label>系统归属冲突</label><select class="select"><option>以主单位为准</option><option>保留双方并标记</option></select></div>
+      <div class="form-item"><label>人员归属冲突</label><select class="select"><option>按信用代码去重</option><option>全部保留</option></select></div>
+      <div class="form-item full"><label>迁移范围</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+          <label><input type="checkbox" checked> 系统资产</label>
+          <label><input type="checkbox" checked> 备案记录</label>
+          <label><input type="checkbox" checked> 人员档案</label>
+          <label><input type="checkbox" checked> 隐患 / 整改记录</label>
+          <label><input type="checkbox"> 供应商关系</label>
+        </div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:14px">合并预览</div>
+    <div class="table-wrap"><table class="tbl tbl-compact">
+      <thead><tr><th>项目</th><th>合并前</th><th>合并后</th></tr></thead>
+      <tbody><tr><td>单位数</td><td>2</td><td>1</td></tr><tr><td>系统数</td><td>5 + 2</td><td>7</td></tr><tr><td>重复备案</td><td>1</td><td>0（保留主单位编号）</td></tr></tbody>
+    </table></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-unit-merge')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-unit-merge');toast('单位已合并，7 个系统已迁移并保留来源标记')">确认合并</button></div>
+</div></div>
+
+<!-- 供应商登记 -->
+<div class="modal-mask" id="m-archive-supplier-add"><div class="modal">
+  <div class="modal__head"><h3>登记供应商</h3><button class="modal__close" onclick="closeModal('m-archive-supplier-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item full"><label>供应商名称 <span class="req">*</span></label><input class="input" placeholder="企业全称"></div>
+    <div class="form-item"><label>服务类型</label><select class="select"><option>云平台服务</option><option>安全运维</option><option>等级测评</option><option>系统集成</option></select></div>
+    <div class="form-item"><label>服务单位</label><select class="select"><option>江州市医疗保障局</option><option>江州银行股份有限公司</option><option>江州市水务集团</option></select></div>
+    <div class="form-item"><label>合作起始</label><input class="input" type="date" value="2026-01-01"></div>
+    <div class="form-item"><label>状态</label><select class="select"><option>合作中</option><option>已终止</option></select></div>
+    <div class="form-item"><label>联系人</label><input class="input" placeholder="姓名"></div>
+    <div class="form-item"><label>联系电话</label><input class="input" placeholder="手机号"></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-supplier-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-supplier-add');toast('供应商已登记')">保存</button></div>
+</div></div>
+
+<!-- 测评机构登记（M-074） -->
+<div class="modal-mask" id="m-archive-org-add"><div class="modal">
+  <div class="modal__head"><h3>登记测评机构</h3><button class="modal__close" onclick="closeModal('m-archive-org-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item full"><label>机构名称 <span class="req">*</span></label><input class="input" placeholder="测评机构全称"></div>
+    <div class="form-item"><label>资质等级</label><select class="select"><option>甲级</option><option>乙级</option></select></div>
+    <div class="form-item"><label>资质证书编号</label><input class="input" placeholder="如 DJCP-2023-0xx"></div>
+    <div class="form-item"><label>资质有效期</label><input class="input" type="date" value="2027-05-31"></div>
+    <div class="form-item"><label>测评师人数</label><input class="input" value="18"></div>
+    <div class="form-item"><label>联系人</label><input class="input" placeholder="姓名"></div>
+    <div class="form-item"><label>联系电话</label><input class="input" placeholder="手机号"></div>
+    <div class="form-item full"><label>状态</label><select class="select"><option>有效</option><option>暂停</option><option>已注销</option></select></div>
+  </div>
+  <div class="notice notice-warn" style="margin-top:12px"><span class="ni">!</span><div>资质有效期不足 60 天时，系统在生效前 30 天自动提醒年审。</div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-org-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-org-add');toast('机构已登记，资质台账已更新')">保存</button></div>
+</div></div>
+
+<!-- 人员新增 -->
+<div class="modal-mask" id="m-archive-person-add"><div class="modal">
+  <div class="modal__head"><h3>人员档案</h3><button class="modal__close" onclick="closeModal('m-archive-person-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>姓名 <span class="req">*</span></label><input class="input" placeholder="姓名"></div>
+    <div class="form-item"><label>所属单位</label><select class="select"><option>江州市医疗保障局</option><option>江州银行股份有限公司</option><option>江州市第一人民医院</option></select></div>
+    <div class="form-item"><label>角色</label><select class="select"><option>系统管理员</option><option>安全责任人</option><option>安全管理员</option></select></div>
+    <div class="form-item"><label>联系电话</label><input class="input" placeholder="手机号"></div>
+    <div class="form-item"><label>邮箱</label><input class="input" placeholder="选填"></div>
+    <div class="form-item"><label>状态</label><select class="select"><option>在职</option><option>已停用</option></select></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-person-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-person-add');toast('人员档案已保存')">保存</button></div>
+</div></div>
+
+<!-- 登记系统（M-080） -->
+<div class="modal-mask" id="m-archive-sys-add"><div class="modal" style="width:720px">
+  <div class="modal__head"><h3>登记系统</h3><button class="modal__close" onclick="closeModal('m-archive-sys-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>系统名称 <span class="req">*</span></label><input class="input" placeholder="如 市三甲医院 HIS 系统"></div>
+    <div class="form-item"><label>所属单位 <span class="req">*</span></label><select class="select"><option>江州市第一人民医院</option><option>江州市医疗保障局</option><option>江州银行股份有限公司</option></select></div>
+    <div class="form-item"><label>业务类型</label><select class="select"><option>业务系统</option><option>门户网站</option><option>数据平台</option><option>办公系统</option></select></div>
+    <div class="form-item"><label>上线时间</label><input class="input" type="date" value="2024-06-01"></div>
+    <div class="form-item full"><label>等保定级（S / A / G 三维）</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span class="muted" style="font-size:12px">业务信息安全性</span>
+        <select class="select" style="width:96px"><option>S2</option><option selected>S3</option><option>S4</option></select>
+        <span class="muted" style="font-size:12px">业务服务保证性</span>
+        <select class="select" style="width:96px"><option>A2</option><option selected>A3</option><option>A4</option></select>
+        <span class="muted" style="font-size:12px">整体安全性</span>
+        <select class="select" style="width:96px"><option>G2</option><option selected>G3</option><option>G4</option></select>
+        <span class="gc">S3A3G3</span><span class="badge b-gray">第三级</span>
+      </div>
+      <div class="hint">定级取 S/A/G 三者最高值；评级变化须同步更新备案信息。</div>
+    </div>
+    <div class="form-item"><label>安全责任人</label><input class="input" value="张敏"></div>
+    <div class="form-item"><label>联系电话</label><input class="input" value="137****4412"></div>
+    <div class="form-item full"><label>备注</label><input class="input" placeholder="选填"></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-sys-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-sys-add');toast('系统已登记并同步至资产台账')">保存</button></div>
+</div></div>
+
+<!-- 资产登记（IP / 域名 / 云 / 大数据） -->
+<div class="modal-mask" id="m-archive-asset-add"><div class="modal" style="width:700px">
+  <div class="modal__head"><h3>资产登记</h3><button class="modal__close" onclick="closeModal('m-archive-asset-add')">×</button></div>
+  <div class="modal__body">
+    <div class="seg-views" id="assetKind" style="margin-bottom:14px">
+      <button class="active" onclick="pickAssetKind(this)">IP 资产</button>
+      <button onclick="pickAssetKind(this)">域名</button>
+      <button onclick="pickAssetKind(this)">云平台</button>
+      <button onclick="pickAssetKind(this)">大数据平台</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-item"><label>归属系统 <span class="req">*</span></label><select class="select"><option>市三甲医院 HIS 系统</option><option>江州市医保局结算系统</option><option>江州银行核心业务系统</option></select></div>
+      <div class="form-item"><label>所属单位</label><input class="input" value="江州市第一人民医院" disabled></div>
+      <div class="form-item"><label id="assetKeyLabel">IP 地址 / 网段</label><input class="input" id="assetKeyInput" placeholder="如 10.20.8.24 或 10.20.8.0/24"></div>
+      <div class="form-item"><label>用途</label><select class="select"><option>Web 服务</option><option>数据库</option><option>运维管理</option><option>网段</option></select></div>
+      <div class="form-item"><label>开放端口</label><input class="input" placeholder="如 443, 8443"></div>
+      <div class="form-item"><label>状态</label><select class="select"><option>在用</option><option>待核实</option><option>已下线</option></select></div>
+      <div class="form-item full"><label>备注</label><input class="input" placeholder="选填；域名类可填 ICP 备案号，云/大数据类可填服务商与规模"></div>
+    </div>
+    <div class="notice notice-info" style="margin-top:12px"><span class="ni">i</span><div>同一 IP 被多个系统登记时自动标记「共用」，并在资产详情中列出共用系统。</div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-asset-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-asset-add');toast('资产已登记并关联归属系统')">保存</button></div>
+</div></div>
+
+<!-- 登记漏洞 -->
+<div class="modal-mask" id="m-archive-vuln-add"><div class="modal">
+  <div class="modal__head"><h3>登记漏洞</h3><button class="modal__close" onclick="closeModal('m-archive-vuln-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>系统 <span class="req">*</span></label><select class="select"><option>市三甲医院 HIS 系统</option><option>江州市医保局结算系统</option><option>江州银行核心业务系统</option></select></div>
+    <div class="form-item"><label>漏洞名称 <span class="req">*</span></label><input class="input" placeholder="如 SQL 注入"></div>
+    <div class="form-item"><label>等级</label><select class="select"><option>高</option><option>中</option><option>低</option></select></div>
+    <div class="form-item"><label>来源</label><select class="select"><option>测评发现</option><option>漏扫对接</option><option>人工录入</option></select></div>
+    <div class="form-item"><label>发现时间</label><input class="input" type="date" value="2026-09-10"></div>
+    <div class="form-item"><label>整改期限</label><input class="input" type="date" value="2026-10-10"></div>
+    <div class="form-item full"><label>描述与影响</label><input class="input" placeholder="漏洞位置、可利用性与影响范围"></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-archive-vuln-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-archive-vuln-add');toast('漏洞已登记，状态为「整改中」')">保存</button></div>
+</div></div>
+
+<!-- 知识标签 -->
+<div class="modal-mask" id="m-agent-kb-tag"><div class="modal">
+  <div class="modal__head"><h3>知识标签</h3><button class="modal__close" onclick="closeModal('m-agent-kb-tag')">×</button></div>
+  <div class="modal__body">
+    <div class="form-item" style="margin-bottom:14px"><label>知识名称</label><input class="input" value="GB/T 22239-2019 基本要求" disabled></div>
+    <div class="form-item" style="margin-bottom:10px"><label>已有标签</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="badge b-info" style="cursor:pointer;padding:5px 10px"><input type="checkbox" checked> 等保 2.0</label>
+        <label class="badge b-gray" style="cursor:pointer;padding:5px 10px"><input type="checkbox" checked> 国家标准</label>
+        <label class="badge b-gray" style="cursor:pointer;padding:5px 10px"><input type="checkbox"> 技术类</label>
+        <label class="badge b-gray" style="cursor:pointer;padding:5px 10px"><input type="checkbox"> 管理类</label>
+        <label class="badge b-gray" style="cursor:pointer;padding:5px 10px"><input type="checkbox"> 现行有效</label>
+      </div>
+    </div>
+    <div class="form-item"><label>新增标签</label><input class="input" placeholder="输入后回车创建，标签与 M7.2 标签管理联动"></div>
+    <div class="hint">标签影响 AI 对话召回排序：同时命中「分类 + 标签」的条目优先引用。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-agent-kb-tag')">取消</button><button class="btn btn-primary" onclick="closeModal('m-agent-kb-tag');toast('标签已保存')">保存</button></div>
+</div></div>
+
+<!-- 数据清洗任务 -->
+<div class="modal-mask" id="m-agent-data-clean"><div class="modal" style="width:720px">
+  <div class="modal__head"><h3>数据清洗任务</h3><button class="modal__close" onclick="closeModal('m-agent-data-clean')">×</button></div>
+  <div class="modal__body">
+    <div class="form-grid">
+      <div class="form-item"><label>目标数据源</label><select class="select"><option>测评报告（需清洗）</option><option>备案数据</option><option>资产测绘</option><option>隐患数据（异常 3 条）</option></select></div>
+      <div class="form-item"><label>执行方式</label><select class="select"><option>立即执行</option><option>定时（每日 02:00）</option><option>仅生成预览</option></select></div>
+      <div class="form-item full"><label>清洗规则</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+          <label><input type="checkbox" checked> 去重（按报告编号）</label>
+          <label><input type="checkbox" checked> 空值补全（单位 / 机构）</label>
+          <label><input type="checkbox" checked> 格式规范化（日期 / 定级）</label>
+          <label><input type="checkbox" checked> 敏感字段脱敏</label>
+          <label><input type="checkbox"> 关联资产库校验</label>
+        </div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:14px">清洗预览（前 3 条）</div>
+    <div class="table-wrap"><table class="tbl tbl-compact" style="min-width:560px">
+      <thead><tr><th>字段</th><th>清洗前</th><th>清洗后</th><th>规则</th></tr></thead>
+      <tbody>
+        <tr><td>测评机构</td><td>江州信安</td><td>江州信安测评中心</td><td>名称归一</td></tr>
+        <tr><td>定级</td><td>三级</td><td>S3A3G3</td><td>定级补全</td></tr>
+        <tr><td>提交时间</td><td>2026/9/2</td><td>2026-09-02</td><td>日期规范化</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice notice-warn" style="margin-top:12px"><span class="ni">!</span><div>预计影响 <b>56 条</b>记录、<b>3</b> 个字段；清洗前自动生成快照，可在运维审计中回滚。</div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-agent-data-clean')">取消</button><button class="btn" onclick="toast('已生成清洗预览，未写入')">仅预览</button><button class="btn btn-primary" onclick="closeModal('m-agent-data-clean');toast('清洗任务已提交，预计 2 分钟完成')">执行清洗</button></div>
+</div></div>
+
+<!-- 数据源详情 -->
+<div class="modal-mask" id="m-agent-data-view"><div class="modal" style="width:720px">
+  <div class="modal__head"><h3>数据源详情 · 测评报告</h3><button class="modal__close" onclick="closeModal('m-agent-data-view')">×</button></div>
+  <div class="modal__body">
+    <dl class="dl">
+      <dt>数据类型</dt><dd>测评报告</dd><dt>来源</dt><dd>机构端上报</dd>
+      <dt>记录数</dt><dd>56</dd><dt>最近同步</dt><dd>2026-09-09 07:40</dd>
+      <dt>同步方式</dt><dd>API 推送 + 每日增量</dd><dt>质量评分</dt><dd><span class="badge b-warn">72 / 100（需清洗）</span></dd>
+    </dl>
+    <div class="section-title" style="margin-top:16px">字段结构</div>
+    <div class="table-wrap"><table class="tbl tbl-compact">
+      <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>完整率</th></tr></thead>
+      <tbody>
+        <tr><td>报告编号</td><td>string</td><td>是</td><td>100%</td></tr>
+        <tr><td>系统名称</td><td>string</td><td>是</td><td>100%</td></tr>
+        <tr><td>测评机构</td><td>string</td><td>是</td><td>94%</td></tr>
+        <tr><td>风险级别</td><td>enum</td><td>是</td><td>98%</td></tr>
+        <tr><td>安全责任人</td><td>string</td><td>否</td><td>61%</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-agent-data-view')">关闭</button><button class="btn btn-primary" onclick="closeModal('m-agent-data-view');openModal('m-agent-data-clean')">去清洗</button></div>
+</div></div>
+
+<!-- 重置密码 -->
+<div class="modal-mask" id="m-sys-pwd-reset"><div class="modal">
+  <div class="modal__head"><h3>重置密码</h3><button class="modal__close" onclick="closeModal('m-sys-pwd-reset')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>账号</label><input class="input" value="zhangp" disabled></div>
+    <div class="form-item"><label>姓名</label><input class="input" value="张平" disabled></div>
+    <div class="form-item full"><label>重置方式</label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+        <label><input type="radio" name="pwdmode" checked> 系统生成随机密码（短信下发）</label>
+        <label><input type="radio" name="pwdmode"> 手动指定新密码</label>
+      </div>
+    </div>
+    <div class="form-item full"><label>安全选项</label>
+      <label style="font-size:13px"><input type="checkbox" checked> 强制下次登录修改密码</label>
+      <label style="font-size:13px;margin-left:16px"><input type="checkbox" checked> 同时使当前会话失效</label>
+    </div>
+  </div>
+  <div class="notice notice-warn" style="margin-top:12px"><span class="ni">!</span><div>重置操作将写入运维审计日志，并保留操作人、时间与目标账号。</div></div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-sys-pwd-reset')">取消</button><button class="btn btn-primary" onclick="closeModal('m-sys-pwd-reset');toast('密码已重置，新密码已短信下发并记录审计日志')">确认重置</button></div>
+</div></div>
+
+<!-- 知识库详情 -->
+<div class="modal-mask" id="m-agent-kb-detail"><div class="modal">
+  <div class="modal__head"><h3>知识库条目</h3><button class="modal__close" onclick="closeModal('m-agent-kb-detail')">×</button></div>
+  <div class="modal__body"><dl class="dl"><dt>分类</dt><dd>标准</dd><dt>名称</dt><dd>GB/T 22239-2019 基本要求</dd><dt>来源</dt><dd>国标委</dd><dt>更新</dt><dd>2019-05-10</dd></dl>
+    <div class="hint" style="margin-top:12px">支持全文检索与 AI 互动问答，可一键引用至审核/报告比对。</div>
+  </div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-agent-kb-detail')">关闭</button><button class="btn btn-primary" onclick="toast('已引用')">引用</button></div>
+</div></div>
+
+<!-- 数据接入 -->
+<div class="modal-mask" id="m-agent-data-add"><div class="modal">
+  <div class="modal__head"><h3>新增数据接入</h3><button class="modal__close" onclick="closeModal('m-agent-data-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>数据源</label><input class="input" placeholder="如 资产测绘平台"></div>
+    <div class="form-item"><label>类型</label><select class="select"><option>API</option><option>文件</option><option>库表</option></select></div>
+    <div class="form-item full"><label>清洗规则</label><input class="input" placeholder="去重/去脏/字段标准化"></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-agent-data-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-agent-data-add');toast('接入任务已创建')">创建</button></div>
+</div></div>
+
+<!-- 系统管理：用户新增 / 角色 -->
+<div class="modal-mask" id="m-sys-user-add"><div class="modal">
+  <div class="modal__head"><h3>新增用户</h3><button class="modal__close" onclick="closeModal('m-sys-user-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>姓名 <span class="req">*</span></label><input class="input"></div>
+    <div class="form-item"><label>账号 <span class="req">*</span></label><input class="input"></div>
+    <div class="form-item"><label>部门</label><input class="input"></div>
+    <div class="form-item"><label>角色</label><select class="select"><option>监管员</option><option>机构用户</option></select></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-sys-user-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-sys-user-add');toast('用户已创建')">保存</button></div>
+</div></div>
+<div class="modal-mask" id="m-sys-role-add"><div class="modal">
+  <div class="modal__head"><h3>新增角色</h3><button class="modal__close" onclick="closeModal('m-sys-role-add')">×</button></div>
+  <div class="modal__body"><div class="form-grid">
+    <div class="form-item"><label>角色名 <span class="req">*</span></label><input class="input"></div>
+    <div class="form-item"><label>权限范围</label><input class="input" placeholder="如 备案/实施/测评审核"></div>
+  </div></div>
+  <div class="modal__foot"><button class="btn" onclick="closeModal('m-sys-role-add')">取消</button><button class="btn btn-primary" onclick="closeModal('m-sys-role-add');toast('角色已创建')">保存</button></div>
+</div></div>
+
+<!-- M5 · 月报摘要（点击常用模板 → AI 生成 → 完整月报） -->
+<div class="modal-mask" id="m-agent-monthly"><div class="modal" style="width:820px">
+  <div class="modal__head"><h3>2026 年 9 月 · 等级保护监管月报</h3><button class="modal__close" onclick="closeModal('m-agent-monthly')">×</button></div>
+  <div class="modal__body" style="max-height:70vh">
+    <div class="report-meta">
+      <span>报告期：<b>2026-09-01 ~ 2026-09-30</b></span>
+      <span>统计范围：<b>421 家单位 / 2,041 个系统</b></span>
+      <span>生成方式：<b>智能体自动汇总 · 人工复核</b></span>
+      <span>生成时间：<b>2026-10-01 08:30</b></span>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:2px">
+      <div class="stat-card"><div class="n">38</div><div class="l">新增备案</div><div class="sub">环比 +12.5%</div></div>
+      <div class="stat-card"><div class="n">26</div><div class="l">完成测评</div><div class="sub">环比 +4.0%</div></div>
+      <div class="stat-card"><div class="n">17</div><div class="l">处置预警</div><div class="sub">环比 -22.7%</div></div>
+      <div class="stat-card"><div class="n">5</div><div class="l">高危漏洞</div><div class="sub">环比 -2 项</div></div>
+    </div>
+
+    <div class="report-sec">
+      <h4>一、备案与测评概况</h4>
+      <div class="table-wrap"><table class="tbl tbl-fit tbl-compact">
+        <thead><tr><th>系统等级</th><th>新增备案</th><th>完成测评</th><th>测评完成率</th><th>平均测评周期</th></tr></thead>
+        <tbody>
+          <tr><td>第三级</td><td>12</td><td>9</td><td><span class="badge b-pass">75.0%</span></td><td>23 天</td></tr>
+          <tr><td>第二级</td><td>26</td><td>17</td><td><span class="badge b-wait">65.4%</span></td><td>16 天</td></tr>
+          <tr class="sum"><td>合计</td><td>38</td><td>26</td><td>68.4%</td><td>19 天</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="report-sec">
+      <h4>二、风险态势（本月 vs 上月）</h4>
+      <div class="table-wrap"><table class="tbl tbl-fit tbl-compact">
+        <thead><tr><th>风险级别</th><th>本月新增</th><th>上月</th><th>环比</th><th>整改闭环率</th><th>未闭环</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge b-back">高危</span></td><td>5</td><td>7</td><td class="up-good">-28.6%</td><td>80.0%</td><td>1</td></tr>
+          <tr><td><span class="badge b-warn">中危</span></td><td>23</td><td>19</td><td class="up-bad">+21.1%</td><td>91.3%</td><td>2</td></tr>
+          <tr><td><span class="badge b-blue">低危</span></td><td>61</td><td>58</td><td class="up-bad">+5.2%</td><td>96.7%</td><td>2</td></tr>
+          <tr class="sum"><td>合计</td><td>89</td><td>84</td><td>+6.0%</td><td>93.3%</td><td>5</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="report-sec">
+      <h4>三、重点关注问题</h4>
+      <div class="issue-list">
+        <div class="it"><span class="idx">01</span><div><b>市三甲医院 HIS 系统</b> 检出 SQL 注入高危漏洞（关联 CVE-2026-1234），已下发整改通知，整改期限 <b>2026-10-15</b>。</div></div>
+        <div class="it"><span class="idx">02</span><div><b>江州市水务集团等 2 家单位</b> 备案信息与实际资产不一致，已退回补正，需 10 个工作日内重新提交。</div></div>
+        <div class="it"><span class="idx">03</span><div><b>Exchange 高危漏洞</b> 影响面覆盖 12 个系统，已发布《安全预警公告》，要求 10 月 10 日前完成排查上报。</div></div>
+      </div>
+    </div>
+
+    <div class="report-sec">
+      <h4>四、下月工作建议</h4>
+      <div class="issue-list">
+        <div class="it"><span class="idx">A</span><div>对三级系统测评报告开展抽查，重点复核高风险项整改闭环证据链。</div></div>
+        <div class="it"><span class="idx">B</span><div>中危漏洞环比上升 21.1%，对增幅前 5 的单位开展专项督办。</div></div>
+        <div class="it"><span class="idx">C</span><div>推进年度备案信息核验，目标覆盖率 ≥ 95%，10 月底前完成首轮。</div></div>
+      </div>
+    </div>
+
+    <div class="report-note">本报告由智能体基于备案、实施报备、测评报告、预警处置、资产测绘五类数据自动汇总生成，数据截止 2026-09-30 24:00，统计口径与《等级保护监管月报编制规范（试行）》一致。复核人：王强（高级测评师 · 杭州安安检测）。</div>
+  </div>
+  <div class="modal__foot">
+    <button class="btn" onclick="closeModal('m-agent-monthly')">关闭</button>
+    <button class="btn" onclick="copyMonthlyPoints()">复制要点</button>
+    <button class="btn" onclick="toast('Word 版月报已导出：等级保护监管月报_202609.docx')">导出 Word</button>
+    <button class="btn btn-primary" onclick="pushMonthlyToPublish()">推送至信息发布</button>
+  </div>
+</div></div>
+
+<template id="tplMonthlyMsg">
+  <div class="bubble bot">
+    已汇总 <b>2026-09-01 ~ 09-30</b> 数据：新增备案 <b>38</b> 个、完成测评 <b>26</b> 个、处置预警 <b>17</b> 起；高危漏洞 <b>5</b> 项（环比 -28.6%），整改闭环率 <b>93.3%</b>。<br>
+    <b>重点关注</b>：市三甲医院 HIS 系统检出 SQL 注入高危漏洞，整改期限 2026-10-15。<br>
+    <span class="link" onclick="openMonthlyReport()">查看完整月报</span>
+    <span class="dot-sep">·</span>
+    <span class="link" onclick="toast('Word 版月报已导出：等级保护监管月报_202609.docx')">导出 Word</span>
+  </div>
+</template>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<script src="app.js"></script>
+</body>
+</html>
