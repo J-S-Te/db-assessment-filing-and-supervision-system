@@ -12068,6 +12068,10 @@ components:
                   type: integer
                   format: int64
                   minimum: 0
+        recentCommonIssues:
+          description: 按北京时间近 30 日登记的已派发隐患问题。
+          allOf:
+          - "$ref": "#/components/schemas/DashboardAnalytics/properties/commonIssues"
         commonIssues:
           type: object
           additionalProperties: false

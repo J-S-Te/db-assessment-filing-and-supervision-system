@@ -31,8 +31,9 @@ type commonIssues struct {
 }
 
 type dashboardAnalysis struct {
-	Industries   industryAnalysis `json:"industries"`
-	CommonIssues commonIssues     `json:"commonIssues"`
+	Industries         industryAnalysis `json:"industries"`
+	CommonIssues       commonIssues     `json:"commonIssues"`
+	RecentCommonIssues commonIssues     `json:"recentCommonIssues"`
 }
 
 const eligibleIndustrySQL = `f.kind='filing' AND f.status='approved'
@@ -53,13 +54,21 @@ const dashboardAnalysisSQL = dashboardScopeSQL + `, open_hazards AS (
     LEFT JOIN open_hazards r ON r.filing_id=f.id
     WHERE ` + eligibleIndustrySQL + ` GROUP BY c.code
 ), issue_counts AS (
-    SELECT c.code,count(*) AS count
+    SELECT c.code,count(*) AS count,
+           count(*) FILTER (WHERE h.created_at >=
+               (date_trunc('day',statement_timestamp() AT TIME ZONE 'Asia/Shanghai')
+                    - interval '29 days') AT TIME ZONE 'Asia/Shanghai'
+               AND h.created_at <= statement_timestamp()) AS recent
     FROM scope_hazards h LEFT JOIN dashboard_hazard_issues c ON c.hazard_id=h.id
     WHERE ` + eligibleIssueSQL + ` GROUP BY c.code
 ), ranked_issues AS (
     SELECT i.code,o.label,i.count FROM issue_counts i
     JOIN dashboard_classification_options o ON o.kind='issue' AND o.code=i.code
     ORDER BY i.count DESC,i.code COLLATE "C" LIMIT 10
+), ranked_recent_issues AS (
+    SELECT i.code,o.label,i.recent AS count FROM issue_counts i
+    JOIN dashboard_classification_options o ON o.kind='issue' AND o.code=i.code
+    WHERE i.recent>0 ORDER BY i.recent DESC,i.code COLLATE "C" LIMIT 10
 )
 SELECT
     COALESCE((SELECT jsonb_agg(to_jsonb(i)||jsonb_build_object('label',o.label)
@@ -69,7 +78,10 @@ SELECT
     COALESCE((SELECT to_jsonb(i)-'code' FROM industry_counts i WHERE i.code IS NULL),'{}'::jsonb),
     COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.count DESC,i.code COLLATE "C")
         FROM ranked_issues i),'[]'::jsonb),
-    COALESCE((SELECT count FROM issue_counts WHERE code IS NULL),0)
+    COALESCE((SELECT count FROM issue_counts WHERE code IS NULL),0),
+    COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.count DESC,i.code COLLATE "C")
+        FROM ranked_recent_issues i),'[]'::jsonb),
+    COALESCE((SELECT recent FROM issue_counts WHERE code IS NULL),0)
 `
 
 // handleAnalysis 汇总有效备案行业和有效入账隐患的问题归类。
@@ -96,7 +108,9 @@ func handleAnalysis(pool *pgxpool.Pool) http.HandlerFunc {
 func readAnalysis(ctx context.Context, db dashboardQueryer, scope districtScope) (dashboardAnalysis, error) {
 	var result dashboardAnalysis
 	industries, issues := &result.Industries, &result.CommonIssues
+	recent := &result.RecentCommonIssues
 	err := db.QueryRow(ctx, dashboardAnalysisSQL, scope.aliases, scope.requireUnit).Scan(
-		&industries.Items, &industries.Unclassified, &issues.Items, &issues.Unclassified)
+		&industries.Items, &industries.Unclassified, &issues.Items, &issues.Unclassified,
+		&recent.Items, &recent.Unclassified)
 	return result, err
 }
