@@ -95,7 +95,7 @@ func assertProgressStage(t *testing.T, service *Service, id, status, stage strin
 	}
 }
 
-// TestDeepSeekJobProfileAndRetry 核对优先 AI、网络失败自动回退和结果复用。
+// TestDeepSeekJobProfileAndRetry 核对失败回退、独立重审和历史结果保留。
 // 参数 t 提供显式隔离的 PostgreSQL 和任务上下文。
 // 返回值 无。
 func TestDeepSeekJobProfileAndRetry(t *testing.T) {
@@ -116,15 +116,18 @@ func TestDeepSeekJobProfileAndRetry(t *testing.T) {
 		t.Fatalf("启用 DeepSeek 后仍复用了原本地结果: %v", err)
 	}
 	fallback := assertQueuedResult(t, service, id, "local_rules")
-	if fallback.Failure != "" || fallback.Fallback == "" || fallback.ID != local.ID || model.count != 1 {
-		t.Fatal("模型网络失败后未自动完成规则审核、保留原因和任务")
+	if fallback.Failure != "" || fallback.Fallback == "" || fallback.ID == local.ID || model.count != 1 {
+		t.Fatal("模型网络失败后未在新批次完成规则审核并保留原因")
 	}
 	model.fail = false
 	finished := assertQueuedResult(t, service, id, "deepseek")
-	same, err := service.Start(t.Context(), id)
-	if err != nil || same.ID != finished.ID || same.Status != "succeeded" ||
-		same.Fallback != "" || model.count != 2 {
-		t.Fatalf("成功后未清除回退提示或复用模型结果: %v", err)
+	same, err := service.Get(t.Context(), id, "")
+	if err != nil || same.ID != finished.ID || same.Fallback != "" || model.count != 2 {
+		t.Fatalf("最新批次未保留独立的模型结果: %v", err)
+	}
+	history, err := service.Get(t.Context(), id, fallback.ID)
+	if err != nil || history.Fallback != fallback.Fallback || history.Source != "local_rules" {
+		t.Fatalf("新审核覆盖了失败回退批次: %v", err)
 	}
 	model.profile = "deepseek-max"
 	current := assertQueuedResult(t, service, id, "deepseek")

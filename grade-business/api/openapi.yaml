@@ -17641,7 +17641,24 @@ components:
         progressStage:
           type: string
           description: 预审执行中的当前阶段
-          enum: [materials, deepseek, local_rules, fallback]
+          enum: [materials, deepseek, deepseek_summary, local_rules, fallback]
+        materialReviewTotal:
+          type: integer
+          minimum: 1
+          description: 当前批次要逐份审核的材料数，归档按可读取的成员分别审核
+        materialReviews:
+          type: array
+          description: 当前批次已处理的逐份记录
+          items:
+            type: object
+            additionalProperties: false
+            required: [attachmentId, fileName, status]
+            properties:
+              attachmentId: {type: string, format: uuid}
+              fileName: {type: string}
+              status: {type: string, enum: [reviewed, unreadable, failed]}
+              failedChecks: {type: integer, minimum: 1}
+              manualChecks: {type: integer, minimum: 1}
         recommendation:
           type: object
           description: 当前材料版本的预审审核建议

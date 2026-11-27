@@ -100,7 +100,7 @@ func readDeepSeekConfig(source io.Reader) (deepSeekFile, error) {
 func (d *DeepSeek) Profile() string {
 	raw, _ := json.Marshal(d.config)
 	digest := sha256.Sum256(raw)
-	return "deepseek-v1-" + hex.EncodeToString(digest[:])
+	return "deepseek-v2-" + hex.EncodeToString(digest[:])
 }
 
 // Timeout 返回一次 DeepSeek API 调用允许的最长时长。
