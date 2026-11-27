@@ -149,10 +149,12 @@ async function logout() {
   overflow-x: clip;
   color: #e9f4ff;
   color-scheme: dark;
-  background:
-    radial-gradient(ellipse at 26% 37%, #103152 0, transparent 48%),
-    radial-gradient(ellipse at 95% 8%, #10233e 0, transparent 43%),
-    linear-gradient(141deg, #060b17 2%, #080e1d 56%, #060916);
+  background-color: #070e1b;
+  background-image:
+    linear-gradient(180deg, #050a1238, #0714281a 54%, #03081266),
+    url('../assets/signin-space.webp');
+  background-position: center, center 58%;
+  background-size: cover;
 }
 
 .signin-layout {
@@ -171,22 +173,34 @@ async function logout() {
 
 .signin-card {
   position: relative;
+  z-index: 0;
   min-width: 0;
   padding: clamp(24px, 3.3vw, 43px);
-  border: 1px solid #789cc657;
+  border: 1px solid #9fcfff60;
   border-radius: 20px;
-  background: linear-gradient(145deg, #1b324b9e, #0b172cde 58%, #10213aba);
-  box-shadow: inset 0 1px 0 #c2e7ff14, 0 28px 76px #0007;
-  backdrop-filter: blur(18px);
+  box-shadow: inset 0 1px 0 #c2e7ff1a, 0 28px 76px #0008, 0 0 30px #268be21a;
 }
 
+/* 分开卡片与输入框的模糊层，让玻璃表面保留不同深浅的光线。 */
 .signin-card::before {
   position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(145deg, #1a3655bc, #09182bc7 58%, #0c2038bd);
+  -webkit-backdrop-filter: blur(16px) saturate(125%);
+  backdrop-filter: blur(16px) saturate(125%);
+  pointer-events: none;
+  content: "";
+}
+
+.signin-card::after {
+  position: absolute;
   top: -1px;
-  left: 10%;
-  width: 51%;
+  left: 8%;
+  width: 62%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, #83d2ffb8, transparent);
+  background: linear-gradient(90deg, transparent, #a7e4ffcc, transparent);
   pointer-events: none;
   content: "";
 }
@@ -219,8 +233,9 @@ async function logout() {
 
 .signin-control svg {
   position: absolute;
+  z-index: 1;
   inset: 50% auto auto 14px;
-  color: #81a3c7;
+  color: #acd4f3;
   pointer-events: none;
   transform: translateY(-50%);
 }
@@ -228,15 +243,22 @@ async function logout() {
 .signin-field input {
   min-height: 47px;
   padding: 10px 13px;
-  border-color: #44638c84;
-  border-radius: 8px;
-  background: #08152acf;
+  border-color: #a7d7ff59;
+  border-radius: 9px;
+  background: linear-gradient(125deg, #3b6b9396, #18324da8 55%, #3a648880);
+  box-shadow: inset 0 1px 0 #c7e8ff2b, inset 0 -1px 0 #0a152b68, 0 5px 14px #01061138;
+  -webkit-backdrop-filter: blur(9px) saturate(135%);
+  backdrop-filter: blur(9px) saturate(135%);
   color: #f1f7ff;
 }
 
 .signin-control input { padding-inline-start: 43px; }
-.signin-field input::placeholder { color: #8199b7; }
-.signin-field input:focus { border-color: var(--focus); }
+.signin-field input::placeholder { color: #c0d4e9; }
+
+.signin-field input:focus {
+  border-color: var(--focus);
+  box-shadow: inset 0 1px 0 #eff9ff4d, 0 0 0 3px #45b9fa29, 0 6px 20px #04162660;
+}
 
 .signin-button {
   display: flex;
@@ -283,7 +305,10 @@ async function logout() {
 }
 
 @media (max-width: 760px) {
-  .signin { padding-top: 14px; }
+  .signin {
+    padding-top: 14px;
+    background-position: center, 59% center;
+  }
   .signin-layout {
     grid-template-columns: minmax(0, 430px);
     justify-content: center;
@@ -296,5 +321,9 @@ async function logout() {
   .signin-mark { width: 44px; height: 44px; margin-bottom: 14px; }
   .signin-form { gap: 13px; margin-top: 22px; }
   .signin-field input, .signin-button { min-height: 44px; }
+}
+
+@media (max-width: 360px) {
+  :global(body:has(.signin)) { min-width: 0; }
 }
 </style>
