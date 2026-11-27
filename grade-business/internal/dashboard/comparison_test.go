@@ -27,7 +27,8 @@ func TestDashboardComparisonUsesRealWindows(t *testing.T) {
 			description,measure,responsibility,deadline,status,dispatched_at,retest_institution,
 			created_at,closed_at)
 		SELECT filing,'major_risk',title,'manual',day-3,severity,'说明','措施','责任',day+delta,
-			status,now(),'复测机构',clock_timestamp() - age * interval '1 day',closed_at
+			status,clock_timestamp() - age * interval '1 day','复测机构',
+			clock_timestamp() - age * interval '1 day',closed_at
 		FROM (VALUES ($1::uuid,'本期未销项','high',5,'open',NULL::timestamptz,5),
 			($1::uuid,'本期已销项','medium',8,'closed',clock_timestamp() - 3 * interval '1 day',5),
 			($2::uuid,'上期未销项','high',40,'open',NULL::timestamptz,40),
@@ -126,6 +127,50 @@ func TestDashboardComparisonWindowParameter(t *testing.T) {
 	}
 	readDistrictTest(t, mux, "/api/v1/dashboard/district-response?scope=all&window=400", 400, &result)
 	readDistrictTest(t, mux, "/api/v1/dashboard/district-response?scope=all&district=柯城区", 400, &result)
+}
+
+// TestDashboardComparisonReplaysHazardEvents 核对跨窗口复测、延期和派发记录。
+// 参数 t 为隔离数据库测试上下文。
+// 返回值 无。
+func TestDashboardComparisonReplaysHazardEvents(t *testing.T) {
+	db := dashboardTestPool(t)
+	filing := dashboardTestFiling(t, db, "复测系统", "复测单位", "approved", false)
+	dashboardExec(t, db, `WITH clock AS (
+		SELECT now() AS ts,(now() AT TIME ZONE 'Asia/Shanghai')::date AS day
+	), registered AS (
+		INSERT INTO hazard_items(registration_filing_id,ledger,title,source,discovered_on,severity,
+			description,measure,responsibility,deadline,status,dispatched_at,retest_institution,
+			created_at,version)
+		SELECT $1::uuid,'major_risk',title,'manual',day-60,'medium',
+			'说明','措施','责任',day+20,status,ts-dispatch_age*interval '1 day',
+			'复测机构',ts-60*interval '1 day',version
+		FROM clock CROSS JOIN (VALUES ('完成复测和延期','returned',60,4),
+			('之后才派发','open',3,2),('本期才进入复测','pending_retest',60,2))
+			AS cases(title,status,dispatch_age,version)
+		RETURNING id,title
+	)
+	INSERT INTO hazard_events(hazard_id,action,from_status,to_status,operator,comment,version,occurred_at)
+	SELECT r.id,e.action,e.before,e.after,'测试账号',
+		CASE WHEN e.action='extend_deadline'
+			THEN format('整改期限由 %s 延至 %s。延期说明',day-40,day+20) ELSE '处理说明' END,
+		e.version,ts-e.age*interval '1 day'
+	FROM clock CROSS JOIN registered r CROSS JOIN (
+		VALUES ('完成复测和延期','submit','open','pending_retest',2,45),
+		       ('完成复测和延期','retest_return','pending_retest','returned',3,10),
+		       ('完成复测和延期','extend_deadline','returned','returned',4,5),
+		       ('本期才进入复测','submit','open','pending_retest',2,8)
+	) e(title,action,before,after,version,age)
+	WHERE r.title=e.title`, filing)
+	mux := http.NewServeMux()
+	Register(mux, db)
+	var result struct{ Comparison dashboardComparison }
+	readDistrictTest(t, mux, "/api/v1/dashboard/district-response?scope=all", 200, &result)
+	comparison := result.Comparison
+	if comparison.RiskIndex.Current != 20 || comparison.RiskIndex.Previous != 60 ||
+		comparison.RiskIndex.PreviousUnavailable ||
+		comparison.OpenHazards.Current != 3 || comparison.OpenHazards.Previous != 2 {
+		t.Fatalf("历史风险应按当时复测、期限与派发记录计算：%+v", comparison)
+	}
 }
 
 // TestDashboardComparisonIncludesLastCalendarDay 验证结束日白天归入对应窗口。

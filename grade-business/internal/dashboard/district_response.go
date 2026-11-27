@@ -87,7 +87,8 @@ WITH scoped_filings AS (
 		(SELECT count(*) FROM scoped_alerts WHERE status='pending') AS "pendingAlerts"
 	FROM open_items
 ), district_scores AS (
-	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
+	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `),
+	       $3::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
 	       count(*) FILTER (WHERE h.deadline<` + districtBusinessDaySQL + `) AS overdue,
 	       count(*) FILTER (WHERE h.severity='high') AS high,
 	       count(*) FILTER (WHERE h.status='pending_retest') AS "pendingRetest"
@@ -210,7 +211,7 @@ func readDistrictResponse(ctx context.Context, pool *pgxpool.Pool, result *distr
 func scanDistrictDetails(ctx context.Context, db dashboardQueryer, result *districtResponse, scope districtScope) error {
 	var topDistrict *string
 	var topIndex int64
-	err := db.QueryRow(ctx, districtResponseSQL, scope.aliases, scope.requireUnit).
+	err := db.QueryRow(ctx, districtResponseSQL, scope.aliases, scope.requireUnit, dashboardDistrictNames).
 		Scan(&result.Counts, &result.Tasks, &result.HighRiskSystems, &result.Alerts, &topDistrict, &topIndex)
 	if err != nil {
 		return err

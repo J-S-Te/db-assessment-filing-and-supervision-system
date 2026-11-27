@@ -98,8 +98,11 @@ export function useDistrictSummary(enabled: Readonly<Ref<boolean>>) {
  * 返回值 最近成功的整屏快照、读取状态和刷新入口。
  */
 export function useDistrictDetail(district: Readonly<Ref<string | null>>, enabled: Readonly<Ref<boolean>>) {
-  const response = shallowRef<DistrictResponse>()
-  const snapshot = computed(() => enabled.value ? response.value : undefined)
+  const response = shallowRef<{ requestedDistrict: string | null; data: DistrictResponse }>()
+  const snapshot = computed(() =>
+    enabled.value && response.value?.requestedDistrict === district.value
+      ? response.value.data
+      : undefined)
   const loading = ref(false)
   const failed = ref(false)
   let pending: AbortController | undefined
@@ -120,7 +123,7 @@ export function useDistrictDetail(district: Readonly<Ref<string | null>>, enable
       const query = new URLSearchParams(selected === null ? { scope: 'all' } : { district: selected })
       const data = await api<DistrictResponse>(dashboardPath + '/district-response?' + query, { signal: request.signal })
       if (pending === request && district.value === selected && enabled.value) {
-        response.value = data
+        response.value = { requestedDistrict: selected, data }
         failed.value = false
       }
     } catch {

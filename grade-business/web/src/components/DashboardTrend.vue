@@ -7,7 +7,7 @@ import {
 } from '../lib/dashboardMetrics'
 
 const DashboardChart = defineAsyncComponent(() => import('./DashboardChart.vue'))
-const props = defineProps<{ history?: DashboardDay[]; loading: boolean }>()
+const props = defineProps<{ history?: DashboardDay[]; loading: boolean; failed?: boolean }>()
 const range = defineModel<DashboardTrendRange>({ required: true })
 const active = ref(0)
 const pinned = ref('')
@@ -61,7 +61,7 @@ function toggleSeries(key: DashboardSeriesKey) {
     </div>
   </div>
   <p v-if="!history?.length" class="trend-empty">
-    {{ loading ? '正在读取业务趋势…' : '暂时无法读取业务趋势。' }}
+    {{ failed ? '暂时无法读取业务趋势。' : loading ? '正在读取业务趋势…' : '暂无业务趋势。' }}
   </p>
   <div v-else class="trend-body">
     <p v-if="firstDate && lastDate" class="trend-period" role="status">

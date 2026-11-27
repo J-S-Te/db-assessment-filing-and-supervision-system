@@ -4,7 +4,10 @@ import (
 	"context"
 
 	"grade-business/internal/access"
+	"grade-business/internal/geoarea"
 )
+
+var dashboardDistrictNames = geoarea.QuzhouAreas()
 
 type districtScope struct {
 	aliases     map[string]string
@@ -19,6 +22,11 @@ func resolveDistrictScope(ctx context.Context, requested *string) (*string, dist
 	if areas == nil {
 		var scope districtScope
 		if requested != nil {
+			code := geoarea.QuzhouAreaCode(*requested)
+			if name, known := dashboardDistrictNames[code]; known {
+				scope.aliases = map[string]string{code: name, name: name}
+				return &name, scope, true
+			}
 			scope.aliases = map[string]string{*requested: *requested}
 		}
 		return requested, scope, true

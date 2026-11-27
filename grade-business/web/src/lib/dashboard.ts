@@ -51,6 +51,8 @@ export interface DashboardMetricDelta {
   rate: number | null
   /** 相对上期是否恶化，流量型业务量指标恒为 false。 */
   worse: boolean
+  previousUnavailable?: boolean
+  yearAgoUnavailable?: boolean
 }
 
 /** 比率型指标的对比，单位为百分点。 */
@@ -60,6 +62,8 @@ export interface DashboardCompletionDelta {
   yearAgo: number
   change: number
   hasCurrent: boolean
+  hasPrevious: boolean
+  hasYearAgo: boolean
 }
 
 /** 当前范围的同比环比结果，全部基于真实事件与时点重放。 */
@@ -115,7 +119,7 @@ const snapshotTime = new Intl.DateTimeFormat('zh-CN', {
  * 返回值 格式化数字或缺少数据标记。
  */
 export function dashboardNumber(value?: number) {
-  return value === undefined ? '—' : localNumber.format(value)
+  return value === undefined ? '暂无' : localNumber.format(value)
 }
 
 /**
@@ -125,7 +129,7 @@ export function dashboardNumber(value?: number) {
  */
 export function dashboardPercent(part?: number, total?: number) {
   const result = metricPercent(part, total)
-  return result === undefined ? '—' : `${result}%`
+  return result === undefined ? '暂无' : `${result}%`
 }
 
 /**

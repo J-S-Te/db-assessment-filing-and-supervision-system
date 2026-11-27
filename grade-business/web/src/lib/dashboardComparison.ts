@@ -16,7 +16,9 @@ export type DeltaChip = {
  * 返回值 展示文字、色彩倾向与悬停说明。
  */
 export function periodChip(delta: DashboardMetricDelta | undefined, neutral = false): DeltaChip {
-  if (!delta) return { text: '较上期 —', tone: 'flat', title: '对比数据尚未就绪' }
+  if (!delta || delta.previousUnavailable || (delta.current === 0 && delta.previous === 0)) {
+    return { text: '较上期 暂无', tone: 'flat', title: '当前与上期没有可用的对比数据' }
+  }
   if (delta.change === 0) return { text: '较上期持平', tone: 'flat', title: '与上期窗口持平' }
   const arrow = delta.change > 0 ? '↑' : '↓'
   const magnitude = delta.rate === null ? String(Math.abs(delta.change)) : `${Math.abs(delta.rate)}%`
@@ -35,7 +37,9 @@ export function periodChip(delta: DashboardMetricDelta | undefined, neutral = fa
  * 返回值 展示文字、色彩倾向与悬停说明。
  */
 export function yearChip(delta: DashboardMetricDelta | undefined, available: boolean): DeltaChip {
-  if (!delta || !available) return { text: '同比 —', tone: 'flat', title: '去年同期窗口没有可用数据' }
+  if (!delta || !available || delta.yearAgoUnavailable || (delta.current === 0 && delta.yearAgo === 0)) {
+    return { text: '同比 暂无', tone: 'flat', title: '去年同期窗口没有可用数据' }
+  }
   if (delta.current === delta.yearAgo) return { text: '同比持平', tone: 'flat', title: '与去年同期持平' }
   const change = delta.current - delta.yearAgo
   const arrow = change > 0 ? '↑' : '↓'
@@ -51,8 +55,8 @@ export function yearChip(delta: DashboardMetricDelta | undefined, available: boo
  * 返回值 展示文字、色彩倾向与悬停说明。
  */
 export function completionChip(delta: DashboardComparison['completionRate'] | undefined): DeltaChip {
-  if (!delta || !delta.hasCurrent) {
-    return { text: '较上期 —', tone: 'flat', title: '整改完成率对比数据尚未就绪' }
+  if (!delta?.hasCurrent || !delta.hasPrevious) {
+    return { text: '较上期 暂无', tone: 'flat', title: '整改完成率对比数据尚未就绪' }
   }
   if (delta.change === 0) return { text: '较上期持平', tone: 'flat', title: '与上期窗口持平' }
   const arrow = delta.change > 0 ? '↑' : '↓'
@@ -65,15 +69,14 @@ export function completionChip(delta: DashboardComparison['completionRate'] | un
 
 /**
  * 用途 把完成率相对去年同期的变化格式化为可展示的标记。
- * 参数 delta 为后端按真实窗口计算的变化量，available 表示去年同期是否有数据。
+ * 参数 delta 为后端按真实窗口计算的变化量。
  * 返回值 展示文字、色彩倾向与悬停说明。
  */
 export function completionYearChip(
   delta: DashboardComparison['completionRate'] | undefined,
-  available: boolean,
 ): DeltaChip {
-  if (!delta || !available || !delta.hasCurrent) {
-    return { text: '同比 —', tone: 'flat', title: '去年同期窗口没有可用数据' }
+  if (!delta?.hasCurrent || !delta.hasYearAgo) {
+    return { text: '同比 暂无', tone: 'flat', title: '去年同期窗口没有可用数据' }
   }
   if (delta.current === delta.yearAgo) return { text: '同比持平', tone: 'flat', title: '与去年同期持平' }
   const change = delta.current - delta.yearAgo

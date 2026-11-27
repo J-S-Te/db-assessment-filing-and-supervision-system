@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { ArrowUpRight, ListOrdered, Map as MapIcon } from '@lucide/vue'
-import type { RouteLocationRaw } from 'vue-router'
 import { districtAsset, loadPublishedDistrictBoundaries } from '../lib/dashboardBoundary'
 import { projectDistrictOutlines, type DistrictOutline } from '../lib/dashboardGeo'
 import {
-  buildMap3D, defaultMapCamera, riskHeightOf, riskLevelOf, type District3DItem,
+  buildMap3D, defaultMapCamera, riskHeightOf, type District3DItem,
 } from '../lib/dashboardGeo3d'
 import { dashboardNumber } from '../lib/dashboard'
 import { risks } from '../lib/domain'
@@ -21,40 +20,45 @@ import type { ResponseSummary, DistrictResponse } from '../lib/districtResponse'
 const props = defineProps<{
   summary?: ResponseSummary; selected: string | null; detail?: DistrictResponse
   loadingSummary: boolean; failedSummary: boolean; loadingDetail: boolean; failedDetail: boolean
-  mapSettings: RouteLocationRaw; area?: DashboardArea; locked?: boolean
+  area?: DashboardArea; locked?: boolean; initialRanking?: boolean
 }>()
 const emit = defineEmits<{ select: [district: string | null]; retrySummary: []; retryDetail: [] }>()
 
 const outlines = shallowRef<DistrictOutline[]>([])
 const mapFailed = ref(false)
-const showMap = ref(true)
+const showMap = ref(!props.initialRanking)
 const heightScale = 34
 /** 基础厚度：没有风险数据时也让区县保持可见的立体台面，避免退化成平面图。 */
 const baseHeight = 15
 
-const riskRows = computed(() => {
-  const rows = new globalThis.Map<string, ResponseSummary['items'][number]>(
-    (props.summary?.items ?? []).map(item => [item.district, item] as const))
-  return outlines.value.map(outline => {
-    const row = rows.get(outline.district)
-    const index = row?.riskIndex ?? 0
-    return {
-      district: outline.district,
-      rings: outline.rings,
-      label: outline.label,
-      value: index,
-      level: row?.riskLevel ?? riskLevelOf(index),
-      height: Math.max(baseHeight, riskHeightOf(index, heightScale)),
-      beam: index >= 66,
-    } satisfies District3DItem
-  })
+const districtRecords = computed(() => new globalThis.Map(
+  (props.summary?.items ?? []).map(item => [item.district, item] as const)))
+const districtNames = computed(() => {
+  const area = props.area
+  const known = area
+    ? area.districts.filter(name => props.locked || name !== area.name)
+    : outlines.value.map(outline => outline.district)
+  return Array.from(new Set([...districtRecords.value.keys(), ...known]))
 })
+const unassigned = computed(() => props.summary?.withoutDistrict)
+const riskRows = computed(() => outlines.value.map(outline => {
+  const row = districtRecords.value.get(outline.district)
+  const index = row?.riskIndex ?? 0
+  return {
+    district: outline.district,
+    rings: outline.rings,
+    label: outline.label,
+    value: index,
+    level: row?.riskLevel ?? 'none',
+    height: Math.max(baseHeight, riskHeightOf(index, heightScale)),
+    beam: index >= 66,
+  } satisfies District3DItem
+}))
 
 const model = computed(() => buildMap3D(riskRows.value, defaultMapCamera, props.selected))
 /** 当前悬停的区县，用于边界高亮与跟随提示。 */
 const hovered = ref<string | null>(null)
-const hoveredRow = computed(() => (props.summary?.items ?? [])
-  .find(item => item.district === hovered.value))
+const hoveredRow = computed(() => hovered.value ? districtRecords.value.get(hovered.value) : undefined)
 const hoveredPoint = ref<{ x: number; y: number } | null>(null)
 /**
  * 用途 记录鼠标在地图上的位置，供跟随提示定位。
@@ -70,13 +74,15 @@ function trackHover(event: MouseEvent, district: string) {
 }
 const currentScope = computed(() => {
   const detail = props.detail
-  if (!detail) return { name: '全域', systems: 0, hazards: 0, overdue: 0, review: 0 }
+  const counts = detail?.counts
+  const district = detail ? detail.district : props.selected
+  const hazards = counts && counts.high + counts.medium + counts.low
   return {
-    name: detail.district === null ? (props.area?.name ?? '全域') : detail.district || '未归区',
-    systems: detail.counts.systems,
-    hazards: detail.counts.high + detail.counts.medium + detail.counts.low,
-    overdue: detail.counts.overdue,
-    review: detail.counts.pendingReview,
+    name: district === null ? (props.area?.name ?? '全域') : district || '未归区',
+    systems: hazards ? counts?.systems : undefined,
+    hazards: hazards || undefined,
+    overdue: hazards ? counts?.overdue : undefined,
+    review: hazards ? counts?.pendingReview : undefined,
   }
 })
 const legendRows = computed(() => {
@@ -97,25 +103,35 @@ const edgePaths = computed(() => model.value.edges.map(item => item.d))
 const beamPaths = computed(() => model.value.beams.map(item => item.d))
 
 /**
+ * 用途 从排名或地图标签切换区县，重复选择当前区县时返回完整范围。
+ * 参数 district 为用户选择的区县名称。
+ * 返回值 无。
+ */
+function toggleDistrict(district: string) {
+  if (!props.locked) emit('select', district === props.selected ? null : district)
+}
+
+/**
  * 用途 读取同源发布的区县边界并投影为三维可用的环坐标。
- * 参数 无。
+ * 参数 activate 表示读取时是否切换至地图。
  * 返回值 本次读取任务。
  */
-async function showMapData() {
-  showMap.value = true
+async function showMapData(activate: boolean) {
+  if (activate) showMap.value = true
   if (outlines.value.length) return
   try {
     const boundaries = districtAsset || props.area
       ? await loadPublishedDistrictBoundaries()
       : []
     outlines.value = projectDistrictOutlines(boundaries, props.area?.districts)
+    mapFailed.value = false
   } catch {
     outlines.value = []
     mapFailed.value = true
   }
 }
 
-onMounted(() => { if (districtAsset) void showMapData() })
+onMounted(() => { if (districtAsset) void showMapData(false) })
 </script>
 
 <template>
@@ -126,12 +142,16 @@ onMounted(() => { if (districtAsset) void showMapData() })
           <button class="response-button" type="button" :aria-pressed="!showMap" @click="showMap = false">
             <ListOrdered aria-hidden="true" />排名
           </button>
-          <button class="response-button" type="button" :aria-pressed="showMap" @click="showMapData">
+          <button class="response-button" type="button" :aria-pressed="showMap" @click="showMapData(true)">
             <MapIcon aria-hidden="true" />地图
           </button>
         </div>
-        <button v-if="!locked" class="response-button" type="button" :aria-pressed="selected === null"
-          @click="emit('select', null)">{{ area ? '市域' : '全域' }}</button>
+        <div v-if="!locked" class="response-switch">
+          <button v-if="!area && (unassigned?.systems ?? 0) > 0" class="response-button"
+            type="button" :aria-pressed="selected === ''" @click="emit('select', '')">未归区</button>
+          <button class="response-button" type="button" :aria-pressed="selected === null"
+            @click="emit('select', null)">{{ area ? '市域' : '全域' }}</button>
+        </div>
       </header>
 
       <p v-if="failedSummary" class="response-status" role="status">
@@ -220,7 +240,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
               :stroke="hovered === item.district ? '#dff2ff' : 'rgba(223,242,255,.45)'"
               :stroke-width="hovered === item.district ? 2.2 : 1"
               @mouseenter="trackHover($event, item.district)" @mousemove="trackHover($event, item.district)"
-              @mouseleave="hovered = null" />
+              @mouseleave="hovered = null" @click="toggleDistrict(item.district)" />
           </g>
           <g class="map-walls">
             <path v-for="(item, index) in wallPaths" :key="`w-${index}`" :d="item.d"
@@ -238,7 +258,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
               :stroke-width="hovered === item.district ? 2.4 : 1"
               stroke-opacity=".85"
               @mouseenter="trackHover($event, item.district)" @mousemove="trackHover($event, item.district)"
-              @mouseleave="hovered = null" />
+              @mouseleave="hovered = null" @click="toggleDistrict(item.district)" />
           </g>
           <g class="map-hover-tip" v-if="hovered && hoveredPoint && hoveredRow">
             <g :transform="`translate(${Math.min(hoveredPoint.x + 14, 196)}, ${Math.max(hoveredPoint.y - 16, 8)})`">
@@ -255,12 +275,16 @@ onMounted(() => { if (districtAsset) void showMapData() })
               stroke="#eaf8ff" stroke-width="2.2" stroke-linejoin="round" filter="url(#dashboard-edge-glow)" />
           </g>
           <g class="map-labels">
-            <g v-for="label in model.labels" :key="label.district"
-              :class="['map-label', { 'is-hover': hovered === label.district }]">
+            <g v-for="label in model.labels" :key="label.district" class="map-label"
+              :class="{ 'map-selectable': !locked, 'is-hover': hovered === label.district }" :role="locked ? undefined : 'button'"
+              :tabindex="locked ? undefined : 0" :aria-label="locked ? undefined : '查看' + label.district"
+              :aria-pressed="locked ? undefined : label.selected" @click="toggleDistrict(label.district)"
+              @keydown.enter.prevent="toggleDistrict(label.district)"
+              @keydown.space.prevent="toggleDistrict(label.district)">
               <rect :x="label.x - 14" :y="label.y - 8" width="28" height="17" rx="4" fill="rgba(2,8,14,.92)" />
               <rect :x="label.x - 14" :y="label.y - 11" width="28" height="17" rx="4" fill="url(#dashboard-badge)"
                 :stroke="label.selected ? '#eaf8ff' : 'rgba(141,229,255,.7)'" stroke-width="1" />
-              <text :x="label.x" :y="label.y + 1" text-anchor="middle" class="map-label-value">{{ label.value }}</text>
+              <text :x="label.x" :y="label.y + 1" text-anchor="middle" class="map-label-value">{{ dashboardNumber(districtRecords.get(label.district)?.riskIndex) }}</text>
               <text :x="label.x" :y="label.y + 18" text-anchor="middle" class="map-label-name">{{ label.district }}</text>
             </g>
           </g>
@@ -270,10 +294,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
           <p class="response-note" role="status">
             {{ mapFailed ? '辖区地图读取失败' : '尚未配置辖区地图' }}
           </p>
-          <button v-if="mapFailed" class="response-button" type="button" @click="showMapData">重试</button>
-          <RouterLink v-if="!area && !districtAsset" :to="props.mapSettings" class="screen-link">
-            导入区县边界<ArrowUpRight aria-hidden="true" />
-          </RouterLink>
+          <button v-if="mapFailed" class="response-button" type="button" @click="showMapData(true)">重试</button>
         </div>
 
         <div class="map-overlay map-overlay-legend">
@@ -284,10 +305,10 @@ onMounted(() => { if (districtAsset) void showMapData() })
         </div>
         <div class="map-overlay map-overlay-scope">
           <p class="ov-title">{{ currentScope.name }}</p>
-          <div class="ov-row"><span>涉及系统</span><b>{{ currentScope.systems }}</b></div>
-          <div class="ov-row"><span>未销项隐患</span><b>{{ currentScope.hazards }}</b></div>
-          <div class="ov-row"><span>已逾期</span><b class="hot">{{ currentScope.overdue }}</b></div>
-          <div class="ov-row"><span>待监管复核</span><b>{{ currentScope.review }}</b></div>
+          <div class="ov-row"><span>涉及系统</span><b>{{ dashboardNumber(currentScope.systems) }}</b></div>
+          <div class="ov-row"><span>未销项隐患</span><b>{{ dashboardNumber(currentScope.hazards) }}</b></div>
+          <div class="ov-row"><span>已逾期</span><b class="hot">{{ dashboardNumber(currentScope.overdue) }}</b></div>
+          <div class="ov-row"><span>待监管复核</span><b>{{ dashboardNumber(currentScope.review) }}</b></div>
         </div>
         <div class="map-overlay map-overlay-note">
           风险指数 = 逾期 40% / 高风险 40% / 待复测 20%，满分 100<br>
@@ -296,21 +317,25 @@ onMounted(() => { if (districtAsset) void showMapData() })
       </div>
 
       <div v-else class="district-scroll">
-        <table>
+        <table v-if="districtNames.length">
           <thead><tr><th>区县</th><th>风险指数</th><th>高风险</th><th>逾期</th></tr></thead>
           <tbody>
-            <tr v-for="item in props.summary?.items ?? []" :key="item.district"
-              :class="{ picked: item.district === selected }">
+            <tr v-for="district in districtNames" :key="district" :class="{ picked: district === selected }">
               <th>
-                <button class="district-name" type="button" :aria-pressed="item.district === selected"
-                  @click="emit('select', item.district === selected ? null : item.district)">{{ item.district }}</button>
+                <span v-if="locked">{{ district }}</span>
+                <button v-else class="district-name" type="button" :aria-pressed="district === selected"
+                  @click="toggleDistrict(district)">{{ district }}</button>
               </th>
-              <td class="index" :class="item.riskLevel">{{ item.riskIndex }}</td>
-              <td :class="{ hot: item.high > 0 }">{{ item.high }}</td>
-              <td :class="{ hot: item.overdue > 0 }">{{ item.overdue }}</td>
+              <td class="index" :class="districtRecords.get(district)?.riskLevel">
+                {{ dashboardNumber(districtRecords.get(district)?.riskIndex) }}</td>
+              <td :class="{ hot: (districtRecords.get(district)?.high ?? 0) > 0 }">
+                {{ dashboardNumber(districtRecords.get(district)?.high) }}</td>
+              <td :class="{ hot: (districtRecords.get(district)?.overdue ?? 0) > 0 }">
+                {{ dashboardNumber(districtRecords.get(district)?.overdue) }}</td>
             </tr>
           </tbody>
         </table>
+        <p v-else-if="!loadingSummary && !failedSummary" class="response-note">暂无区县风险记录。</p>
       </div>
     </section>
 
@@ -321,7 +346,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
         <button class="response-button" type="button" @click="emit('retryDetail')">重试</button>
       </p>
       <p v-else-if="loadingDetail && !props.detail" class="response-note" role="status">正在读取处置态势…</p>
-      <ul v-else-if="props.detail?.tasks.length" class="hazard-list">
+      <ul v-if="props.detail?.tasks.length" class="hazard-list">
         <li v-for="item in props.detail.tasks" :key="item.id">
           <RouterLink v-if="!props.area" class="hazard-item" :to="hazardPath(item.id)">
             <span class="hazard-head">
@@ -330,7 +355,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
             </span>
             <span class="hazard-meta">
               <span class="chip" :class="item.severity === 'high' ? 'high' : item.severity === 'medium' ? 'mid' : 'low'">
-                {{ risks[item.severity] }}风险</span>
+                {{ risks[item.severity] }}</span>
               <span v-if="item.overdue" class="chip high">已逾期</span>
               <span class="chip state">{{ hazardStatuses[item.status] }}</span>
               <span class="hazard-source">{{ item.organizationName }}</span>
@@ -343,7 +368,7 @@ onMounted(() => { if (districtAsset) void showMapData() })
             </span>
             <span class="hazard-meta">
               <span class="chip" :class="item.severity === 'high' ? 'high' : item.severity === 'medium' ? 'mid' : 'low'">
-                {{ risks[item.severity] }}风险</span>
+                {{ risks[item.severity] }}</span>
               <span v-if="item.overdue" class="chip high">已逾期</span>
               <span class="chip state">{{ hazardStatuses[item.status] }}</span>
               <span class="hazard-source">{{ item.organizationName }}</span>
@@ -351,9 +376,9 @@ onMounted(() => { if (districtAsset) void showMapData() })
           </div>
         </li>
       </ul>
-      <p v-else class="response-note">当前范围暂无重点事项。</p>
+      <p v-else-if="!loadingDetail && !failedDetail" class="response-note">当前范围暂无重点事项。</p>
       <div class="hazard-foot">
-        <span>共 {{ dashboardNumber(props.detail?.counts.high ?? 0) }} 项高风险</span>
+        <span v-if="props.detail?.counts.high">共 {{ dashboardNumber(props.detail.counts.high) }} 项高风险</span>
         <RouterLink v-if="!props.area" to="/hazards">全部隐患<ArrowUpRight aria-hidden="true" /></RouterLink>
       </div>
     </aside>
@@ -409,6 +434,8 @@ onMounted(() => { if (districtAsset) void showMapData() })
 .ov-row b{margin-left:auto;font-family:var(--mono);font-weight:500;color:var(--ink)}
 .ov-row b.hot{color:var(--danger)}
 
+.map-selectable{cursor:pointer}
+.map-selectable:is(:hover,:focus-visible) rect:last-of-type{stroke:#eaf8ff;stroke-width:2}
 .map-label-value{font-family:var(--mono);font-size:11px;font-weight:600;fill:#eaf7ff}
 .map-label-name{font-family:inherit;font-size:9.5px;fill:#e2f1ff;paint-order:stroke;stroke:rgba(3,12,22,.9);stroke-width:2.6px;stroke-linejoin:round}
 
