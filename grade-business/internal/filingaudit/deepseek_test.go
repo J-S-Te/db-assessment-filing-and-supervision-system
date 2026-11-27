@@ -95,3 +95,24 @@ func TestLoadDeepSeekFromEnvironment(t *testing.T) {
 		t.Fatal("未配置部署密钥时应使用本地规则")
 	}
 }
+
+// TestDeepSeekConfigPath 验证预审配置路径接受绝对路径并拒绝目录穿越和非 JSON 文件。
+// 参数 t 提供合成路径用例。
+// 返回值 无。
+func TestDeepSeekConfigPath(t *testing.T) {
+	for _, path := range []string{"config/filing-audit.deepseek.local.json",
+		"/srv/grade-business/config/filing-audit.deepseek.local.json"} {
+		if err := checkDeepSeekConfigPath(path); err != nil {
+			t.Fatalf("合法配置路径 %s 被拒绝: %v", path, err)
+		}
+	}
+	for _, path := range []string{"../secret.json", "config/../secret.json",
+		`config\..\secret.json`, "config/filing-audit.toml", "/etc/passwd"} {
+		if err := checkDeepSeekConfigPath(path); err == nil {
+			t.Fatalf("不合规的配置路径 %s 被接受", path)
+		}
+	}
+	if _, err := LoadDeepSeek("../config/filing-audit.deepseek.local.json", ""); err == nil {
+		t.Fatal("LoadDeepSeek 接受了包含 .. 的配置路径")
+	}
+}

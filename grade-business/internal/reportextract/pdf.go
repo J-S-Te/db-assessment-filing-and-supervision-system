@@ -201,7 +201,8 @@ func readPDFScan(ctx context.Context, file *os.File, page int) (string, error) {
 
 // runPDFTool 以标准流调用本地工具，限制期限、输出和子进程环境。
 // 参数 ctx 控制期限，name 为工具名，input 为标准输入，limit 为输出上限，
-// unavailable 为工具缺失错误，args 为受控参数。
+// unavailable 为工具缺失错误，args 为受控参数。工具名与参数均为代码内字面量
+// （或页码整数的文本），不拼接任何外部数据，不可信内容只经标准输入进入子进程。
 // 返回值 有界的标准输出，或工具、进程、输入输出限制错误。
 func runPDFTool(ctx context.Context, name string, input io.Reader, limit int,
 	unavailable error, args ...string,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -28,11 +29,15 @@ type deepSeekFile struct {
 const LocalDeepSeekConfig = "./config/filing-audit.deepseek.local.json"
 
 // LoadDeepSeek 读取指定配置并用运行时凭据构造客户端。
-// 参数 path 为可选配置文件位置，key 为进程环境中的 DeepSeek API 密钥。
+// 参数 path 为可选配置文件位置，key 为进程环境中的 DeepSeek API 密钥，
+// 显式路径经 checkDeepSeekConfigPath 校验为不含 .. 分量的 JSON 文件。
 // 返回值 已配置的客户端，未启用时为空，配置异常时为错误。
 func LoadDeepSeek(path, key string) (*DeepSeek, error) {
 	if strings.TrimSpace(path) == "" {
 		path = LocalDeepSeekConfig
+	}
+	if err := checkDeepSeekConfigPath(path); err != nil {
+		return nil, err
 	}
 	config := deepSeekFile{DeepSeekConfig: defaultDeepSeekConfig()}
 	file, err := os.Open(path)
@@ -56,6 +61,23 @@ func LoadDeepSeek(path, key string) (*DeepSeek, error) {
 		return nil, errors.New("DeepSeek API Key 包含非法字符")
 	}
 	return newDeepSeek(config.DeepSeekConfig, key), nil
+}
+
+// checkDeepSeekConfigPath 校验部署方显式指定的预审配置文件位置。
+// 参数 path 为环境变量给出的配置路径，允许绝对路径或工作目录相对路径。
+// 返回值 路径不含 .. 目录分量且指向 .json 文件时为 nil，否则为错误。
+func checkDeepSeekConfigPath(path string) error {
+	for _, element := range strings.FieldsFunc(path, func(char rune) bool {
+		return char == '/' || char == '\\'
+	}) {
+		if element == ".." {
+			return errors.New("DeepSeek 预审配置路径不允许包含 .. 目录分量")
+		}
+	}
+	if strings.ToLower(filepath.Ext(path)) != ".json" {
+		return errors.New("DeepSeek 预审配置路径须指向 .json 配置文件")
+	}
+	return nil
 }
 
 // defaultDeepSeekConfig 提供仅设置运行时密钥时使用的预审参数。

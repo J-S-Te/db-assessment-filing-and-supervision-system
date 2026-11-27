@@ -1,5 +1,13 @@
 # 等保管理端业务版验收记录
 
+## Mimosa 深度安全扫描复核
+
+- 2026-11-28 用 Mimosa 深度扫描复核本地代码（scan `scan-2026-11-27T16-57-15.858Z-ec72e6338ce9`，seal `sha256:119dd7e1…`）。依赖扫描 8 个包零命中，报告 5 条 finding，逐条人工复核均为模式级误报或部署方可控输入，无可利用漏洞。加固与复扫 `scan-2026-11-27T17-10-53.733Z-e652d180b121`（seal `sha256:d62afb55…`）后降至 4 条，均为已复核接受项：两处本地工具 exec（固定字面量参数、OCR 架构所限）及 `LoadDeepSeek` 跨文件污点（部署方环境变量，已加路径校验）。
+- 两处「命令注入」位于 `cases/material_pdf.go` 与 `reportextract/pdf.go`：本地工具（pdfinfo/pdftotext/pdftoppm/tesseract）调用均为固定字面量参数、无 shell，不可信 PDF 内容只经 stdin 进入并受限时、输出上限与最小环境约束，附件键经 48 位 hex 与 `os.OpenRoot` 目录限定。已在两处补不变量注释说明该约束。
+- 「路径穿越」两条位于 `cmd/manager/main.go:99` 的 `LoadDeepSeek`：路径来自部署方环境变量（与 DSN 同信任级），已新增 `checkDeepSeekConfigPath` 校验（仅 .json、禁 `..` 分量）及 `TestDeepSeekConfigPath` 测试，README 文档化的绝对路径用法不受影响。
+- 「路径穿越」一条位于原型脚本 `原型/驾驶舱改版/tools/project-map.py`：argv 路径为开发者手动指定，不跨权限边界；已新增 argv 校验（拒绝 `..` 分量、限定 .geojson/.json 扩展名）并将用法示例改为仓库根相对路径。实际运行脚本与设计稿 `驾驶舱3D改版设计稿.html` 内联的历史数据逐位一致（viewBox `69.8 14.0 420.4 402.0` 及六区县标签坐标）。
+- 验证：`go build ./...`、`go vet`、filingaudit/cases/reportextract 三包测试及新增路径校验测试通过，`py_compile` 通过。保留 OCR 本地工具架构的前提下 exec 类规则无法清零，属架构性接受项。
+
 ## 备案材料逐项预审
 
 - 新增迁移 `078` 支持独立审核批次。DeepSeek 逐份审查材料，归档内按成员读取，汇总终审只接收本批次核验后的检查项及出处。两个后台工作循环可同时办理不同备案。执行中的同版本重复点击复用批次，完成后再次发起保留历史并创建新批次。
