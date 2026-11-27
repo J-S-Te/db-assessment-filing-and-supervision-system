@@ -16,7 +16,33 @@ const nextPassword = ref('')
 const confirmPassword = ref('')
 const pending = ref(false)
 const failure = ref('')
+const loginAccepted = ref(false)
 const biometricHelp = ref(false)
+const loginState = computed(() => {
+  if (loginAccepted.value) return 'success'
+  if (failure.value) return 'error'
+  return pending.value ? 'checking' : 'idle'
+})
+
+/**
+ * 用途 展示服务端通过账号口令验证的反馈，再进入账号有权访问的页面。
+ * 参数 actor 为登录接口确认的账号会话。
+ * 返回值 完成反馈和页面导航的异步任务。
+ */
+async function enterAfterLogin(actor: Session) {
+  const signInRoute = router.currentRoute.value
+  session.value = actor
+  password.value = ''
+  loginAccepted.value = true
+  // 跳转会卸载基座，短暂保留登录页，让用户看见绿灯与成功提示。
+  await new Promise<void>(resolve => window.setTimeout(resolve, 500))
+  if (router.currentRoute.value !== signInRoute) return
+
+  const destination = signInRoute.query.redirect
+  const resume = typeof destination === 'string' && /^\/(?![\/\\])/.test(destination) &&
+    canVisit(actor, router.resolve(destination).path)
+  await router.replace(actor.mustChangePassword ? '/account/password' : resume ? destination : actor.home)
+}
 
 /**
  * 用途 登录或完成首登改密，根据实际账号权限进入所属办理端。
@@ -42,15 +68,12 @@ async function submit() {
     const actor = await api<Session>('/auth/login', { method: 'POST', body: {
       username: username.value, password: password.value,
     } })
-    session.value = actor
-    const destination = route.query.redirect
-    const resume = typeof destination === 'string' && /^\/(?![\/\\])/.test(destination) &&
-      canVisit(actor, router.resolve(destination).path)
-    await router.replace(actor.mustChangePassword ? '/account/password' : resume ? destination : actor.home)
+    await enterAfterLogin(actor)
   } catch (error) {
     failure.value = errorText(error)
   } finally {
     password.value = nextPassword.value = confirmPassword.value = ''
+    loginAccepted.value = false
     pending.value = false
   }
 }
@@ -73,12 +96,15 @@ async function logout() {
 <template>
   <main class="signin">
     <div class="signin-layout" :class="{ 'signin-layout-single': changing }">
-      <SignInSecurityCore v-if="!changing" />
+      <SignInSecurityCore v-if="!changing" :login-state="loginState" />
       <section class="signin-card" aria-labelledby="signin-title">
         <header class="signin-heading">
           <span class="signin-mark"><ShieldCheck :size="26" aria-hidden="true" /></span>
           <h1 id="signin-title">{{ changing ? '修改账号密码' : '网络安全等级保护平台' }}</h1>
           <p v-if="changing && session?.mustChangePassword">首次登录请修改初始密码。</p>
+          <p v-else-if="loginAccepted" class="signin-message signin-success" role="status">
+            登录成功，正在进入…
+          </p>
           <p v-else-if="route.query.changed === '1'" class="signin-message" role="status">
             密码已修改，请重新登录。
           </p>
@@ -115,7 +141,7 @@ async function logout() {
           </template>
           <p v-if="failure" role="alert" class="signin-error">{{ failure }}</p>
           <button class="signin-button signin-primary" :disabled="pending" type="submit">
-            {{ pending ? '处理中' : changing ? '保存密码' : '登录' }}
+            {{ loginAccepted ? '正在进入' : pending ? '处理中' : changing ? '保存密码' : '登录' }}
             <ArrowRight v-if="!changing && !pending" :size="18" aria-hidden="true" />
           </button>
           <button v-if="changing" class="signin-button signin-secondary" type="button"
@@ -227,6 +253,7 @@ async function logout() {
 
 .signin-heading p { margin-top: 9px; color: var(--muted); }
 .signin-heading .signin-message { color: #9de2ff; }
+.signin-heading .signin-success { color: #8aefb1; }
 .signin-form { display: grid; gap: 17px; margin-top: 30px; }
 .signin-field { display: grid; gap: 7px; color: #d9e7fa; font-weight: 520; }
 .signin-control { position: relative; display: block; }
