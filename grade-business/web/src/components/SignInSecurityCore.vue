@@ -4,6 +4,8 @@ import { Activity } from '@lucide/vue'
 import baseArt from '../assets/signin-security-base.webp'
 import SignInShieldModel from './SignInShieldModel.vue'
 
+defineProps<{ loginState: 'idle' | 'checking' | 'success' | 'error' }>()
+
 const tilt = useTemplateRef('tilt')
 const orbit = useTemplateRef('orbit')
 const impact = useTemplateRef('impact')
@@ -170,7 +172,7 @@ onUnmounted(() => {
 <template>
   <figure class="security-scene" aria-labelledby="security-title"
     :style="{ '--security-impact-duration': impactDuration + 'ms' }">
-    <div class="security-stage">
+    <div class="security-stage" :data-login-state="loginState">
       <img class="security-base" :src="baseArt" alt="" width="1122" height="1402">
       <img class="security-base-glow" :src="baseArt" alt="" width="1122" height="1402">
       <div class="security-grid" aria-hidden="true"></div>
@@ -250,10 +252,10 @@ onUnmounted(() => {
 .security-base-glow {
   object-fit: fill;
   opacity: 0;
-  filter: brightness(1.2);
-  /* 按原素材中的红色内环和三条灯带裁亮，保留基座的蓝光与金属明暗。 */
+  filter: var(--base-lamp-filter, brightness(1.2));
+  /* 只调红色内环和三条灯带，让底板和蓝色外环保留素材的原色。 */
   mask-image:
-    radial-gradient(ellipse 17% 3.2% at 50% 73.5%, #000 71%, transparent),
+    radial-gradient(ellipse 17.5% 3.6% at 50% 73.5%, #000 84%, transparent),
     radial-gradient(ellipse 7% 1.4% at 24% 84.7%, #000 63%, transparent),
     radial-gradient(ellipse 13% 1.5% at 50% 84.4%, #000 63%, transparent),
     radial-gradient(ellipse 7% 1.4% at 76% 84.7%, #000 63%, transparent);
@@ -261,6 +263,20 @@ onUnmounted(() => {
 }
 
 .security-stage:has(.security-core:is(:hover, :focus-visible)) .security-base-glow { opacity: 1; }
+
+.security-stage[data-login-state="checking"] {
+  --base-lamp-filter: hue-rotate(180deg) saturate(1.35) brightness(1.6);
+}
+
+.security-stage[data-login-state="success"] {
+  --base-lamp-filter: hue-rotate(120deg) saturate(1.4) brightness(1.65);
+}
+
+.security-stage[data-login-state="error"] {
+  --base-lamp-filter: saturate(1.35) brightness(1.45);
+}
+
+.security-stage[data-login-state]:not([data-login-state="idle"]) .security-base-glow { opacity: 1; }
 
 .security-grid {
   background: radial-gradient(circle, #5bc6ff3d 1px, transparent 1.5px) 0 0 / 22px 22px;
