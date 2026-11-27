@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { rankRiskIndustries, riskAlertSegments } from '../src/lib/dashboardRiskAnalysis.ts'
+import { activeRiskAlertCount, rankRiskIndustries, riskAlertSegments } from '../src/lib/dashboardRiskAnalysis.ts'
 
 test('行业按未销项隐患总量排名，忽略没有隐患的分类', () => {
   const result = rankRiskIndustries({ industries: { items: [
@@ -18,4 +18,11 @@ test('预警环图保留实际状态数与大小，零量无扇区', () => {
     .map(({ status, percent, start }) => [status, percent, start]), [
     ['pending', 25, 0], ['processing', 0, 25], ['closed', 75, 25],
   ])
+})
+
+test('没有预警记录时展示暂无，有已关闭预警时保留活跃为零', () => {
+  assert.equal(activeRiskAlertCount(undefined), undefined)
+  assert.equal(activeRiskAlertCount({ total: 0, pending: 0, processing: 0, closed: 0 }), undefined)
+  assert.equal(activeRiskAlertCount({ total: 3, pending: 0, processing: 0, closed: 3 }), 0)
+  assert.equal(activeRiskAlertCount({ total: 5, pending: 1, processing: 2, closed: 2 }), 3)
 })

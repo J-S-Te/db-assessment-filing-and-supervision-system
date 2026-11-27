@@ -15,6 +15,15 @@ export function rankRiskIndustries(analytics?: DashboardAnalytics) {
 }
 
 /**
+ * 用途 统计有业务记录的辖区中尚未关闭的预警。
+ * 参数 counts 为当前辖区的预警状态汇总。
+ * 返回值 活跃预警数量，暂无预警记录时为 undefined。
+ */
+export function activeRiskAlertCount(counts?: AlertCounts) {
+  return counts?.total ? counts.pending + counts.processing : undefined
+}
+
+/**
  * 用途 将预警状态计数映射为环图的百分比与起始位置。
  * 参数 counts 为当前辖区的预警状态汇总。
  * 返回值 三种实际状态的绘图数据，空汇总返回空数组。

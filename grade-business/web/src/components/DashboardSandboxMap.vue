@@ -315,7 +315,7 @@ function disposeObjects(root: THREE.Object3D) {
 
 /**
  * 用途 按实际区县统计重建立体块并重新计算默认视角。
- * 参数 无，采用当前会话可见的区县数据。
+ * 参数 无，采用当前会话可见的区县数据并保留当前相机位置。
  * 返回值 无。
  */
 function rebuild() {
@@ -394,7 +394,6 @@ function rebuild() {
     controls.minDistance = fit * (props.riskPresentation ? 0.45 : 0.4)
     controls.maxDistance = fit * (props.riskPresentation ? 1.3 : 1.5)
     computeOverview(w, h)
-    applySelection(props.selected)
   }
 }
 
@@ -705,6 +704,7 @@ onMounted(() => {
   scene.add(scanRing)
 
   rebuild()
+  applySelection(props.selected)
   resize()
   resizeObserver = new ResizeObserver(() => resize())
   resizeObserver.observe(host.value)

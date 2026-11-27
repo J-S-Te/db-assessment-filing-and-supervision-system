@@ -116,6 +116,8 @@ onMounted(() => void loadMap())
           :aria-pressed="mode === 'heat'" @click="mode = 'heat'">热力</button>
       </div>
       <span class="cap grow">综合风险指数 · 逾期 40% / 高风险 40% / 待复测 20%</span>
+      <button v-if="!locked && !area && (summary?.withoutDistrict.systems ?? 0) > 0"
+        class="chip mini" type="button" :aria-pressed="selected === ''" @click="choose('')">未归区</button>
       <button v-if="!locked" class="chip mini" type="button" @click="reset">{{ area ? '市域' : '全域' }}</button>
     </header>
 
@@ -126,6 +128,7 @@ onMounted(() => void loadMap())
         @unavailable="mapError = '当前浏览器无法加载三维地图'" />
       <div v-if="mode === 'heat' && mapError" class="map-empty" role="status">
         {{ mapError }}
+        <button class="chip mini" type="button" @click="loadMap">重试地图</button>
         <button class="chip mini" type="button" @click="mode = 'rank'">查看排名</button>
       </div>
       <div v-else-if="mode === 'heat' && !rows.length" class="map-empty" role="status">正在加载区县边界…</div>
@@ -145,9 +148,13 @@ onMounted(() => void loadMap())
           </div>
           <div class="stats-row"><span>未销项隐患</span><b class="red">{{ dashboardNumber(openTotal) }}</b></div>
           <div v-if="selected === null" class="stats-row"><span>其中高风险</span>
-            <b class="red">{{ dashboardNumber(detailCount?.high) }}</b>
+            <b class="red">{{ dashboardNumber(openTotal ? detailCount?.high : undefined) }}</b>
           </div>
           <div class="stats-row"><span>活跃预警</span><b>{{ dashboardNumber(activeAlerts) }}</b></div>
+          <div v-if="summaryFailed" class="panel-status" role="status">
+            区县热力更新失败
+            <button class="chip mini" type="button" @click="emit('retrySummary')">重试</button>
+          </div>
         </div>
         <div class="map-caption">风险指数 = 逾期 40% / 高风险 40% / 待复测 20%，满分 100。<br>区域隆起高度即该区县的综合风险指数，点击可下钻。</div>
         <div class="rotate-hint">北向上 · 拖动旋转 · 滚轮缩放 · 点击区县查看详情</div>

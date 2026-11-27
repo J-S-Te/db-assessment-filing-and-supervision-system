@@ -10,7 +10,10 @@ import type { DashboardAnalytics } from '../lib/dashboardAnalytics'
 import { vDashboardScroll } from '../lib/dashboardAutoScroll'
 import { periodChip, withWindowRange, yearChip } from '../lib/dashboardComparison'
 import type { DashboardDay, DashboardTrendRange } from '../lib/dashboardMetrics'
-import { rankRiskIndustries, riskAlertSegments, riskColor, riskGaugeArc, riskLevels, riskParts } from '../lib/dashboardRiskAnalysis'
+import {
+  activeRiskAlertCount, rankRiskIndustries, riskAlertSegments,
+  riskColor, riskGaugeArc, riskLevels, riskParts,
+} from '../lib/dashboardRiskAnalysis'
 import type { DistrictResponse, ResponseSummary } from '../lib/districtResponse'
 import { canVisit, session, type DashboardArea } from '../lib/session'
 
@@ -56,7 +59,7 @@ const openTotal = computed(() => props.statistics
 const maxOpen = computed(() => Math.max(1, ...openRows.value.map(row => row.count ?? 0)))
 const daysInTrend = computed(() => props.statistics?.trend.slice(-trendRange.value) ?? [])
 const peak = computed(() => Math.max(0, ...daysInTrend.value.flatMap(day => series.map(item => day[item.key]))))
-const activeAlerts = computed(() => props.alertCounts && props.alertCounts.pending + props.alertCounts.processing)
+const activeAlerts = computed(() => activeRiskAlertCount(props.alertCounts))
 const segments = computed(() => riskAlertSegments(props.alertCounts))
 const industries = computed(() => rankRiskIndustries(props.analytics))
 const issues = computed(() => props.analytics?.recentCommonIssues?.items.slice(0, 5) ?? [])
@@ -90,21 +93,12 @@ function linePoints(key: keyof Pick<DashboardDay, 'alertsTriggered' | 'hazardsCl
 }
 
 /**
- * 用途 返回风险构成卡片对应的隐患台账筛选。
- * 参数 level 为高、中、低风险的展示编码。
- * 返回值 系统隐患台账的真实严重度过滤条件。
- */
-function hazardListLocation(level: string) {
-  return { path: '/hazards', query: { severity: level === 'mid' ? 'medium' : level } }
-}
-
-/**
- * 用途 返回未销项系统对应的实际备案隐患入口。
- * 参数 filingId 为系统备案记录标识。
- * 返回值 带备案范围的隐患台账路由。
+ * 用途 打开高风险隐患系统对应的备案记录。
+ * 参数 filingId 为风险统计关联的备案标识。
+ * 返回值 备案详情路由。
  */
 function systemLocation(filingId: string) {
-  return { path: '/hazards', query: { filingId } }
+  return '/filings/' + encodeURIComponent(filingId)
 }
 
 /**
@@ -192,14 +186,13 @@ onScopeDispose(() => window.removeEventListener('keydown', escapeDistrict))
           </div>
           <ul class="risk-rows">
             <li v-for="row in openRows" :key="row.level">
-              <component :is="canOpen(hazardListLocation(row.level)) ? RouterLink : 'span'"
-                class="risk-row" :to="hazardListLocation(row.level)">
+              <span class="risk-row">
                 <span class="label">{{ row.label }}</span>
                 <span class="bar" :class="'r-' + row.level"><i :style="{ width: (row.count ?? 0) * 100 / maxOpen + '%' }"></i></span>
                 <span class="val">{{ dashboardNumber(openTotal ? row.count : undefined) }}
                   <small v-if="openTotal">项 · {{ Math.round((row.count ?? 0) * 100 / openTotal) }}%</small>
                 </span>
-              </component>
+              </span>
             </li>
           </ul>
         </section>
@@ -284,7 +277,8 @@ onScopeDispose(() => window.removeEventListener('keydown', escapeDistrict))
       <aside class="risk-right" aria-label="风险待办与分类">
         <section class="card glass">
           <div class="card-head"><h3>风险待办</h3><span class="cap">{{ scope }}</span></div>
-          <component v-for="task in tasks" :key="task.label" :is="canOpen(task.to) ? RouterLink : 'div'" :to="task.to" class="dg-row">
+          <component v-for="task in tasks" :key="task.label"
+            :is="selected === null && canOpen(task.to) ? RouterLink : 'div'" :to="task.to" class="dg-row">
             <component :is="task.icon" class="ico" aria-hidden="true" />
             <span class="label">{{ task.label }}</span>
             <span class="val" :class="{ hot: task.urgent && task.value }">{{ dashboardNumber(task.value || undefined) }}</span>

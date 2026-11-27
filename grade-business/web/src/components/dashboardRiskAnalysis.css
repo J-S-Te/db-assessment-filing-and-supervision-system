@@ -144,10 +144,8 @@
 .risk-analysis .risk-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .risk-analysis .risk-rows .risk-row {
   display: flex; align-items: center; gap: 8px; font-size: 12px;
-  padding: 5px 8px; margin: -5px -8px; border-radius: 8px; cursor: pointer;
-  transition: background 0.15s ease;
+  padding: 5px 8px; margin: -5px -8px; border-radius: 8px;
 }
-.risk-analysis .risk-rows .risk-row:hover { background: rgba(53, 214, 255, 0.07); }
 .risk-analysis .risk-rows .label { width: 64px; color: var(--text-dim); flex: none; white-space: nowrap; }
 .risk-analysis .risk-rows .bar { flex: 1; height: 12px; border-radius: 6px; background: rgba(18, 36, 70, 0.7); overflow: hidden; }
 .risk-analysis .risk-rows .bar i { display: block; height: 100%; border-radius: 6px; transition: width 0.6s ease; }
@@ -365,11 +363,10 @@
   background: var(--panel-2);
   font-size: 12px;
   margin-bottom: 5px;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
 }
 .risk-analysis .dg-row:last-child { margin-bottom: 0; }
-.risk-analysis .dg-row:hover { border-color: var(--line-strong); }
+.risk-analysis a.dg-row { transition: border-color 0.15s ease; }
+.risk-analysis a.dg-row:hover { border-color: var(--line-strong); }
 .risk-analysis .dg-row .ico { color: var(--accent); font-size: 12px; width: 16px; text-align: center; }
 .risk-analysis .dg-row .label { flex: 1; }
 .risk-analysis .dg-row .val { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 14px; }

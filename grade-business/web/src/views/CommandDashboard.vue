@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onScopeDispose, ref, watch } from 'vue'
 import {
   Activity, ArrowLeft, ArrowRight, BellRing, Boxes, CalendarClock, ChartNoAxesCombined, CircleCheck,
   ClipboardList, ClipboardPenLine, FileChartColumn, FileSearch, Files, Maximize, Minimize, RefreshCw,
@@ -11,7 +11,6 @@ import DashboardAlerts from '../components/DashboardAlerts.vue'
 import DashboardDistribution from '../components/DashboardDistribution.vue'
 import DashboardDistrictResponse from '../components/DashboardDistrictResponse.vue'
 import DashboardScene from '../components/DashboardScene.vue'
-import DashboardRiskAnalysis from '../components/DashboardRiskAnalysis.vue'
 import DashboardTrend from '../components/DashboardTrend.vue'
 import { alertPath, alertStatuses, type AlertStatus } from '../lib/alerts'
 import { dashboardAccessEvent, sessionChangeKey } from '../lib/api'
@@ -38,6 +37,7 @@ const tabs = {
   alerts: { label: '实时预警', icon: BellRing },
   statistics: { label: '统计分析', icon: ChartNoAxesCombined },
 }
+const DashboardRiskAnalysis = defineAsyncComponent(() => import('../components/DashboardRiskAnalysis.vue'))
 const route = useRoute()
 const router = useRouter()
 const tabSessionKey = 'grade-business.dashboard-standalone'
