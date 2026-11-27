@@ -19,10 +19,16 @@ func (input reviewInput) checkReviewRole(ctx context.Context, status string, ope
 		return nil
 	}
 	if actor, ok := access.Current(ctx); ok {
-		if actor.Role != access.SystemAdmin && actor.Role != access.Regulator {
-			return ErrConflict
+		switch actor.Role {
+		case access.SystemAdmin, access.Regulator:
+			return nil
+		case access.OrgAdmin:
+			// 机构席位只办理本单位负责的运营者来源待初审，范围已由权限网关锁定为本机构。
+			if operatorOrigin && status == pendingInitial && input.institutionReviewer != "" {
+				return nil
+			}
 		}
-		return nil
+		return ErrConflict
 	}
 	institutionRequired := operatorOrigin && status == pendingInitial
 	if institutionRequired != (input.institutionReviewer != "") {

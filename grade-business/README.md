@@ -73,9 +73,11 @@ go run ./cmd/access-account --username demo-admin --name '测试管理员' \
 - 审核员人工核实单位资料、联系人身份和授权后通过。通过时在同一事务中关联或建立单位名录、开通唯一 `ROLE_OPERATOR` 账号并保存审核留痕。驳回必须提供原因，申请人可修改后重新提交。待审和被驳回的申请不能用来登录，审批通过后直接使用自设密码。
 - 使用独立测试数据库执行 `go test ./cmd/manager -run '^TestOperatorRegistration' -v`，沿用 `GRADE_ACCESS_TEST_DSN` 和专用 schema。
 
-短信验证码和审核结果短信待接入。本机回环可使用 HTTP。通过受控 HTTPS 反向代理终止 TLS 时，在应用进程设置 `GRADE_BUSINESS_COOKIE_SECURE=true`，并限制用户只能经代理访问应用。旧版免登录的 HTTP 验收脚本需接入测试账号会话后才能运行。
+短信验证码和审核结果短信待接入。本机回环可使用 HTTP。正式登录前应配置 HTTPS 并核对账号与辖区名录。通过受控 HTTPS 反向代理终止 TLS 时，在应用进程设置 `GRADE_BUSINESS_COOKIE_SECURE=true`，并限制用户只能通过代理访问应用。应用直连 TLS 时自动标记会话 Cookie 为 `Secure`：在应用进程配置 `GRADE_BUSINESS_TLS_CERT` 与 `GRADE_BUSINESS_TLS_KEY`（服务器已有证书时填证书和私钥路径，两个必须同时提供）即可直接提供 HTTPS。旧版免登录的 HTTP 验收脚本需接入测试账号会话后才能运行。
 
-反向代理应覆盖 `X-Real-IP` 后再转发请求。应用通过 `GRADE_BUSINESS_AUTH_TRUSTED_PROXY` 配置直接连接它的单一代理 IP，只有该对端发送的合法单一地址参与客户端限流。未配置时按 TCP 连接来源限流。
+会话在 30 分钟无请求后失效，可用 `GRADE_BUSINESS_SESSION_IDLE_MINUTES`（1–720）调整，登录后的总有效期仍为 8 小时。新设口令（开户临时口令、注册、改密）至少 12 位，并含大写字母、小写字母、数字、符号四类中的三类；存量账号口令不受影响，下次修改时才要求复杂度。
+
+反向代理还应覆盖 `X-Real-IP` 后再转发请求，例如 Nginx 使用 `proxy_set_header X-Real-IP $remote_addr;`。应用通过 `GRADE_BUSINESS_AUTH_TRUSTED_PROXY` 配置直接连接它的单一代理 IP，只有该对端发送的合法单一地址参与客户端限流。未配置代理时使用 TCP 连接来源。
 
 PDF 文字提取需要应用进程的 `PATH` 包含 Poppler 的 `pdfinfo`、`pdftotext`。扫描页还需 `pdftoppm`、Tesseract 的 `tesseract` 以及 `chi_sim`、`eng` 语言包。可以使用 `tesseract --list-langs` 核对语言。资料专区发布 PDF 前也使用 `pdfinfo` 检查页面结构。DOCX 提取随 Go 服务提供。
 

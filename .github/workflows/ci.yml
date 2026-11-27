@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: self-hosted
+    env:
+      CI_TEST_DB: grade-ci-test-db
+      CI_TEST_PORT: '15447'
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 构建 Go 后端
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOPROXY=https://goproxy.cn,direct
+          export GOTOOLCHAIN=auto
+          cd grade-business
+          go build ./...
+          go vet ./...
+
+      - name: 启动一次性测试数据库
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker rm -f "$CI_TEST_DB" >/dev/null 2>&1 || true
+          docker run -d --rm --name "$CI_TEST_DB" \
+            -e POSTGRES_DB=grade_business_test -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci \
+            -p "127.0.0.1:$CI_TEST_PORT:5432" postgres:16 >/dev/null
+          ready=false
+          for _ in $(seq 1 30); do
+            if docker exec "$CI_TEST_DB" pg_isready -U ci -d grade_business_test >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          [[ "$ready" == true ]] || { echo '测试数据库未就绪' >&2; exit 1; }
+          dsn="postgres://ci:ci@127.0.0.1:$CI_TEST_PORT/grade_business_test?sslmode=disable"
+          echo "GRADE_BUSINESS_TEST_DSN=$dsn" >> "$GITHUB_ENV"
+          echo "GRADE_ACCESS_TEST_DSN=$dsn" >> "$GITHUB_ENV"
+
+      - name: 全量测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOPROXY=https://goproxy.cn,direct
+          export GOTOOLCHAIN=auto
+          cd grade-business
+          go test -race -count=1 ./...
+
+      - name: 清理测试数据库
+        if: always()
+        shell: bash
+        run: docker rm -f "$CI_TEST_DB" >/dev/null 2>&1 || true
+
+      - name: 构建前端
+        shell: bash
+        run: |
+          set -euo pipefail
+          export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+          tools=/tmp/grade-ci-node
+          mkdir -p "$tools"
+          if ! command -v node >/dev/null || ! command -v corepack >/dev/null ||
+            [[ "$(node --version)" != v24.* ]]; then
+            version=24.18.0
+            case "$(uname -m)" in
+              x86_64) arch=x64; sha256=783130984963db7ba9cbd01089eaf2c2efb055c7c1693c943174b967b3050cb8 ;;
+              aarch64) arch=arm64; sha256=6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508 ;;
+              *) echo 'Runner 架构没有可用的 Node.js 构建包' >&2; exit 1 ;;
+            esac
+            archive="node-v$version-linux-$arch.tar.gz"
+            archive_path="$tools/$archive"
+            found=false
+            cached="${GRADE_RELEASE_NODE_CACHE:-/opt/grade-business/.ci-cache/node}/$archive"
+            if [[ -r "$cached" ]] && cp -- "$cached" "$archive_path" &&
+              printf '%s  %s\n' "$sha256" "$archive_path" | sha256sum --check --status; then
+              echo '已校验并复用 Node.js 发布缓存'
+              found=true
+            fi
+            if [[ "$found" != true ]]; then
+              for base in https://nodejs.org/dist https://registry.npmmirror.com/-/binary/node; do
+                if curl -4fsSL --retry 1 --retry-all-errors --connect-timeout 8 --max-time 180 \
+                  "$base/v$version/$archive" -o "$archive_path" &&
+                  printf '%s  %s\n' "$sha256" "$archive_path" | sha256sum --check --status; then
+                  found=true
+                  break
+                fi
+              done
+            fi
+            [[ "$found" == true ]] || { echo 'Node.js 下载失败或 SHA-256 校验失败' >&2; exit 1; }
+            tar -xzf "$archive_path" -C "$tools"
+            export PATH="$tools/node-v$version-linux-$arch/bin:$PATH"
+          fi
+          cd grade-business/web
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm build

@@ -7,8 +7,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"math/big"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -89,7 +91,7 @@ const provisionAccountSQL = `
 // 参数 input 为待配置账号，辖区和关联标识来自授权的运维操作。
 // 返回值 字段与所选角色匹配时为真。
 func validAccount(input AccountInput) bool {
-	if !usernamePattern.MatchString(input.Username) || !validPassword(input.Password) ||
+	if !usernamePattern.MatchString(input.Username) || !strongPassword(input.Password) ||
 		input.Name == "" || utf8.RuneCountInString(input.Name) > 100 ||
 		utf8.RuneCountInString(input.PersonKey) > 160 {
 		return false
@@ -108,11 +110,80 @@ func validAccount(input AccountInput) bool {
 	}
 }
 
-// validPassword 检查首次设置和后续修改时的密码长度。
+// validPassword 检查登录预检和当前口令校验的密码长度，避免收紧策略后锁定存量账号。
 // 参数 password 为用户提交的口令。
 // 返回值 长度符合要求时为真。
 func validPassword(password string) bool {
 	return len(password) <= 256 && utf8.RuneCountInString(password) >= 12
+}
+
+// strongPassword 检查新设口令的长度与字符类别复杂度，要求大小写字母、数字和符号四类中至少三类。
+// 参数 password 为首次设置、开户或修改时提交的新口令。
+// 返回值 长度与复杂度均符合要求时为真。
+func strongPassword(password string) bool {
+	if !validPassword(password) {
+		return false
+	}
+	var upper, lower, digit, other bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			upper = true
+		case unicode.IsLower(r):
+			lower = true
+		case unicode.IsDigit(r):
+			digit = true
+		default:
+			other = other || unicode.IsPrint(r)
+		}
+	}
+	kinds := 0
+	for _, hit := range []bool{upper, lower, digit, other} {
+		if hit {
+			kinds++
+		}
+	}
+	return kinds >= 3
+}
+
+// temporaryPassword 生成含大小写字母和数字的系统临时口令，保证满足新口令复杂度。
+// 参数 无。
+// 返回值 满足复杂度的随机临时口令，或随机数错误。
+func temporaryPassword() (string, error) {
+	const upper, lower, digit = "ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnpqrstuvwxyz", "23456789"
+	pick := func(set string) (byte, error) {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(set))))
+		if err != nil {
+			return 0, err
+		}
+		return set[n.Int64()], nil
+	}
+	out := make([]byte, 16)
+	var err error
+	if out[0], err = pick(upper); err != nil {
+		return "", err
+	}
+	if out[1], err = pick(lower); err != nil {
+		return "", err
+	}
+	if out[2], err = pick(digit); err != nil {
+		return "", err
+	}
+	all := upper + lower + digit
+	for i := 3; i < len(out); i++ {
+		if out[i], err = pick(all); err != nil {
+			return "", err
+		}
+	}
+	for i := len(out) - 1; i > 0; i-- {
+		n, shuffleErr := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if shuffleErr != nil {
+			return "", shuffleErr
+		}
+		j := n.Int64()
+		out[i], out[j] = out[j], out[i]
+	}
+	return string(out), nil
 }
 
 // newPassword 生成随机盐和当前算法派生的密码摘要。

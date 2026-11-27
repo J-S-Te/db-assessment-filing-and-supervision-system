@@ -48,7 +48,7 @@ func CSVText(value string) string {
 	})
 	first, _ := utf8.DecodeRuneInString(trimmed)
 	if strings.ContainsAny(value[:len(value)-len(trimmed)], "\t\r\n") ||
-		strings.ContainsRune("=+-@＝＋－＠", first) {
+		strings.ContainsRune("=+-@[＝＋－＠［", first) {
 		return "'" + value
 	}
 	return value

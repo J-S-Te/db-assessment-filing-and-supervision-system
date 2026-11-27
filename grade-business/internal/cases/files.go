@@ -212,5 +212,16 @@ func (s *Service) discardUnreferenced(ctx context.Context, key string) error {
 	if err != nil || exists {
 		return err
 	}
-	return os.Remove(filepath.Join(s.attachmentDir, key))
+	if len(key) != 48 {
+		return ErrNotFound
+	}
+	if _, err := hex.DecodeString(key); err != nil {
+		return ErrNotFound
+	}
+	root, err := os.OpenRoot(s.attachmentDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return root.Remove(key)
 }

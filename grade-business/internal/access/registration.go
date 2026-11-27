@@ -86,7 +86,7 @@ func normalizeRegistration(input *registrationInput) bool {
 	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
 	return registrationText(input.UnitName, 200, false) && registrationText(input.ContactName, 100, false) &&
 		validCreditCode(input.CreditCode) && registrationPhone.MatchString(input.Phone) &&
-		usernamePattern.MatchString(input.Username) && validPassword(input.Password) &&
+		usernamePattern.MatchString(input.Username) && strongPassword(input.Password) &&
 		!strings.ContainsRune(input.Password, 0)
 }
 

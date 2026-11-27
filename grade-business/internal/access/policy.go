@@ -69,7 +69,11 @@ func allowed(actor Principal, pattern string) bool {
 	}
 	switch {
 	case strings.HasPrefix(path, "/api/v1/institution/"):
-		return role == OrgAdmin && !strings.HasSuffix(path, "/review-actions")
+		if strings.HasSuffix(path, "/review-actions") {
+			return role == OrgAdmin && (path == "/api/v1/institution/filings/{id}/review-actions" ||
+				path == "/api/v1/institution/filing-applications/{id}/review-actions")
+		}
+		return role == OrgAdmin
 	case strings.HasPrefix(path, "/api/v1/operator/"):
 		return role == Operator
 	case role == SystemAdmin:
@@ -136,7 +140,8 @@ func bindSubject(r *http.Request, actor Principal, pattern string) bool {
 		return !query.Has(key) && len(query["kind"]) == 1 && query.Get("kind") == "institution"
 	}
 	if actor.Role == OrgAdmin && query.Get("review") == "assigned" {
-		return false
+		return pattern == "GET /api/v1/institution/filings" ||
+			pattern == "GET /api/v1/institution/filing-applications"
 	}
 	query.Set(key, actor.Subject)
 	r.URL.RawQuery = query.Encode()

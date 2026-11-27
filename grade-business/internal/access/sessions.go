@@ -23,6 +23,8 @@ const (
 	sessionHours   = 8
 	maxRateSources = 4096
 	rateDuration   = 5 * time.Minute
+	idleTimeout    = 30 * time.Minute
+	idleTouchStep  = 10 * time.Minute
 )
 
 type Service struct {
@@ -34,10 +36,11 @@ type Service struct {
 	registrationRates map[string]loginWindow
 }
 
-// Options 指定部署端明确启用的会话传输与代理信任设置。
+// Options 指定部署端明确启用的会话传输、空闲超时与代理信任设置。
 type Options struct {
 	SecureCookies bool
 	TrustedProxy  netip.Addr
+	IdleTimeout   time.Duration
 }
 
 type loginWindow struct {
@@ -58,12 +61,15 @@ const loginEligible = `a.enabled AND (a.subject_id IS NULL OR
       AND (p.kind='unit' OR p.valid_until >= (statement_timestamp() AT TIME ZONE 'Asia/Shanghai')::date)))`
 
 // New 创建基于数据库会话的权限服务。
-// 参数 pool 为账号及名录连接池，options 为 Cookie 与可信反代配置。
+// 参数 pool 为账号及名录连接池，options 为 Cookie、空闲超时和可信反代配置，未指定空闲超时采用 30 分钟。
 // 返回值 可注册登录接口与权限网关的服务。
 func New(pool *pgxpool.Pool, options ...Options) *Service {
 	var cfg Options
 	if len(options) > 0 {
 		cfg = options[0]
+	}
+	if cfg.IdleTimeout <= 0 {
+		cfg.IdleTimeout = idleTimeout
 	}
 	return &Service{db: pool, options: cfg,
 		loginRates: make(map[string]loginSourceWindow), registrationRates: make(map[string]loginWindow)}
@@ -138,7 +144,7 @@ func sessionToken(r *http.Request) ([32]byte, bool) {
 	return sha256.Sum256(raw), true
 }
 
-// session 返回仍有效的会话身份，核对名录资格和账号状态。
+// session 返回仍有效的会话身份，核对名录资格、账号状态和空闲超时。
 // 参数 r 为携带浏览器会话 Cookie 的请求。
 // 返回值 当前身份，或无会话、资格变更、数据库错误。
 func (s *Service) session(r *http.Request) (Principal, error) {
@@ -149,9 +155,27 @@ func (s *Service) session(r *http.Request) (Principal, error) {
 	}
 	err := s.db.QueryRow(r.Context(), "SELECT "+principalFields+
 		" FROM access_sessions t JOIN access_accounts a ON a.id=t.account_id"+principalJoin+
-		" WHERE t.token_hash=$1 AND t.expires_at>statement_timestamp() AND "+loginEligible,
-		hash[:]).Scan(fields(&actor)...)
+		" WHERE t.token_hash=$1 AND t.expires_at>statement_timestamp()"+
+			" AND t.last_seen_at>statement_timestamp()-make_interval(secs => $2) AND "+loginEligible,
+		hash[:], int(s.options.IdleTimeout.Seconds())).Scan(fields(&actor)...)
+	if err == nil {
+		s.touchSession(r, hash, actor.ID)
+	}
 	return actor, err
+}
+
+// touchSession 顺带刷新活跃会话的最近使用时间，让空闲判定随真实请求推进。
+// 参数 r 为已通过会话校验的请求，hash 为会话令牌摘要，accountID 为会话所属账号。
+// 返回值 无，刷新失败仅记录日志，不影响本次业务请求。
+func (s *Service) touchSession(r *http.Request, hash [32]byte, accountID string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
+	defer cancel()
+	if _, err := s.db.Exec(ctx, `
+		UPDATE access_sessions SET last_seen_at=statement_timestamp()
+		WHERE token_hash=$1 AND last_seen_at<statement_timestamp()-make_interval(secs => $2)`,
+		hash[:], int(idleTouchStep.Seconds())); err != nil {
+		slog.Error("会话活跃时间刷新失败", "operatorId", accountID)
+	}
 }
 
 // limitLogin 限制账号口令校验的频率及计数器存量。
