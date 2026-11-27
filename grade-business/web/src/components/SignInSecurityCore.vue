@@ -6,7 +6,9 @@ import SignInShieldModel from './SignInShieldModel.vue'
 
 const tilt = useTemplateRef('tilt')
 const orbit = useTemplateRef('orbit')
+const impact = useTemplateRef('impact')
 const pulse = ref(0)
+const impactDuration = 500
 const defaultPitch = 3
 const defaultYaw = -24
 const pitch = ref(defaultPitch)
@@ -69,6 +71,11 @@ function startDrag(event: PointerEvent) {
  */
 function moveDrag(event: PointerEvent) {
   if (drag?.pointerId !== event.pointerId) return
+  if (!(event.buttons & 1)) {
+    endDrag(event)
+    return
+  }
+
   const x = event.clientX - drag.x
   const y = event.clientY - drag.y
   if (!dragged && Math.hypot(x, y) < 5) return
@@ -82,7 +89,7 @@ function moveDrag(event: PointerEvent) {
 
 /**
  * 用途 在释放或取消拖动时保留当前观察角度并结束本次手势。
- * 参数 event 为指针释放、取消或失去捕获事件。
+ * 参数 event 为指针释放、取消或发现主键已松开的移动事件。
  * 返回值 无。
  */
 function endDrag(event: PointerEvent) {
@@ -90,12 +97,27 @@ function endDrag(event: PointerEvent) {
 }
 
 /**
- * 用途 将轻点和键盘激活转换成红光脉冲，区分拖动产生的点击事件。
+ * 用途 同步触发悬浮组轻震和核心冲击波，区分拖动产生的点击事件。
  * 参数 event 为按钮点击事件，detail 为 0 时代表非指针激活。
  * 返回值 无。
  */
 function activate(event: MouseEvent) {
-  if (!dragged || event.detail === 0) pulse.value++
+  if (dragged && event.detail !== 0) return
+
+  pulse.value++
+  const group = impact.value
+  if (!group || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+  // 只重启受击层，重复点击时保留悬浮和围栏的当前动画进度。
+  group.getAnimations().forEach(animation => animation.cancel())
+  group.animate([
+    { transform: 'translate(0)' },
+    { transform: 'translate(-3.5px, 1px)', offset: .12 },
+    { transform: 'translate(2.5px, -1px)', offset: .27 },
+    { transform: 'translate(-1.5px, .5px)', offset: .44 },
+    { transform: 'translate(.6px, 0)', offset: .67 },
+    { transform: 'translate(0)' },
+  ], { duration: impactDuration, easing: 'ease-out' })
 }
 
 /**
@@ -146,25 +168,27 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <figure class="security-scene" aria-labelledby="security-title">
+  <figure class="security-scene" aria-labelledby="security-title"
+    :style="{ '--security-impact-duration': impactDuration + 'ms' }">
     <div class="security-stage">
       <img class="security-base" :src="baseArt" alt="" width="1122" height="1402">
+      <img class="security-base-glow" :src="baseArt" alt="" width="1122" height="1402">
       <div class="security-grid" aria-hidden="true"></div>
       <div class="security-flow" aria-hidden="true"><i></i><i></i><i></i></div>
       <button class="security-core" type="button" aria-label="旋转或激活安防盾牌"
         aria-describedby="security-controls"
         @mouseenter="setOrbitSpeed(1.4)" @mouseleave="setOrbitSpeed(1)"
-        @pointerdown="startDrag" @lostpointercapture="endDrag"
+        @pointerdown="startDrag"
         @keydown="rotateWithKeyboard" @click="activate">
         <span class="security-float" aria-hidden="true">
-          <span ref="tilt" class="security-tilt">
-            <span class="security-glass">
+          <span ref="impact" class="security-impact">
+            <span ref="tilt" class="security-tilt">
               <SignInShieldModel :pitch="pitch" :yaw="yaw" :pulse="pulse" />
-            </span>
-            <span class="security-orbit">
-              <span ref="orbit" class="security-orbit-spin">
-                <span v-for="mark in 18" :key="mark" class="security-orbit-mark"
-                  :style="{ rotate: mark * 20 + 'deg' }"></span>
+              <span class="security-orbit">
+                <span ref="orbit" class="security-orbit-spin">
+                  <span v-for="mark in 18" :key="mark" class="security-orbit-mark"
+                    :style="{ rotate: mark * 20 + 'deg' }"></span>
+                </span>
               </span>
             </span>
           </span>
@@ -206,6 +230,7 @@ onUnmounted(() => {
 }
 
 .security-base,
+.security-base-glow,
 .security-grid,
 .security-flow {
   position: absolute;
@@ -221,6 +246,21 @@ onUnmounted(() => {
     linear-gradient(180deg, transparent, #000 22% 87%, transparent);
   mask-composite: intersect;
 }
+
+.security-base-glow {
+  object-fit: fill;
+  opacity: 0;
+  filter: brightness(1.2);
+  /* 按原素材中的红色内环和三条灯带裁亮，保留基座的蓝光与金属明暗。 */
+  mask-image:
+    radial-gradient(ellipse 17% 3.2% at 50% 73.5%, #000 71%, transparent),
+    radial-gradient(ellipse 7% 1.4% at 24% 84.7%, #000 63%, transparent),
+    radial-gradient(ellipse 13% 1.5% at 50% 84.4%, #000 63%, transparent),
+    radial-gradient(ellipse 7% 1.4% at 76% 84.7%, #000 63%, transparent);
+  transition: opacity .3s ease-in-out;
+}
+
+.security-stage:has(.security-core:is(:hover, :focus-visible)) .security-base-glow { opacity: 1; }
 
 .security-grid {
   background: radial-gradient(circle, #5bc6ff3d 1px, transparent 1.5px) 0 0 / 22px 22px;
@@ -286,7 +326,7 @@ onUnmounted(() => {
   border-radius: 24% 24% 46% 46%;
   background: transparent;
   cursor: grab;
-  perspective: 900px;
+  perspective: 1000px;
   touch-action: none;
   transform: translateX(-50%);
 }
@@ -308,8 +348,8 @@ onUnmounted(() => {
 .security-core:is(:hover, :focus-visible)::before { opacity: 1; }
 
 .security-float,
-.security-tilt,
-.security-glass {
+.security-impact,
+.security-tilt {
   display: block;
   position: absolute;
   inset: 0;
@@ -317,19 +357,15 @@ onUnmounted(() => {
   transform-style: preserve-3d;
 }
 
-.security-float { animation: security-hover 3.6s ease-in-out infinite; }
+.security-float { animation: security-hover 3s ease-in-out infinite; }
 
 .security-tilt {
   transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-  transition: transform .38s cubic-bezier(.19, 1, .22, 1);
-}
-
-.security-glass {
   scale: 1;
-  transition: scale .28s ease-in-out;
+  transition: transform .38s cubic-bezier(.19, 1, .22, 1), scale .3s ease-in-out;
 }
 
-.security-core:is(:hover, :focus-visible) .security-glass {
+.security-core:is(:hover, :focus-visible) .security-tilt {
   --shield-brightness: 1.1;
   scale: 1.05;
 }
@@ -350,7 +386,7 @@ onUnmounted(() => {
   border: 1px solid #a7d8f178;
   border-radius: 50%;
   box-shadow: 0 0 9px #73beff45, inset 0 0 8px #8fccf32d;
-  animation: security-orbit-turn 14s linear infinite;
+  animation: security-orbit-turn 15s linear infinite;
 }
 
 .security-orbit-spin::after {
@@ -423,8 +459,8 @@ onUnmounted(() => {
 }
 
 @keyframes security-hover {
-  0%, 100% { transform: translateY(-14px); }
-  50% { transform: translateY(14px); }
+  0%, 100% { transform: translateY(-17px); }
+  50% { transform: translateY(17px); }
 }
 
 @keyframes security-orbit-turn { to { rotate: 360deg; } }
@@ -439,7 +475,8 @@ onUnmounted(() => {
 @media (prefers-reduced-motion: reduce) {
   .security-float, .security-orbit-spin, .security-flow i::after { animation: none; }
   .security-tilt { transform: none; }
-  .security-glass, .security-core::before { transition: none; }
-  .security-core:is(:hover, :focus-visible) .security-glass { scale: 1; }
+  .security-impact { transform: none !important; }
+  .security-tilt, .security-base-glow, .security-core::before { transition: none; }
+  .security-core:is(:hover, :focus-visible) .security-tilt { scale: 1; }
 }
 </style>
