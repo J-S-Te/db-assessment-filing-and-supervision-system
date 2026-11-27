@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 
+const props = defineProps<{ compact?: boolean }>()
 const clockText = ref('')
 let desktop: MediaQueryList | undefined
 let timer = 0
 
 /**
- * 用途 更新登录页指挥条显示的本地日期和时间。
+ * 用途 更新本地时间，紧凑模式只显示时分秒。
  * 参数 无。
  * 返回值 无。
  */
@@ -15,7 +16,8 @@ function updateClock() {
   const [month, day, hour, minute, second] = [
     now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds(),
   ].map(value => String(value).padStart(2, '0'))
-  clockText.value = `${now.getFullYear()}-${month}-${day} ${hour}:${minute}:${second}`
+  const time = `${hour}:${minute}:${second}`
+  clockText.value = props.compact ? time : `${now.getFullYear()}-${month}-${day} ${time}`
 }
 
 /**
@@ -31,7 +33,7 @@ function syncClock() {
 }
 
 onMounted(() => {
-  desktop = window.matchMedia('(width > 760px)')
+  desktop = window.matchMedia(props.compact ? '(width > 560px)' : '(width > 760px)')
   desktop.addEventListener('change', syncClock)
   document.addEventListener('visibilitychange', syncClock)
   syncClock()
