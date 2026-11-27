@@ -8,7 +8,8 @@ import {
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
 import DashboardAlerts from '../components/DashboardAlerts.vue'
-import DashboardDistribution from '../components/DashboardDistribution.vue'
+import DashboardOverviewTrend from '../components/DashboardOverviewTrend.vue'
+import DashboardRiskMap from '../components/DashboardRiskMap.vue'
 import DashboardDistrictResponse from '../components/DashboardDistrictResponse.vue'
 import DashboardScene from '../components/DashboardScene.vue'
 import DashboardTrend from '../components/DashboardTrend.vue'
@@ -26,7 +27,7 @@ import {
 import { vDashboardScroll } from '../lib/dashboardAutoScroll'
 import { useDistrictDetail, useDistrictSummary } from '../lib/districtResponse'
 import { refreshBusinessOnFocus } from '../lib/scopedBusiness'
-import { refreshSession, session } from '../lib/session'
+import { canVisit, refreshSession, session } from '../lib/session'
 import {
   dashboardColors, type DashboardTone, type DashboardTrendRange, type MetricSlice,
 } from '../lib/dashboardMetrics'
@@ -116,16 +117,47 @@ const riskIndex = computed(() => snapshot.value?.risk)
 const riskLevel = computed(() => riskIndex.value?.level ?? 'none')
 /** 当前范围的待办汇总。 */
 const dutySummary = computed(() => snapshot.value?.duty)
-const riskHasRecords = computed(() => {
-  const counts = snapshot.value?.counts
-  return counts && counts.high + counts.medium + counts.low > 0
-})
+const riskHasRecords = computed(() => (snapshot.value?.counts.systems ?? 0) > 0 || Boolean(openRiskTotal.value))
 const riskValue = computed(() => dashboardNumber(riskHasRecords.value ? riskIndex.value?.index : undefined))
 const riskLevelLabel = computed(() => ({ high: '高', mid: '中', low: '低', none: '无' })[riskLevel.value])
+const alertTimestamp = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
+/**
+ * 用途 检查当前驾驶舱账号是否可以下钻到详情。
+ * 参数 to 为原有业务路由。
+ * 返回值 会话允许访问该页面时为真。
+ */
+function canOpen(to: RouteLocationRaw) {
+  return session.value ? canVisit(session.value, router.resolve(to).path) : false
+}
+
+/**
+ * 用途 将实际预警时间整理为态势总览列表显示的本地时分。
+ * 参数 value 为接口返回的带时区时间。
+ * 返回值 以北京时间展示的时分，时间无效时为空字符串。
+ */
+function alertTime(value: string) {
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? alertTimestamp.format(time) : ''
+}
+
+/**
+ * 用途 以原型的短标签展示真实环比值，比较窗口由卡片标题说明。
+ * 参数 chip 为使用原有业务口径计算的比较结果。
+ * 返回值 含变化方向的短标签。
+ */
+function overviewPeriod(chip: DeltaChip) {
+  const short = chip.text.replace(/^较上期\s*\d+\s*日\s*/, '')
+  const change = /^(↑|↓)(.+)$/.exec(short)
+  if (!change) return `环比 ${short}`
+  return `环比 ${change[1] === '↑' ? '+' : '−'}${change[2]} ${change[1]}`
+}
 
 const metrics = computed<readonly {
   label: string; value: string; tone: DashboardTone; note: string
-  period: DeltaChip; year: DeltaChip
+  period: DeltaChip; year: DeltaChip; path: RouteLocationRaw
 }[]>(() => {
   const windowDays = comparison.value?.windowDays ?? 30
   const hasYearAgo = comparison.value?.hasYearAgo ?? false
@@ -136,24 +168,28 @@ const metrics = computed<readonly {
       note: riskIndex.value?.weights ?? '逾期 40% / 高风险 40% / 待复测 20%',
       period: withWindowRange(periodChip(comparison.value?.riskIndex), windowDays),
       year: yearChip(comparison.value?.riskIndex, hasYearAgo),
+      path: scopedRankingLocation.value,
     },
     {
       label: '未销项隐患', value: dashboardNumber(overview.value?.hazardTotal ? openRiskTotal.value : undefined), tone: 'red',
       note: overview.value?.hazardTotal && statistics.value ? `高 ${dashboardNumber(statistics.value.openHazards.high)} · 中 ${dashboardNumber(statistics.value.openHazards.medium)} · 低 ${dashboardNumber(statistics.value.openHazards.low)}` : '',
       period: withWindowRange(periodChip(comparison.value?.openHazards), windowDays),
       year: yearChip(comparison.value?.openHazards, hasYearAgo),
+      path: { path: '/hazards' },
     },
     {
       label: '整改完成率', value: completion.value, tone: 'teal',
       note: overview.value?.hazardTotal ? `已销项 ${dashboardNumber(overview.value.hazardClosed)} / ${dashboardNumber(overview.value.hazardTotal)}` : '',
       period: withWindowRange(completionChip(comparison.value?.completionRate), windowDays),
       year: completionYearChip(comparison.value?.completionRate),
+      path: { path: '/hazards', query: { status: 'closed' } },
     },
     {
       label: '活跃预警', value: dashboardNumber(alertCounts.value?.total ? activeAlerts.value : undefined), tone: 'amber',
       note: alertCounts.value?.total ? `待处理 ${dashboardNumber(alertCounts.value.pending)} · 处理中 ${dashboardNumber(alertCounts.value.processing)}` : '',
       period: withWindowRange(periodChip(comparison.value?.activeAlerts), windowDays),
       year: yearChip(comparison.value?.activeAlerts, hasYearAgo),
+      path: scopedAlertsLocation.value,
     },
   ]
 })
@@ -178,26 +214,29 @@ const categories = computed<readonly { label: string; value?: number; tone: Dash
   { label: '备案记录', value: overview.value?.filingTotal, tone: 'blue', path: '/filings' },
   { label: '在办实施报备', value: overview.value?.implementationOpen, tone: 'teal', path: '/implementations' },
   { label: '已登记隐患', value: overview.value?.hazardTotal, tone: 'amber', path: '/hazards' },
-  { label: '站内预警', value: alertCounts.value?.total, tone: 'red', path: alertPath },
+  { label: '活跃预警', value: activeAlerts.value, tone: 'red', path: alertPath },
 ])
 const categoryMax = computed(() => Math.max(1, ...categories.value.map(item => item.value ?? 0)))
 
 const filingSlices = computed<MetricSlice[]>(() => {
   const rows = statistics.value?.filings
   return rows ? [
-    { label: '有效备案', count: rows.active, tone: 'blue', color: '#58afff' },
-    { label: '审核中', count: rows.underReview, tone: 'blue', color: '#3d8fc9' },
-    { label: '待补正', count: rows.returned, tone: 'blue', color: '#2f6fa3' },
-    { label: '草稿', count: rows.draft, tone: 'blue', color: '#27567f' },
-    { label: '已注销', count: rows.cancelled, tone: 'slate', color: '#4a5f78' },
+    { label: '有效备案', count: rows.active, tone: 'blue', color: '#35d6ff' },
+    { label: '审核中', count: rows.underReview, tone: 'blue', color: '#6ea8ff' },
+    { label: '待补正', count: rows.returned, tone: 'amber', color: '#ffb84d' },
+    { label: '草稿', count: rows.draft, tone: 'red', color: '#ff5d6c' },
+    { label: '已注销', count: rows.cancelled, tone: 'slate', color: '#5b7396' },
   ] : []
 })
-const openRiskSlices = computed<MetricSlice[]>(() => {
+const openRiskSlices = computed<readonly (MetricSlice & { path: RouteLocationRaw })[]>(() => {
   const rows = statistics.value?.openHazards
   return rows ? [
-    { label: '高风险', count: rows.high, tone: 'red', color: dashboardColors.red },
-    { label: '中风险', count: rows.medium, tone: 'amber', color: dashboardColors.amber },
-    { label: '低风险', count: rows.low, tone: 'blue', color: dashboardColors.blue },
+    { label: '高风险', count: rows.high, tone: 'red', color: dashboardColors.red,
+      path: { path: '/hazards', query: { severity: 'high' } } },
+    { label: '中风险', count: rows.medium, tone: 'amber', color: dashboardColors.amber,
+      path: { path: '/hazards', query: { severity: 'medium' } } },
+    { label: '低风险', count: rows.low, tone: 'blue', color: dashboardColors.blue,
+      path: { path: '/hazards', query: { severity: 'low' } } },
   ] : []
 })
 const coverage = computed(() => {
@@ -205,11 +244,11 @@ const coverage = computed(() => {
   return current?.eligible ? current : undefined
 })
 const coveragePath = { path: archivePaths.systems, query: { tab: 'coverage' } }
-const coverageSlices = computed<MetricSlice[]>(() => {
+const coverageSlices = computed<readonly (MetricSlice & { path: RouteLocationRaw })[]>(() => {
   const current = coverage.value
   return current ? [
-    { label: '已覆盖', count: current.covered, tone: 'blue', color: dashboardColors.blue },
-    { label: '未覆盖', count: current.eligible - current.covered, tone: 'slate', color: '#33546f' },
+    { label: '已覆盖', count: current.covered, tone: 'blue', color: dashboardColors.blue, path: coveragePath },
+    { label: '未覆盖', count: current.eligible - current.covered, tone: 'slate', color: '#33546f', path: coveragePath },
   ] : []
 })
 const reportReview = computed(() => statistics.value?.reportFirstReview)
@@ -253,11 +292,13 @@ const workItems = computed(() => [
   { label: '待审核整改规划', value: dutyCounts.value?.pendingPlanReview, icon: ClipboardList,
     to: { path: '/remediations', query: { status: 'pending_review' } } },
 ])
-const flow = [
-  { label: '定级备案', path: '/filings' }, { label: '实施报备', path: '/implementations' },
-  { label: '测评审核', path: '/reports' }, { label: '整改规划', path: '/remediations' },
-  { label: '整改闭环', path: '/hazards' }, { label: '持续监测', path: alertPath },
-]
+const overviewRiskTasks = computed(() => [{
+  label: '重点隐患', value: statistics.value?.openHazards.high, icon: ShieldAlert,
+  to: { path: '/hazards', query: { severity: 'high' } }, urgent: false,
+}, workItems.value[0]!, {
+  label: '待监管复测隐患', value: snapshot.value?.counts.pendingRetest, icon: RefreshCw,
+  to: { path: '/hazards', query: { status: 'pending_retest' } }, urgent: false,
+}])
 const screen = ref<HTMLElement>()
 const fullscreenAvailable = ref(false)
 const fullscreen = ref(false)
@@ -421,8 +462,9 @@ onScopeDispose(() => {
 </script>
 
 <template>
-  <section v-if="sessionAvailable" ref="screen" class="command-screen" aria-label="指挥驾驶舱">
-    <DashboardScene />
+  <section v-if="sessionAvailable" ref="screen" class="command-screen"
+    :class="{ 'overview-screen': overviewVisible }" aria-label="指挥驾驶舱">
+    <DashboardScene v-if="!overviewVisible" />
 
     <div class="command-stage">
       <header class="screen-header">
@@ -443,7 +485,7 @@ onScopeDispose(() => {
             </span>
             <h1>网络安全等级保护<span>指挥驾驶舱</span></h1>
           </div>
-          <p class="title-sub">{{ districtScopeName }}</p>
+          <p class="title-sub">{{ overviewVisible && !fixedDistrict && selectedDistrict !== null && area ? `${area.name} · ` : '' }}{{ districtScopeName }}</p>
         </div>
 
         <nav class="screen-tabs" aria-label="驾驶舱分区">
@@ -488,11 +530,14 @@ onScopeDispose(() => {
             <ShieldAlert aria-hidden="true" />
             {{ districtScopeName }}待办<template v-if="dutySummary?.total"> {{ dashboardNumber(dutySummary.total) }} 项</template>
           </span>
-          <p v-if="dutySummary">{{ dutySummary.conclusion }}</p>
+          <p v-if="dutySummary?.total" :title="dutySummary.conclusion">
+            其中 <b>{{ dashboardNumber(dutySummary.overdueHazards) }}</b> 项已逾期、<b>{{ dashboardNumber(dutySummary.pendingAlerts) }}</b> 项预警待处理。
+            <template v-if="dutySummary.topDistrict">当前范围风险指数最高（<b>{{ dutySummary.topDistrict }}</b>）。</template>
+          </p>
           <p v-else>{{ scopedLoading ? '正在读取待办汇总…' : scopedFailed ? '暂时无法读取待办汇总' : '暂无待办事项' }}</p>
           <div class="conclusion-worst">
             <span>综合风险指数</span><b>{{ riskValue }}</b>
-            <span v-if="riskHasRecords" class="conclusion-level">{{ riskLevelLabel }}</span>
+            <span v-if="riskHasRecords" class="conclusion-level lv-pill" :class="riskLevel">{{ riskLevelLabel }}</span>
           </div>
         </section>
 
@@ -503,93 +548,89 @@ onScopeDispose(() => {
                 <span class="screen-caption">{{ districtScopeName }} · 对比窗口 {{ comparison?.windowDays ?? 30 }} 日</span>
               </header>
               <div class="metric-grid">
-                <div v-for="item in metrics" :key="item.label" class="metric-card"
+                <RouterLink v-for="item in metrics" :key="item.label" class="metric-card" :to="item.path"
                   :style="{ '--metric-tone': dashboardColors[item.tone] }">
                   <span class="metric-head">
                     <span class="metric-label">{{ item.label }}</span>
-                    <span class="delta-chip" :class="item.year.tone" :title="item.year.title">{{ item.year.text }}</span>
+                    <span class="delta-chip" :class="item.period.tone"
+                      :title="`${item.period.text} · ${item.period.title}。${item.year.text} · ${item.year.title}`"
+                      :aria-label="`${item.period.text}，${item.year.text}`">{{ overviewPeriod(item.period) }}</span>
                   </span>
                   <span class="metric-row">
                     <strong class="metric-value">{{ item.value }}</strong>
-                    <span class="delta-chip" :class="item.period.tone" :title="item.period.title">{{ item.period.text }}</span>
                   </span>
                   <small v-if="item.note">{{ item.note }}</small>
-                </div>
+                </RouterLink>
               </div>
             </section>
 
             <section class="screen-card category-card">
               <header class="card-heading"><h2>业务分类统计</h2><span class="screen-caption">{{ districtScopeName }}</span></header>
               <div class="category-list">
-                <div v-for="item in categories" :key="item.label" class="category-row">
+                <RouterLink v-for="item in categories" :key="item.label" class="category-row" :to="item.path">
                   <span class="category-label">{{ item.label }}</span>
-                  <span class="category-value">{{ dashboardNumber(item.value || undefined) }}</span>
                   <span class="category-track" aria-hidden="true">
-                    <i :style="{ width: `${(item.value ?? 0) * 100 / categoryMax}%`, background: dashboardColors[item.tone] }" />
+                    <i :class="`category-${item.tone}`"
+                      :style="{ width: `${item.value ? Math.max(3, item.value * 100 / categoryMax) : 0}%` }" />
                   </span>
-                </div>
+                  <span class="category-value">{{ dashboardNumber(item.value) }}</span>
+                </RouterLink>
               </div>
             </section>
 
             <section class="screen-card trend-card">
-              <header class="card-heading"><h2>业务趋势</h2>
-                <span class="screen-caption">按日统计实际业务量</span>
-              </header>
-              <div class="trend-compare">
-                <span v-for="item in trendComparison" :key="item.label" class="trend-compare-item">
-                  <span class="trend-compare-label">{{ item.label }}</span>
-                  <span class="delta-chip" :class="item.period.tone" :title="item.period.title">{{ item.period.text }}</span>
-                  <span class="delta-chip" :class="item.year.tone" :title="item.year.title">{{ item.year.text }}</span>
-                </span>
-              </div>
-              <DashboardTrend v-model="range" :history="statistics?.trend" :loading="metricsLoading" :failed="metricsFailed" />
+              <DashboardOverviewTrend v-model="range" :history="statistics?.trend" :comparison="trendComparison"
+                :loading="metricsLoading" :failed="metricsFailed" />
             </section>
           </div>
 
           <div class="screen-column layout-center">
-            <section class="screen-card map-card">
-              <header class="card-heading">
-                <h2>区县处置态势</h2>
-                <span class="screen-caption">综合风险指数 · 逾期 40% / 高风险 40% / 待复测 20%</span>
-              </header>
-              <DashboardDistrictResponse :summary="districts.summary.value" :selected="selectedDistrict"
-                :detail="snapshot" :loading-summary="districts.loading.value"
-                :failed-summary="districts.failed.value" :loading-detail="districtDetail.loading.value"
-                :failed-detail="districtDetail.failed.value"
-                :area="area" :locked="Boolean(fixedDistrict)" @select="selectDistrict"
-                @retry-summary="districts.refresh" @retry-detail="districtDetail.refresh" />
-            </section>
+            <DashboardRiskMap overview :summary="districts.summary.value" :detail="snapshot"
+              :scope="districtScopeName" :selected="selectedDistrict" :area="area" :locked="Boolean(fixedDistrict)"
+              :starting-rank="false" :summary-loading="districts.loading.value" :summary-failed="districts.failed.value"
+              :loading="districtDetail.loading.value" :failed="districtDetail.failed.value"
+              :open-total="openRiskTotal" :closed-total="overview?.hazardClosed" :active-alerts="activeAlerts" :can-open="canOpen"
+              :scoped-alerts-location="scopedAlertsLocation" @select="selectDistrict"
+              @retry-summary="districts.refresh" @retry-detail="districtDetail.refresh" />
 
             <div class="overview-lists">
               <section class="screen-card">
                 <header class="card-heading"><h2>高风险系统</h2>
                   <RouterLink class="screen-link" :to="scopedRankingLocation">查看排行<ArrowRight aria-hidden="true" /></RouterLink>
                 </header>
-                <ul class="system-list">
-                  <li v-for="item in (visibleRiskSystems ?? []).slice(0, 3)" :key="item.filingId" class="system-row">
-                    <span class="system-name">{{ item.systemName }}</span>
-                    <span class="system-count">{{ dashboardNumber(item.count) }}<small>项隐患</small></span>
-                    <span class="system-org">{{ item.organizationName }}</span>
-                  </li>
-                  <li v-if="!(visibleRiskSystems ?? []).length" class="system-empty">{{ !visibleRiskSystems && scopedLoading ? '正在读取高风险系统…' : !visibleRiskSystems && scopedFailed ? '暂时无法读取高风险系统' : '当前范围暂无高风险系统。' }}</li>
-                </ul>
+                <div v-if="visibleRiskSystems?.length" class="overview-roll" v-dashboard-scroll
+                  tabindex="0" aria-label="高风险系统列表">
+                  <ul class="system-list" data-dashboard-loop-original>
+                    <li v-for="item in visibleRiskSystems" :key="item.filingId">
+                      <component :is="canOpen('/hazards') ? RouterLink : 'span'" class="system-row"
+                        :to="{ path: '/hazards', query: { filingId: item.filingId } }"
+                        :title="item.systemName + ' · ' + item.organizationName">
+                        <span class="tag tag-high">高</span><span class="system-name">{{ item.systemName }}</span>
+                        <span class="system-count">{{ dashboardNumber(item.count) }} <small>项隐患</small></span>
+                      </component>
+                    </li>
+                  </ul>
+                  <ul class="system-list" data-dashboard-loop-copy aria-hidden="true" hidden></ul>
+                </div>
+                <p v-else class="system-empty">{{ !visibleRiskSystems && scopedLoading ? '正在读取高风险系统…' : !visibleRiskSystems && scopedFailed ? '暂时无法读取高风险系统' : '当前范围暂无高风险系统。' }}</p>
               </section>
               <section class="screen-card">
                 <header class="card-heading"><h2>最新预警</h2>
                   <RouterLink class="screen-link" :to="scopedAlertsLocation">查看全部<ArrowRight aria-hidden="true" /></RouterLink>
                 </header>
-                <div class="marquee" v-if="(visibleAlerts ?? []).length">
-                  <ul class="marquee-track" v-dashboard-scroll>
-                    <li v-for="item in visibleAlerts ?? []" :key="item.id" class="alert-row">
-                      <span class="alert-title">{{ item.systemName || item.type }}</span>
-                      <span class="alert-meta">
-                        <span class="chip" :class="item.severity === 'high' ? 'high' : item.severity === 'medium' ? 'mid' : 'low'">
-                          {{ item.severity === 'high' ? '高风险' : item.severity === 'medium' ? '中风险' : '低风险' }}</span>
-                        <span class="chip state">{{ alertStatuses[item.status as AlertStatus] }}</span>
-                        <span class="alert-org">{{ item.organizationName }}</span>
-                      </span>
+                <div v-if="visibleAlerts?.length" class="overview-roll" v-dashboard-scroll
+                  tabindex="0" aria-label="最新预警列表">
+                  <ul class="system-list" data-dashboard-loop-original>
+                    <li v-for="item in visibleAlerts" :key="item.id">
+                      <component :is="canOpen(alertPath) ? RouterLink : 'span'" class="alert-row"
+                        :to="{ path: alertPath, query: { alert: item.id } }"
+                        :title="[item.systemName, item.organizationName, alertStatuses[item.status as AlertStatus]].filter(Boolean).join(' · ')">
+                        <time :datetime="item.triggeredAt">{{ alertTime(item.triggeredAt) }}</time>
+                        <span class="alert-title">{{ item.systemName || item.type }}</span>
+                      </component>
                     </li>
                   </ul>
+                  <ul class="system-list" data-dashboard-loop-copy aria-hidden="true" hidden></ul>
                 </div>
                 <p v-else class="system-empty">{{ !visibleAlerts && metricsLoading ? '正在读取预警…' : !visibleAlerts && metricsFailed ? '暂时无法读取预警' : '当前范围暂无预警。' }}</p>
               </section>
@@ -601,25 +642,24 @@ onScopeDispose(() => {
               <header class="card-heading"><h2>监管待办</h2><span class="screen-caption">{{ districtScopeName }}</span></header>
               <div class="duty-group">
                 <p class="duty-group-title">风险处置</p>
-                <div v-for="task in workItems.slice(0, 2)" :key="task.label" class="duty-item"
-                  :class="{ urgent: task.urgent && (task.value ?? 0) > 0 }">
+                <component :is="canOpen(task.to) ? RouterLink : 'span'" v-for="task in overviewRiskTasks"
+                  :key="task.label" class="duty-item" :to="task.to" :class="{ urgent: task.urgent && (task.value ?? 0) > 0 }">
                   <component :is="task.icon" aria-hidden="true" />
-                  <span>{{ task.label }}</span><b>{{ dashboardNumber(task.value || undefined) }}</b>
-                </div>
+                  <span>{{ task.label }}</span><b>{{ dashboardNumber(task.value) }}</b>
+                </component>
               </div>
               <div class="duty-group">
                 <p class="duty-group-title">审核流程</p>
-                <div v-for="task in workItems.slice(2)" :key="task.label" class="duty-item">
+                <component :is="canOpen(task.to) ? RouterLink : 'span'" v-for="task in workItems.slice(2)"
+                  :key="task.label" class="duty-item" :to="task.to">
                   <component :is="task.icon" aria-hidden="true" />
-                  <span>{{ task.label }}</span><b>{{ dashboardNumber(task.value || undefined) }}</b>
-                </div>
+                  <span>{{ task.label }}</span><b>{{ dashboardNumber(task.value) }}</b>
+                </component>
               </div>
             </section>
 
             <section class="screen-card">
-              <header class="card-heading"><h2>备案状态分布</h2>
-                <RouterLink class="screen-link" to="/filings">备案台账<ArrowRight aria-hidden="true" /></RouterLink>
-              </header>
+              <header class="card-heading"><h2>备案状态分布</h2></header>
               <DashboardDistribution :slices="filingSlices" label="备案记录" :loading="metricsLoading" :failed="metricsFailed" />
             </section>
 
@@ -628,11 +668,11 @@ onScopeDispose(() => {
                 <RouterLink class="screen-link" :to="coveragePath">覆盖清册<ArrowRight aria-hidden="true" /></RouterLink>
               </header>
               <div v-if="coverage" class="bench-list">
-                <div v-for="item in coverageSlices" :key="item.label" class="bench-row">
+                <RouterLink v-for="item in coverageSlices" :key="item.label" class="bench-row" :to="item.path">
                   <span class="bench-label">{{ item.label }}</span>
                   <span class="bench-track"><i :style="{ width: `${coverage?.eligible ? item.count * 100 / coverage.eligible : 0}%`, background: item.color }" /></span>
                   <span class="bench-value">{{ dashboardNumber(item.count) }}<em v-if="coverage"> /{{ dashboardNumber(coverage.eligible) }}</em></span>
-                </div>
+                </RouterLink>
                 <p class="bench-note">覆盖率 {{ dashboardPercent(coverage.covered, coverage.eligible) }}</p>
               </div>
               <p v-else class="bench-note">{{ metricsLoading && !statistics ? '正在读取覆盖清册…' : metricsFailed && !statistics ? '暂时无法读取覆盖清册' : '暂无覆盖清册' }}</p>
@@ -640,15 +680,14 @@ onScopeDispose(() => {
 
             <section class="screen-card">
               <header class="card-heading"><h2>未销项风险分布</h2>
-                <RouterLink class="screen-link" :to="scopedRankingLocation">风险分析<ArrowRight aria-hidden="true" /></RouterLink>
+                <span v-if="openRiskTotal !== undefined" class="screen-caption">合计 {{ dashboardNumber(openRiskTotal) }} 项</span>
               </header>
-              <div v-if="openRiskTotal" class="bench-list">
-                <div v-for="item in openRiskSlices" :key="item.label" class="bench-row">
+              <div v-if="openRiskSlices.length" class="bench-list">
+                <RouterLink v-for="item in openRiskSlices" :key="item.label" class="bench-row" :to="item.path">
                   <span class="bench-label">{{ item.label }}</span>
                   <span class="bench-track"><i :style="{ width: `${openRiskTotal ? item.count * 100 / openRiskTotal : 0}%`, background: item.color }" /></span>
                   <span class="bench-value">{{ dashboardNumber(item.count) }}</span>
-                </div>
-                <p class="bench-note">合计 {{ dashboardNumber(openRiskTotal) }} 项</p>
+                </RouterLink>
               </div>
               <p v-else class="bench-note">{{ metricsLoading && !statistics ? '正在读取风险分布…' : metricsFailed && !statistics ? '暂时无法读取风险分布' : '暂无未销项隐患' }}</p>
             </section>
@@ -716,3 +755,4 @@ onScopeDispose(() => {
 </template>
 
 <style scoped src="./commandDashboard.css"></style>
+<style scoped src="./dashboardOverview.css"></style>
