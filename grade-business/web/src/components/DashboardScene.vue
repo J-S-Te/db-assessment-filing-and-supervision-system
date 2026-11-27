@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import spaceUrl from '../assets/signin-space.webp?url'
 
 /**
  * 驾驶舱的三维空间背景层。
@@ -11,10 +12,7 @@ const space = ref('')
 const particles = ref<{ left: string; top: string; size: number; delay: number; duration: number }[]>([])
 
 onMounted(() => {
-  const asset = import.meta.glob<string>('../assets/dashboard-space.webp', {
-    eager: true, import: 'default', query: '?url&no-inline',
-  })
-  space.value = asset['../assets/dashboard-space.webp'] ?? ''
+  space.value = spaceUrl
   particles.value = Array.from({ length: 28 }, (_, index) => ({
     left: `${(index * 37) % 100}%`,
     top: `${(index * 61) % 100}%`,
