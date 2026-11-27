@@ -80,7 +80,7 @@ func RegulatorAreaNames(ctx context.Context) map[string]string {
 
 // Districts 为辖区查询提供当前账号可访问的标准区县名称与编码。
 // 参数 ctx 为带监管身份的请求上下文。
-// 返回值 非监管员返回 nil，监管员返回可比对的编码和标准全称。
+// 返回值 非监管员返回 nil，监管员返回编码、标准全称和受支持的历史简写。
 func Districts(ctx context.Context) []string {
 	areas := RegulatorAreaNames(ctx)
 	if areas == nil {
@@ -89,6 +89,9 @@ func Districts(ctx context.Context) []string {
 	result := make([]string, 0, 2*len(areas))
 	for code, name := range areas {
 		result = append(result, code, name)
+	}
+	if areas["331000"] != "" {
+		result = append(result, "台州")
 	}
 	return result
 }

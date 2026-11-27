@@ -1,4 +1,4 @@
-import type { Attachment, FilingRuleEvidence } from './domain'
+import type { Attachment, FilingReviewItem, FilingRuleCheck, FilingRuleEvidence } from './domain'
 
 export interface FilingTextDocument {
   fileName: string
@@ -18,6 +18,39 @@ export interface WordEvidenceTarget {
   attachment: Attachment
   member?: string
   paragraph?: number
+}
+
+const rulesByMaterial = new Map<string, readonly string[]>([
+  ['filing_form', ['object_number', 'system_and_unit', 'classification_date', 'seals', 'protection_level',
+    'assets', 'business_description', 'responsible_entity', 'filing_certificate']],
+  ['classification_report', ['system_and_unit', 'classification_date', 'seals', 'responsible_person',
+    'protection_level', 'assets', 'business_description', 'carried_data', 'responsible_entity']],
+  ['expert_opinion', ['system_and_unit', 'classification_date', 'responsible_person', 'protection_level']],
+  ['data_survey', ['carried_data']],
+  ['filing_certificate', ['filing_certificate']],
+  ['authorization', ['seals']],
+])
+
+/**
+ * 用途 按附件和归档成员筛选批注，并保留适用材料的缺项检查。
+ * 参数 items、checks 为审核表及预审结论，attachment、member 为可选的当前原件与归档成员。
+ * 返回值 按审核表顺序排列的条目及其原始出处索引，未选择附件时返回全部条目。
+ */
+export function reviewRows<T extends FilingReviewItem>(items: readonly T[],
+  checks: ReadonlyMap<string, FilingRuleCheck>, attachment?: Attachment, member?: string,
+) {
+  const applicable = attachment && !member ? rulesByMaterial.get(attachment.kind) : undefined
+  return items.flatMap(item => {
+    const check = checks.get(item.ruleId)
+    const citations = (check?.evidence ?? []).map((evidence, index) => ({ evidence, index }))
+    if (!attachment) return [{ item, check, citations }]
+    if (!citations.length) {
+      return applicable?.includes(item.ruleId) ? [{ item, check, citations }] : []
+    }
+    const matches = citations.filter(({ evidence }) => evidence.attachmentId === attachment.id &&
+      (!member || evidence.fileName === `${attachment.fileName} / ${member}`))
+    return matches.length ? [{ item, check, citations: matches }] : []
+  })
 }
 
 /**
@@ -45,6 +78,15 @@ export function wordEvidenceTarget(evidence: FilingRuleEvidence, attachments: At
   const paragraph = found && !evidence.kind && (attachment.kind !== 'filing_package' || member) &&
     canPreviewWord(attachment, member) ? Number(found[1]) : undefined
   return { attachment, member, paragraph }
+}
+
+/**
+ * 用途 为证据和原文生成一致的段落标识，区分归档中同名文件。
+ * 参数 member 是可选归档成员的完整路径，paragraph 是原件段号。
+ * 返回值 可匹配的段落标识，缺少段号时为空。
+ */
+export function wordParagraphKey(member?: string, paragraph?: number) {
+  return paragraph === undefined ? undefined : JSON.stringify([member ?? '', paragraph])
 }
 
 /**

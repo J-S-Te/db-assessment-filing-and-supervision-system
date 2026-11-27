@@ -9,6 +9,7 @@ const rules = ref<FilingMaterialRule[]>([])
 const busy = ref(false)
 const failure = ref('')
 const notice = ref('')
+const checkedLabels = ref(false)
 
 /**
  * 用途 加载已保存的备案材料规则、启用状态和版本。
@@ -24,6 +25,7 @@ async function load() {
     const result = await api<FilingMaterialPolicy>(path)
     policy.value = result
     rules.value = result.rules.map(rule => ({ ...rule }))
+    checkedLabels.value = false
   } catch (error) {
     failure.value = errorText(error)
   } finally {
@@ -38,15 +40,18 @@ async function load() {
  */
 async function save() {
   if (busy.value || !policy.value) return
-  busy.value = true
   notice.value = ''
   failure.value = ''
+  checkedLabels.value = true
+  if (rules.value.some(rule => !rule.label.trim())) return
+  busy.value = true
   try {
     const result = await api<FilingMaterialPolicy>(path, {
       method: 'PUT', body: { expectedVersion: policy.value.version, rules: rules.value },
     })
     policy.value = result
     rules.value = result.rules.map(rule => ({ ...rule }))
+    checkedLabels.value = false
     notice.value = '已保存材料规则。对应事项的提交和新发起的预审将按当前启用状态检查。'
   } catch (error) {
     failure.value = errorText(error)
@@ -59,7 +64,7 @@ onMounted(() => { void load() })
 </script>
 
 <template>
-  <form class="panel policy-panel" aria-labelledby="material-policy-heading" @submit.prevent="save">
+  <form class="panel policy-panel" aria-labelledby="material-policy-heading" novalidate @submit.prevent="save">
     <div class="policy-heading">
       <div>
         <h2 id="material-policy-heading">备案附加必传材料</h2>
@@ -85,7 +90,13 @@ onMounted(() => { void load() })
             <option v-for="(label, kind) in filingPolicyKinds[rule.stage]" :key="kind" :value="kind">{{ label }}</option>
           </select>
         </label>
-        <label class="field"><span>显示名称</span><input v-model="rule.label" required maxlength="120"></label>
+        <label class="field"><span>显示名称</span>
+          <input v-model="rule.label" required maxlength="120"
+            :aria-invalid="checkedLabels && !rule.label.trim() ? true : undefined"
+            :aria-describedby="checkedLabels && !rule.label.trim() ? 'material-name-error-' + index : undefined">
+          <small v-if="checkedLabels && !rule.label.trim()" :id="'material-name-error-' + index"
+            class="error-message" role="alert">请填写显示名称。</small>
+        </label>
         <label class="field"><span>文件名关键词（选填）</span>
           <input v-model="rule.filenameContains" maxlength="120">
         </label>

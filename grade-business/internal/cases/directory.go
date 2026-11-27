@@ -10,14 +10,14 @@ import (
 	"grade-business/internal/directoryref"
 )
 
-// prepareCaseCreation 为测评和已登录运营者的首报保存所需的名录引用。
+// prepareCaseCreation 为备案和测评保存所需的名录引用。
 // 参数 ctx、tx 为创建事务，kind、institution 和 fields 描述业务类型、机构范围、拟保存字段。
 // 返回值 材料配置、可空的名录快照或业务校验错误。
 func prepareCaseCreation(ctx context.Context, tx pgx.Tx, kind, institution string,
 	fields *saveFields,
 ) (string, *directoryref.Snapshot, error) {
 	if kind != report {
-		snapshot, err := resolveOperatorFilingDirectory(ctx, tx, fields, operatorFilingScope(ctx) != "")
+		snapshot, err := resolveFilingDirectory(ctx, tx, fields, operatorFilingScope(ctx) != "")
 		return legacySubmissionProfile, snapshot, err
 	}
 	if err := lockReportFiling(ctx, tx, *fields.filingID, institution); err != nil {
@@ -32,14 +32,14 @@ func prepareCaseCreation(ctx context.Context, tx pgx.Tx, kind, institution strin
 	return profile, snapshot, err
 }
 
-// prepareCaseUpdate 为编辑后的自主备案和测评报告更新单位、机构等名录引用。
+// prepareCaseUpdate 为编辑后的备案和测评报告更新单位、机构等名录引用。
 // 参数 ctx、tx 为更新事务，kind、institution、current、fields 为范围、现状和新输入。
 // 返回值 本次确认的名录快照或归属、版本化关联校验错误。
 func prepareCaseUpdate(ctx context.Context, tx pgx.Tx, kind, institution string,
 	current stateRow, fields *saveFields,
 ) (*directoryref.Snapshot, error) {
 	if kind != report {
-		return resolveOperatorFilingDirectory(ctx, tx, fields, current.operatorOrigin)
+		return resolveFilingDirectory(ctx, tx, fields, current.operatorOrigin)
 	}
 	if err := validateReportAssociation(ctx, tx, current, *fields, institution); err != nil {
 		return nil, err
@@ -52,15 +52,25 @@ func prepareCaseUpdate(ctx context.Context, tx pgx.Tx, kind, institution string,
 	return snapshot, err
 }
 
-// resolveOperatorFilingDirectory 绑定单位名录，使已登录运营者的首报进入对应辖区审核范围。
+// resolveFilingDirectory 绑定备案对应的名录单位，为辖区审核提供可信归属。
 // 参数 ctx、tx 包含会话和写入事务，fields 为已校验表单，operatorOrigin 表示运营者来源。
 // 返回值 本轮名录快照、身份归属错误或名录校验错误。
-func resolveOperatorFilingDirectory(ctx context.Context, tx pgx.Tx, fields *saveFields,
+func resolveFilingDirectory(ctx context.Context, tx pgx.Tx, fields *saveFields,
 	operatorOrigin bool,
 ) (*directoryref.Snapshot, error) {
 	actor, authenticated := access.Current(ctx)
-	if !operatorOrigin || !authenticated {
+	if !authenticated {
 		return nil, nil
+	}
+	if !operatorOrigin {
+		if actor.Role != access.SystemAdmin {
+			return nil, nil
+		}
+		snapshot, err := directoryref.Resolve(ctx, tx, fields.organizationName, "", "", false)
+		if snapshot != nil && snapshot.Unit != nil {
+			fields.organizationName = snapshot.Unit.ScopeName
+		}
+		return snapshot, err
 	}
 	snapshot, err := directoryref.Resolve(ctx, tx, fields.organizationName, fields.assessmentOrg, "", false)
 	if err != nil {

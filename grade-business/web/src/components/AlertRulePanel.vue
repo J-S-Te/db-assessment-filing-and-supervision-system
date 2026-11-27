@@ -4,6 +4,7 @@ import AsyncState from './AsyncState.vue'
 import DirectoryPicker from './DirectoryPicker.vue'
 import { api, ApiError, errorText, isAbort, params } from '../lib/api'
 import { formatTime, levels } from '../lib/domain'
+import { createRequestId } from '../lib/requestId'
 
 const endpoint = '/alerts/rules'
 const triggers = { high_risk: '未销项高风险隐患', overdue: '整改逾期', filing_review_overdue: '备案审核超期' }
@@ -113,6 +114,7 @@ async function run(mode: 'preview' | 'save' | 'sync') {
       return
     }
     const current = editing.value
+    if (!current && !requestId.value) requestId.value = createRequestId()
     await api(current ? endpoint + '/' + current.id : endpoint, {
       method: current ? 'PATCH' : 'POST',
       body: { ...policy.value, ...(current ? { expectedVersion: current.version } : { requestId: requestId.value }) },
@@ -143,7 +145,7 @@ function locationLabel(record: RulePolicy) {
 }
 
 watch(policy, () => {
-  requestId.value = crypto.randomUUID()
+  requestId.value = ''
   preview.value = undefined
 })
 watch(tab, () => void load())

@@ -174,10 +174,10 @@ async function reloadCurrent() {
 
 /**
  * 用途 加载指定公告的最新正文和可执行操作。
- * 参数 id 为公告标识，editing 表示进入版本编辑，receipts 表示查看送达回执。
+ * 参数 id 为公告标识，view 指定要打开的内容或待确认的操作。
  * 返回值 详情读取任务。
  */
-async function openItem(id: string, editing = false, receipts = false) {
+async function openItem(id: string, view: 'detail' | 'edit' | 'receipts' | PublicationAction = 'detail') {
   resetDialog()
   mode.value = 'detail'
   detailLoading.value = true
@@ -187,8 +187,12 @@ async function openItem(id: string, editing = false, receipts = false) {
     const item = await api<PublicationDetail>(publicationPath + '/' + encodeURIComponent(id), { signal: request.signal })
     if (request.signal.aborted) return
     current.value = item
-    if (editing) editCurrent()
-    if (receipts) showReceipts()
+    if (view === 'edit') editCurrent()
+    else if (view === 'receipts') showReceipts()
+    else if (view !== 'detail' && item.allowedActions?.includes(view) &&
+      (view === 'withdraw' || !publishFileMissing.value)) {
+      confirmation.value = view
+    }
   } catch (error) {
     if (!isAbort(error)) dialogError.value = errorText(error)
   } finally {
@@ -386,9 +390,13 @@ onScopeDispose(() => { detailRequest?.abort(); saveRequest?.abort(); historyRequ
               </span><small v-if="item.publishedVersion && item.version !== item.publishedVersion" class="muted revision-note">有未发布修订</small></td>
               <td class="row-actions">
                 <button class="text-action" type="button" @click="openItem(item.id)">查看</button>
-                <button class="text-action" type="button" @click="openItem(item.id, true)">编辑</button>
+                <button class="text-action" type="button" @click="openItem(item.id, 'edit')">编辑</button>
+                <button v-if="item.version !== item.publishedVersion" class="text-action" type="button"
+                  @click="openItem(item.id, 'publish')">发布</button>
+                <button v-if="item.status === 'published'" class="text-action" type="button"
+                  @click="openItem(item.id, 'withdraw')">撤回</button>
                 <button v-if="item.publishedVersion || item.status !== 'draft'" class="text-action" type="button"
-                  @click="openItem(item.id, false, true)">送达回执</button>
+                  @click="openItem(item.id, 'receipts')">送达回执</button>
               </td>
             </tr></tbody>
           </table>

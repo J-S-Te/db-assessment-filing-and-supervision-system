@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>材料审阅工作台 · 界面设计稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--panel:#ffffff;--surface:#f8fbff;--line:#d6e0ec;--line-soft:#e7edf5;
+  --ink:#16283d;--ink-2:#425c78;--muted:#7288a1;
+  --accent:#285bb5;--accent-soft:#eaf1fd;--accent-line:#9dbbe8;
+  --pass:#176346;--pass-bg:#eaf7f1;
+  --fail:#9b2437;--fail-bg:#fff0f1;
+  --warn:#7f5319;--warn-bg:#fdf3da;
+  --pending:#6b7d92;--pending-bg:#eef2f7;
+  --quote:#fff6d9;--quote-line:#e8b93c;
+  --radius:10px;
+  --font-cn:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --font-en:"Outfit","PingFang SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-cn);font-size:13px;line-height:1.6;-webkit-font-smoothing:antialiased;padding:16px}
+button,select,textarea,input{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+
+/* ================= 外壳（模拟管理端） ================= */
+.shell{display:grid;grid-template-columns:196px minmax(0,1fr);min-height:calc(100dvh - 32px);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:0 18px 48px #1c3a5e14}
+.side{background:linear-gradient(180deg,#132539,#0e1c2b);color:#c7d7e8;padding:14px 0;display:flex;flex-direction:column}
+.side-brand{display:flex;gap:9px;align-items:center;padding:2px 14px 14px;border-bottom:1px solid #ffffff14}
+.side-brand i{width:30px;height:30px;border-radius:8px;background:#1d4a7a;display:grid;place-items:center;color:#bfe0ff;flex:none}
+.side-brand b{display:block;color:#eaf3ff;font-size:12.5px;line-height:1.3}
+.side-brand span{font-size:9.5px;color:#7d97b3;letter-spacing:.06em}
+.side nav{padding:10px 0;display:grid;gap:1px}
+.side nav a{display:flex;align-items:center;gap:9px;padding:8px 14px;color:#b4c8dd;text-decoration:none;font-size:12.5px}
+.side nav a.on{background:#1c4a7d;color:#fff;box-shadow:inset 3px 0 #63b8ff}
+.side nav .grp{padding:12px 14px 5px;font-size:10px;letter-spacing:.14em;color:#5f7a96}
+.side nav .tag{margin-left:auto;font-size:9.5px;background:#ffffff1a;border-radius:4px;padding:1px 5px;color:#9fb6cd}
+.side-foot{margin-top:auto;padding:10px 14px 0;border-top:1px solid #ffffff14;font-size:10.5px;color:#5f7a96}
+
+.main{display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.topbar{display:flex;align-items:center;gap:12px;padding:10px 18px;background:#14263a;color:#dce9f7}
+.topbar .crumb{font-size:12.5px;color:#8fa9c4}
+.topbar .spacer{margin-left:auto}
+.topbar button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:7px;
+  background:#ffffff12;border:1px solid #ffffff1c;color:#dce9f7;font-size:12px}
+.topbar .avatar{width:28px;height:28px;border-radius:50%;background:#2b5c96;color:#fff;display:grid;place-items:center;font-size:11px}
+
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:16px 20px 12px}
+.page-head h1{font-size:21px;font-weight:700;letter-spacing:.01em}
+.page-head p{font-size:12px;color:var(--muted);margin-top:2px}
+.page-head .back{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;
+  background:var(--panel);border:1px solid var(--line);color:var(--ink-2);font-size:12.5px}
+
+/* ================= 审阅工具条 ================= */
+.toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 20px;
+  background:var(--panel);border-block:1px solid var(--line)}
+.ring-wrap{display:flex;align-items:center;gap:9px;flex:none}
+.ring{position:relative;width:46px;height:46px;flex:none}
+.ring-label{font-size:11.5px;color:var(--muted);line-height:1.35}
+.sep-v{width:1px;height:26px;background:var(--line);flex:none}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute;inset:0;display:grid;place-content:center;font-family:var(--mono);font-size:12.5px;font-weight:600}
+.ring .val small{display:block;font-size:8px;color:var(--muted);font-family:var(--font-cn);font-weight:400;line-height:1}
+.bar{display:flex;height:9px;border-radius:5px;overflow:hidden;width:236px;background:#e6ecf4;flex:none}
+.bar i{display:block;height:100%}
+.tally{display:flex;gap:12px;font-size:11.5px;color:var(--muted)}
+.tally b{font-family:var(--mono);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{padding:5px 11px;font-size:12px;color:var(--muted);border-right:1px solid var(--line-soft)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.toolbar .grow{margin-left:auto;display:flex;gap:10px;align-items:center}
+.unsaved{font-size:11.5px;color:#b4762a;font-weight:600}
+.bar{display:flex;gap:2px;height:9px;border-radius:5px;overflow:hidden;flex:none}
+.bar i{display:block;height:100%;border-radius:2px}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink-2);font-size:12.5px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ================= 三栏工作台 ================= */
+.workspace{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:1.35rem;flex:1;min-height:0}
+.pane{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+.pane+.pane{border-left:1px solid var(--line)}
+.pane-hd{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line);background:var(--surface);flex:none}
+.pane-hd h2{font-size:12.5px;font-weight:600}
+.pane-hd .count{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pane-hd .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+
+/* 左栏：规则清单 */
+.catalog{overflow:auto;flex:1;padding:7px}
+.cat-item{width:100%;display:grid;grid-template-columns:14px 20px minmax(0,1fr) auto;align-items:center;gap:7px;
+  padding:7px 8px;border-radius:8px;text-align:start;color:var(--ink-2)}
+.cat-item:hover{background:#f1f5fa}
+.cat-item.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.cat-item .dot{width:8px;height:8px;border-radius:50%;background:var(--pending)}
+.cat-item .dot.fail{background:var(--fail)}
+.cat-item .dot.pass{background:var(--pass)}
+.cat-item .no{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.cat-item.on .no{color:var(--accent)}
+.cat-item .txt{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
+.cat-item .chip{font-size:10px;padding:1px 5px;border-radius:4px;font-family:var(--mono)}
+.chip.fail{background:var(--fail-bg);color:var(--fail)}
+.chip.pass{background:var(--pass-bg);color:var(--pass)}
+.chip.pending{background:var(--pending-bg);color:var(--pending)}
+.cat-foot{flex:none;border-top:1px solid var(--line);padding:9px 13px;background:var(--surface);display:grid;gap:6px}
+.kbd{font-family:var(--mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+
+/* 中栏：原文 */
+.doc-tools{display:flex;align-items:center;gap:9px;padding:8px 14px;border-bottom:1px solid var(--line);flex:none;background:var(--panel)}
+.doc-tools select{height:29px;border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:0 8px;font-size:12px;max-width:330px}
+.doc-tools .link{color:var(--accent);font-size:12px;text-decoration:none;border-bottom:1px dashed var(--accent-line)}
+.doc-tools .spacer{margin-left:auto}
+.doc-tools .ghost{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:7px;height:28px;padding:0 10px}
+.doc-scroll{overflow:auto;height:auto;max-height:clamp(27rem,68dvh,56rem);padding:16px 18px;background:#e9eef5;
+  align-self:start;border-radius:10px}
+.sheet{background:#fff;border:1px solid var(--line);border-radius:8px;padding:30px 34px;
+  box-shadow:0 6px 20px #1c3a5e12;max-width:720px;margin:0 0 auto}
+.sheet h3{font-size:16px;font-weight:700;margin-bottom:4px}
+.sheet .meta{font-size:11.5px;color:var(--muted);margin-bottom:16px}
+.sheet p{margin-bottom:9px;font-size:13px;color:#2b3f56}
+.sheet .sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft);font-weight:600;font-size:13px}
+mark{background:var(--quote);border-left:3px solid var(--quote-line);padding:1px 4px;border-radius:3px;
+  box-shadow:0 0 0 3px var(--quote);transition:box-shadow .2s}
+mark.flash{animation:flash 1.5s ease-out}
+@keyframes flash{0%,45%{box-shadow:0 0 0 7px #e8b93c66}100%{box-shadow:0 0 0 3px var(--quote)}}
+.sheet .aside{position:absolute;right:-6px;transform:translateY(-50%);width:11px;height:11px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 3px #ffffff,0 0 0 4px var(--accent-line)}
+
+/* 右栏：审核工作台 */
+.queue{overflow:auto;flex:1;padding:9px;display:grid;gap:8px;align-content:start}
+.card{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden;
+  transition:border-color .16s,box-shadow .16s}
+.card.on{border-color:var(--accent-line);box-shadow:0 0 0 2px #285bb51f,0 6px 18px #1c3a5e12}
+.card-top{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:10px 11px 0}
+.card-top .ttl{display:flex;gap:8px;align-items:baseline}
+.card-top .no{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
+.card-top h4{font-size:13px;font-weight:600;line-height:1.4}
+.card-top .status{font-size:10.5px;padding:2px 7px;border-radius:5px;white-space:nowrap;font-weight:600}
+.status.fail{background:var(--fail-bg);color:var(--fail)}
+.status.pass{background:var(--pass-bg);color:var(--pass)}
+.status.pending{background:var(--pending-bg);color:var(--pending)}
+.status.manual{background:var(--warn-bg);color:var(--warn)}
+.ai-line{display:flex;align-items:center;gap:6px;padding:7px 11px 0;font-size:11.5px;color:var(--muted)}
+.ai-line .tag{font-size:10px;padding:1px 5px;border-radius:4px;background:#f0f3f8;color:#5c7characters}
+.ai-line .tag{background:#f0f3f8;color:#5c7186}
+.ai-msg{margin:6px 11px 0;padding:8px 10px;border-radius:7px;font-size:12px;line-height:1.55;
+  background:var(--surface);border:1px solid var(--line-soft);color:var(--ink-2)}
+.ai-msg b{color:var(--fail);font-weight:600}
+.ev-list{margin:7px 11px 0;display:grid;gap:5px}
+.ev{display:grid;gap:3px;width:100%;text-align:start;padding:7px 9px;border-radius:7px;
+  background:#f4f8fd;border:1px solid var(--line-soft);color:var(--ink-2);font-size:11.5px}
+.ev:hover{background:var(--accent-soft);border-color:var(--accent-line)}
+.ev.on{background:var(--accent-soft);border-color:var(--accent);box-shadow:0 0 0 2px #285bb518}
+.ev b{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--accent);font-weight:600}
+.ev span{font-size:11.5px;color:var(--ink-2)}
+.edit{margin:9px 11px 11px;padding-top:9px;border-top:1px dashed var(--line);display:grid;gap:8px}
+.edit label{display:grid;gap:3px;font-size:11.5px;color:var(--ink-2);font-weight:600}
+.edit select,.edit textarea{width:100%;border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;font-size:12.5px}
+.edit textarea{resize:vertical;min-height:52px;font-weight:400;color:var(--ink)}
+.edit-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.edit-row .btn{height:28px;font-size:12px}
+.edit-row .who{font-size:10.5px;color:var(--muted);margin-left:auto}
+.card-mini{display:flex;align-items:center;gap:8px;padding:9px 11px}
+.card-mini .no{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.card-mini .txt{font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-mini .who{font-size:10.5px;color:var(--muted)}
+.connector{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+.connector path{fill:none;stroke-linecap:round;stroke-dasharray:5 5}
+.connector circle{stroke:#fff;stroke-width:1.5}
+.hint{font-size:11px;color:var(--muted);padding:0 13px 9px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- 管理端外壳（现状保留，仅替换红框区域） -->
+  <aside class="side">
+    <div class="side-brand">
+      <i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></i>
+      <div><b>网络安全<br>等级保护平台</b><span>网络安全监管</span></div>
+    </div>
+    <nav>
+      <div class="grp">业务总览</div>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>工作台</a>
+      <a href="#" class="on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>等级保护</a>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16v16H4z"/><path d="M9 9h6v6H9z"/></svg>全息档案</a>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/></svg>监测预警</a>
+      <div class="grp">智能体治理</div>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>智能体</a>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>指挥驾驶舱</a>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/></svg>系统管理</a>
+      <div class="grp">AI 智能审核</div>
+      <a href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>材料审阅<span class="tag">待接入</span></a>
+    </nav>
+    <div class="side-foot">监管工作台 · 本地业务测试</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <span class="crumb">等级保护 / 备案审核 / 材料审阅</span>
+      <span class="spacer"></span>
+      <button><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><circle cx="17" cy="17" r="3"/></svg>流程示意</button>
+      <button>修改密码</button>
+      <button>退出登录</button>
+      <span class="avatar">监</span>
+    </div>
+
+    <div class="page-head">
+      <div>
+        <h1>材料审阅</h1>
+        <p>虚构政务服务系统 · 虚构公共服务中心 · 材料版本 v3</p>
+      </div>
+      <a class="back" href="#">← 返回备案详情</a>
+    </div>
+
+    <!-- ============ 审阅工具条 ============ -->
+    <div class="toolbar">
+      <div class="ring-wrap">
+      <div class="ring">
+        <svg width="46" height="46" viewBox="0 0 46 46">
+          <circle cx="23" cy="23" r="19" fill="none" stroke="#e6ecf4" stroke-width="5"/>
+          <circle cx="23" cy="23" r="19" fill="none" stroke="#285bb5" stroke-width="5"
+            stroke-linecap="round" stroke-dasharray="119.4" stroke-dashoffset="119.4" id="ringArc"/>
+        </svg>
+        <div class="val"><span id="ringText">0/11</span><small>已审</small></div>
+      </div>
+      <div class="ring-label">人工审核进度<br><span id="ringHint">尚未开始</span></div>
+      </div>
+      <div class="tally" style="gap:10px">
+        <span>第 <b id="stepNo" style="color:var(--accent)">2</b> 项 / 共 11 项</span>
+        <span>已审 <b id="doneNo">0</b></span>
+      </div>
+      <div class="bar" id="bar" style="width:320px" aria-hidden="true">
+        <i style="background:#25835a"></i><i style="background:#b83347"></i>
+        <i style="background:#bd8328"></i><i style="background:#a9bbce"></i>
+      </div>
+      <div class="grow">
+        <span class="unsaved" id="unsaved" hidden>● 有未保存修改</span>
+        <button class="btn primary">保存并跳到下一项</button>
+      </div>
+    </div>
+
+    <!-- ============ 三栏工作台 ============ -->
+    <div class="workspace" id="workspace">
+      <!-- 中：原文主位 -->
+      <section class="pane">
+        <div class="doc-tools">
+          <select id="fileSel">
+            <option>演示备案表.docx</option>
+            <option>演示定级报告.docx</option>
+            <option>演示专家意见书.docx</option>
+          </select>
+          <a class="link" href="#">下载原件</a>
+          <span class="spacer"></span>
+          <button class="ghost">原文</button>
+          <button class="ghost">并排对照</button>
+        </div>
+        <div class="doc-scroll" id="docScroll">
+          <div class="sheet" id="sheet">
+            <h3>演示备案表.docx</h3>
+            <p class="meta">正文 · 6 段 · 附件版本 v3</p>
+            <p class="sec">正文</p>
+            <p>网络安全等级保护备案表（测试件）</p>
+            <p>备案编号：DEMO-FILING-001</p>
+            <p>系统名称：虚构设施管理系统</p>
+            <p><mark id="mark1">所属单位：虚构资料管理单位</mark></p>
+            <p>安全保护等级：第三级</p>
+            <p>测评机构：虚构测评机构</p>
+            <p>说明：本文件为测试用样例材料，仅用于功能测试，不含真实业务数据。</p>
+            <p class="sec">表一 定级对象</p>
+            <p>定级对象编号：A01</p>
+            <p>定级对象总数：1</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右：审核工作台 -->
+      <section class="pane">
+        <header class="pane-hd">
+          <h2>审核批注</h2><span class="count" id="queueCount">11 项</span>
+          <span class="right">
+            <button class="ghost" style="height:25px;font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:0 8px">显示全部</button>
+          </span>
+        </header>
+        <div class="queue" id="queue"></div>
+        <p class="hint">点击依据可在左侧原文定位；点目录或按 J/K 切换审核项。</p>
+      </section>
+
+      <svg class="connector" id="connector" aria-hidden="true"></svg>
+    </div>
+  </main>
+</div>
+
+<script>
+const RULES = [
+  { id:'object_number', no:1, title:'定级对象编号', ai:'fail',
+    msg:'未见定级对象编号及表一对象总数，无法核对对象编号。',
+    ev:[{ file:'演示备案表.docx', loc:'第 4 段', quote:'所属单位：虚构资料管理单位' }] },
+  { id:'system_and_unit', no:2, title:'系统信息和单位信息', ai:'fail',
+    msg:'备案表所属单位"虚构资料管理单位"与本地名录单位"虚构公共服务中心"不一致，且未见统一社会信用代码、属地和隶属信息。',
+    ev:[{ file:'演示备案表.docx', loc:'第 4 段', quote:'所属单位：虚构资料管理单位' }] },
+  { id:'classification_date', no:3, title:'定级时间', ai:'manual',
+    msg:'材料未见明确的定级日期与投入运行日期，需人工核实是否合理。', ev:[] },
+  { id:'seals', no:4, title:'报告用章', ai:'manual',
+    msg:'扫描件未见盖章位置，需人工核对备案表、定级报告与委托书用章。', ev:[] },
+  { id:'responsible_person', no:5, title:'主管人员', ai:'manual',
+    msg:'未提取到专家意见表签字与定级报告主管人员信息，需人工核对。', ev:[] },
+  { id:'protection_level', no:6, title:'安全保护等级', ai:'manual',
+    msg:'三份材料等级字段需人工比对，模型未能可靠匹配。', ev:[] },
+  { id:'assets', no:7, title:'被测对象资产', ai:'manual',
+    msg:'未取得定级报告的平台构成与拓扑描述，需人工核对网络边界。', ev:[] },
+  { id:'business_description', no:8, title:'业务描述准确性', ai:'manual',
+    msg:'对象描述与备案表记载需人工比对。', ev:[] },
+  { id:'carried_data', no:9, title:'承载数据准确性', ai:'manual',
+    msg:'数据摸底调查材料缺失，无法逐项比对。', ev:[] },
+  { id:'responsible_entity', no:10, title:'责任主体合规性', ai:'manual',
+    msg:'责任主体与运维主体名称需人工核对。', ev:[] },
+  { id:'filing_certificate', no:11, title:'备案证明', ai:'manual',
+    msg:'未见新技术新应用场景，暂判定为待核实以确认是否无需备案证明。', ev:[] },
+]
+
+const state = { current:'system_and_unit', filter:'all', expanded:new Set(['system_and_unit']),
+  human:{}, dirty:{}, evidence:new Set(['system_and_unit:0']) }
+const STATUS_TEXT = { fail:'不通过', pass:'通过', manual:'待核实', pending:'未审核' }
+const STATUS_CLASS = { fail:'fail', pass:'pass', manual:'manual', pending:'pending' }
+
+const queueEl = document.getElementById('queue')
+const connectorEl = document.getElementById('connector')
+
+function humanOf(r){ return state.human[r.id] }
+function levelOf(r){
+  const h = humanOf(r)
+  if (h && h.status !== 'pending') return h.status
+  return 'pending'
+}
+
+function renderQueue(){
+  const items = RULES.filter(r => state.filter==='all' || (state.filter==='pending' && levelOf(r)==='pending') || (state.filter==='fail' && r.ai==='fail'))
+  queueEl.innerHTML = items.map(r => {
+    const lv = levelOf(r)
+    const on = r.id===state.current
+    const aiCls = r.ai==='manual' ? 'manual' : r.ai
+    const head = `
+      <div class="card-top">
+        <div class="ttl"><span class="no">${r.no}</span><h4>${r.title}</h4></div>
+        <span class="status ${lv==='pending'?'pending':lv}">${lv==='pending'?'未审核':STATUS_TEXT[lv]}</span>
+      </div>
+      <div class="ai-line"><span class="tag">AI 预审</span><span>· ${STATUS_TEXT[aiCls]}</span></div>
+      <div class="ai-msg">${r.msg}</div>`
+    if (!on && lv!=='pending'){
+      const h = humanOf(r)
+      return `<article class="card" data-id="${r.id}">
+        ${head}
+        <div class="card-mini" style="padding-top:7px">
+          <span class="who">${h && h.reviewer ? h.reviewer+' · '+h.reviewerAt : '已审核'}</span>
+        </div>
+      </article>`
+    }
+    const evs = r.ev.length ? `<div class="ev-list">${r.ev.map((e,i)=>`
+      <button class="ev ${state.evidence.has(r.id+':'+i)?'on':''}" data-id="${r.id}" data-idx="${i}">
+        <b><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21c3 0 7-1 7-8V5H3v8c0 1-1 2-2 2"/><path d="M7 21h10"/></svg>${e.file} · ${e.loc}</b>
+        <span>${e.quote}</span>
+      </button>`).join('')}</div>` : ''
+    const h = humanOf(r)
+    return `<article class="card ${on?'on':''}" data-id="${r.id}">
+      ${head}
+      ${evs}
+      <div class="edit">
+        <label>人工审核
+          <select data-field="status">
+            <option value="pending" ${!h||h.status==='pending'?'selected':''}>未审核</option>
+            <option value="pass" ${h&&h.status==='pass'?'selected':''}>通过</option>
+            <option value="fail" ${h&&h.status==='fail'?'selected':''}>不通过</option>
+            <option value="manual" ${h&&h.status==='manual'?'selected':''}>待核实（材料不足，无法判定）</option>
+          </select>
+        </label>
+        <label>人工备注
+          <textarea data-field="remark" placeholder="填写需要说明的核对依据（选填）">${h?h.remark:''}</textarea>
+        </label>
+        <div class="edit-row">
+          <button class="btn primary" data-act="save">保存本项</button>
+          <button class="btn" data-act="next">保存并下一项</button>
+          ${h&&h.reviewer?`<span class="who">${h.reviewer} · ${h.reviewerAt}</span>`:''}
+        </div>
+      </div>
+    </article>`
+  }).join('')
+
+  queueEl.querySelectorAll('.ev').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation()
+    const key = b.dataset.id+':'+b.dataset.idx
+    state.evidence.has(key) ? state.evidence.delete(key) : state.evidence.add(key)
+    select(b.dataset.id)
+    state.evidence.add(key)
+    flashMark()
+    renderQueue(); drawLink()
+  }))
+  queueEl.querySelectorAll('.card').forEach(c => c.addEventListener('click', e => {
+    if (e.target.closest('.ev')||e.target.closest('select')||e.target.closest('textarea')) return
+    select(c.dataset.id)
+  }))
+  queueEl.querySelectorAll('[data-act="save"],[data-act="next"]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation()
+    const card = b.closest('.card')
+    const r = RULES.find(x=>x.id===card.dataset.id)
+    const st = card.querySelector('[data-field="status"]').value
+    const rm = card.querySelector('[data-field="remark"]').value
+    state.human[r.id] = { status: st, remark: rm, reviewer:'系统管理员', reviewerAt:'11-27 21:18' }
+    delete state.dirty[r.id]
+    state.expanded.add(r.id)
+    updateProgress()
+    if (b.dataset.act==='next') move(1)
+    renderAll()
+  }))
+  queueEl.querySelectorAll('[data-field]').forEach(f => f.addEventListener('input', () => {
+    const card = f.closest('.card')
+    const r = RULES.find(x => x.id === card.dataset.id)
+    state.dirty[r.id] = true
+    updateProgress()
+  }))
+}
+
+/**
+ * 用途 更新原型中的当前审核项和保存结果进度。
+ * 参数 无。
+ * 返回值 无。
+ */
+function updateProgress(){
+  const total = RULES.length
+  const reviewed = RULES.filter(r => levelOf(r)!=='pending').length
+  const pass = RULES.filter(r => levelOf(r)==='pass').length
+  const fail = RULES.filter(r => levelOf(r)==='fail').length
+  document.getElementById('ringText').textContent = reviewed + '/' + total
+  document.getElementById('ringHint').textContent = reviewed ? ('已记录 ' + reviewed + ' 项') : '尚未开始'
+  document.getElementById('ringArc').setAttribute('stroke-dashoffset', String(119.4*(1-reviewed/total)))
+  document.getElementById('stepNo').textContent = RULES.findIndex(r => r.id===state.current) + 1
+  document.getElementById('doneNo').textContent = reviewed
+  document.getElementById('unsaved').hidden = !Object.values(state.dirty).some(Boolean)
+  const counts = [pass, fail, reviewed - pass - fail, total - reviewed]
+  document.querySelectorAll('#bar i').forEach((segment, index) => {
+    segment.style.width = (counts[index]/total*100)+'%'
+  })
+}
+
+function select(id){
+  state.current = id
+  state.expanded.add(id)
+  renderAll()
+  const el = queueEl.querySelector('.card[data-id="'+id+'"]')
+  if (el) el.scrollIntoView({ block:'nearest', behavior:'smooth' })
+  setTimeout(flashMark, 60)
+}
+
+function flashMark(){
+  document.querySelectorAll('mark').forEach(m => { m.classList.remove('flash'); void m.offsetWidth })
+  const m = document.getElementById('mark1')
+  if (m) { m.classList.add('flash'); m.scrollIntoView({ block:'center', behavior:'smooth' }) }
+}
+
+function move(step){
+  const ids = RULES.map(r=>r.id)
+  const i = ids.indexOf(state.current)
+  select(ids[(i+step+ids.length)%ids.length])
+}
+
+function drawLink(){
+  connectorEl.innerHTML = ''
+  // 只画当前激活的一条连线；其余依据靠原文段落的左侧竖条表达
+  const ev = queueEl.querySelector('.ev.on')
+  const mark = document.getElementById('mark1')
+  if (!ev || !mark) return
+  const ws = document.getElementById('workspace').getBoundingClientRect()
+  const a = ev.getBoundingClientRect(), b = mark.getBoundingClientRect()
+  const x = a.left - ws.left, y = a.top + a.height/2 - ws.top
+  const ex = b.right - ws.left, ey = b.top + b.height/2 - ws.top
+  const bend = (ex-x)*0.45
+  connectorEl.innerHTML = `<path d="M ${x} ${y} C ${x+bend} ${y}, ${ex-bend} ${ey}, ${ex} ${ey}"
+      stroke="#9dbbe8" stroke-width="1.6"/>
+    <circle cx="${x}" cy="${y}" r="4" fill="#285bb5"/>
+    <circle cx="${ex}" cy="${ey}" r="4" fill="#e8b93c"/>`
+}
+
+function renderAll(){ renderQueue(); updateProgress(); requestAnimationFrame(drawLink) }
+
+document.querySelectorAll('#filterSeg button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#filterSeg button').forEach(x=>x.classList.remove('on'))
+  b.classList.add('on'); state.filter = b.dataset.filter; renderAll()
+}))
+
+const preset = new URLSearchParams(location.search)
+if (preset.has('demo')) {
+  state.human = {
+    object_number: { status:'pass', remark:'表一对象总数 1 与材料一致。', reviewer:'系统管理员', reviewerAt:'01-15 09:02' },
+    classification_date: { status:'manual'==='x'?'':'pass', remark:'定级时间 2026-03 与投入运行时间相符。', reviewer:'系统管理员', reviewerAt:'01-15 09:05' },
+    seals: { status:'fail', remark:'备案表未加盖公章，已通知机构补正。', reviewer:'系统管理员', reviewerAt:'01-15 09:09' },
+    responsible_person: { status:'pass', remark:'', reviewer:'系统管理员', reviewerAt:'01-15 09:12' },
+  }
+  state.current = 'protection_level'
+}
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select')) return
+  if (e.key==='j'||e.key==='ArrowDown'){ e.preventDefault(); move(1) }
+  if (e.key==='k'||e.key==='ArrowUp'){ e.preventDefault(); move(-1) }
+})
+window.addEventListener('resize', drawLink)
+document.getElementById('docScroll').addEventListener('scroll', drawLink)
+renderAll()
+</script>
+</body>
+</html>

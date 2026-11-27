@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import spaceUrl from '../assets/signin-space.webp?url'
+import spaceUrl from '../assets/dashboard-space.webp?url'
 
 /**
  * 驾驶舱的三维空间背景层。

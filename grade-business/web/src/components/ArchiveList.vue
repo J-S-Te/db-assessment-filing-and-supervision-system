@@ -37,7 +37,7 @@ const { keyword, filter, extraFilter, page, failure, loading, load, search, rese
         <label class="field filter-keyword">
           <span>关键词</span>
           <input v-model="keyword" type="search" maxlength="120"
-            :placeholder="kind === 'units' ? '单位名称' : '系统 / 单位 / 备案编号'">
+            :placeholder="kind === 'units' ? '单位名称 / 信用代码' : '系统 / 单位 / 备案编号 / 信用代码'">
         </label>
         <button class="button primary" type="submit"><Search :size="16" aria-hidden="true" />查询</button>
         <button class="button neutral" type="button" @click="reset">重置</button>
@@ -47,12 +47,15 @@ const { keyword, filter, extraFilter, page, failure, loading, load, search, rese
     </form>
 
     <AsyncState :loading="loading" :error="failure" :empty="!page.items.length"
-      empty-text="未找到符合条件的档案。" @retry="load">
+      :empty-text="kind === 'units' ? '未找到符合条件的单位档案。' : '未找到符合条件的系统档案。备案终审通过后进入系统档案。'"
+      @retry="load">
       <div class="table-wrap v2-list-table">
         <table class="data-table">
           <thead>
             <tr>
-              <template v-if="kind === 'units'"><th>单位名称</th><th>系统数</th><th>有效系统</th></template>
+              <template v-if="kind === 'units'">
+                <th>单位名称</th><th>单位类型</th><th>所属区县</th><th>系统数</th><th>有效系统</th><th>名录状态</th>
+              </template>
               <template v-else><th>系统名称</th><th>所属单位</th><th>等保级别</th><th>备案状态</th><th>登记资产</th></template>
               <th>最近测评提交</th><th>未销项隐患</th><th>操作</th>
             </tr>
@@ -60,9 +63,12 @@ const { keyword, filter, extraFilter, page, failure, loading, load, search, rese
           <tbody>
             <tr v-for="row in page.items" :key="'key' in row ? row.key : row.id">
               <template v-if="'key' in row">
-                <td><strong class="emphasis">{{ row.organizationName }}</strong></td>
+                <td><strong class="emphasis">{{ row.directoryName || row.organizationName }}</strong></td>
+                <td>{{ row.classification || '—' }}</td>
+                <td>{{ row.district || '—' }}</td>
                 <td>{{ row.systemCount }}</td>
                 <td>{{ row.activeSystemCount }}</td>
+                <td>{{ row.directoryStatus === 'active' ? '有效' : row.directoryStatus === 'inactive' ? '已停用' : '—' }}</td>
               </template>
               <template v-else>
                 <td><strong class="emphasis">{{ row.systemName }}</strong><br><span class="code">{{ row.filingNumber }}</span></td>
