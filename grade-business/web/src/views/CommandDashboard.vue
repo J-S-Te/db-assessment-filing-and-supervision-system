@@ -288,11 +288,23 @@ async function toggleFullscreen() {
   if (!screen.value || !fullscreenAvailable.value) return
   fullscreenMessage.value = ''
   try {
-    if (fullscreen.value) await document.exitFullscreen()
+    if (document.fullscreenElement === screen.value) await document.exitFullscreen()
     else await screen.value.requestFullscreen()
   } catch {
     fullscreenMessage.value = '暂时无法切换全屏，请检查浏览器设置。'
   }
+}
+
+/**
+ * 用途 在现有驾驶舱全屏时响应 Esc，保留打开的业务弹窗对按键的处理。
+ * 参数 event 为当前页的键盘事件。
+ * 返回值 无。
+ */
+function onFullscreenEscape(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || event.defaultPrevented || !screen.value
+    || document.fullscreenElement !== screen.value || screen.value.querySelector('dialog[open]')) return
+  event.preventDefault()
+  void toggleFullscreen()
 }
 
 /**
@@ -367,12 +379,14 @@ onMounted(() => {
   }
   fullscreenAvailable.value = document.fullscreenEnabled && typeof screen.value?.requestFullscreen === 'function'
   document.addEventListener('fullscreenchange', syncFullscreen)
+  document.addEventListener('keydown', onFullscreenEscape)
 })
 onScopeDispose(() => {
   window.removeEventListener('storage', onSessionStorage)
   window.removeEventListener(dashboardAccessEvent, verifyDashboardSession)
   window.clearTimeout(returnTimer)
   document.removeEventListener('fullscreenchange', syncFullscreen)
+  document.removeEventListener('keydown', onFullscreenEscape)
 })
 </script>
 

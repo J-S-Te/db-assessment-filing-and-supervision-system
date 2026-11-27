@@ -224,7 +224,8 @@ onScopeDispose(() => request?.abort())
         </div>
       </form>
       <AsyncState :loading="loading" :error="failure" :empty="!page.items.length"
-        :empty-text="operator ? '未找到符合条件的整改单。' : major ? '未找到符合条件的重大风险。' : '未找到符合条件的漏洞。'"
+        :empty-text="operator ? '暂无符合条件的整改单。'
+          : major ? '暂无符合条件的重大风险。' : '暂无符合条件的漏洞。'"
         @retry="load()">
         <div class="table-wrap v2-list-table">
           <table class="data-table">

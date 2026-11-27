@@ -12,7 +12,7 @@ import { api, errorText, params } from './lib/api'
 import { dashboardPath, dashboardTabLocation } from './lib/dashboard'
 import { queryValue } from './lib/paging'
 import { publicationUnread, refreshPublicationUnread } from './lib/publications'
-import { canVisit, session } from './lib/session'
+import { canVisit, deniedRoute, session } from './lib/session'
 import { businessScopes, refreshBusinessOnFocus } from './lib/scopedBusiness'
 import { cancelWorkbenchRefresh, refreshWorkbench, workbench } from './lib/workbench'
 
@@ -175,7 +175,7 @@ const visibleNavigation = computed(() => navigation.map(group => ({
   ...group,
   items: group.items.filter(item => session.value?.menu.includes(item.key)).map(item =>
     item.key === 'system' && session.value?.roleCode === 'ROLE_REGULATOR'
-      ? { ...item, path: '/operator-registrations' } : item),
+      ? { ...item, name: '注册审核', path: '/operator-registrations' } : item),
 })).filter(group => group.items.length))
 const activeScopedNavigation = computed(() => scopedAudience.value && scopedNavigation[scopedAudience.value])
 const activeScopedGroup = computed(() => {
@@ -389,6 +389,9 @@ onBeforeUnmount(() => {
         </span>
       </header>
       <main id="scoped-content" class="content v2-content" tabindex="-1">
+        <p v-if="deniedRoute" class="form-message error-message" role="alert">
+          当前账号无权访问该页面，已返回授权首页。
+        </p>
         <RouterView />
       </main>
       <CopyrightFooter />
@@ -397,7 +400,7 @@ onBeforeUnmount(() => {
   <div v-else-if="session" class="workspace v2-shell regulator-shell">
     <a class="skip-link" href="#workspace-content">跳至主要内容</a>
     <aside id="v2-sidebar" class="v2-sidebar" :class="{ 'v2-sidebar-open': sidebarOpen }">
-      <RouterLink class="v2-brand" to="/" aria-label="网络安全等级保护平台工作台">
+      <RouterLink class="v2-brand" :to="session.home" aria-label="网络安全等级保护平台首页">
         <span class="v2-logo" aria-hidden="true"><ShieldCheck :size="21" /></span>
         <span>网络安全等级保护平台<small>网络安全监管</small></span>
       </RouterLink>
@@ -463,6 +466,9 @@ onBeforeUnmount(() => {
           <small>{{ session.roleCode === 'ROLE_SYS_ADMIN' ? '系统管理员' : '监管员' }}</small></span>
       </header>
       <main id="workspace-content" ref="backdropRef" class="content v2-content" tabindex="-1">
+        <p v-if="deniedRoute" class="form-message error-message" role="alert">
+          当前账号无权访问该页面，已返回授权首页。
+        </p>
         <div :key="'scan-' + activeGroup" class="regulator-navigation-scan" aria-hidden="true"></div>
         <template v-if="module">
           <header :key="module.key" class="v2-page-head regulator-module-head">

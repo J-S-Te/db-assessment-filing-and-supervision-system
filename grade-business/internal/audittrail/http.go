@@ -26,13 +26,14 @@ func New(pool *pgxpool.Pool) *Service {
 // 返回值 无。
 func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/audit", s.handleList)
+	mux.HandleFunc("GET /api/v1/audit/export", s.handleExport)
 }
 
 // handleList 验证输入并按已持久化的操作时间返回有界结果。
 // 参数 w 为响应写入端，r 为审计列表请求。
 // 返回值 无。
 func (s *Service) handleList(w http.ResponseWriter, r *http.Request) {
-	filters, err := parseFilter(r.URL.RawQuery)
+	filters, err := parseFilter(r.URL.RawQuery, true)
 	if err != nil {
 		httpx.Error(w, 400, "invalid_input", "请核对业务类型、关键词和分页条件。")
 		return

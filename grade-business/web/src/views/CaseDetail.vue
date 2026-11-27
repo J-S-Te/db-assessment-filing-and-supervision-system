@@ -2,7 +2,7 @@
 import { hasPermission } from '../lib/session'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, Check, ChevronRight, History, Pencil, Send } from '@lucide/vue'
+import { ArrowLeft, Check, ChevronRight, FileSearch, History, Pencil, Send } from '@lucide/vue'
 import AsyncState from '../components/AsyncState.vue'
 import BusinessReceiptDialog from '../components/BusinessReceiptDialog.vue'
 import FilingWithdrawalPanel from '../components/FilingWithdrawalPanel.vue'
@@ -34,6 +34,12 @@ const canEditCase = computed(() => hasPermission('admin.grade.case.edit'))
 const canReviewCase = computed(() => hasPermission(
   props.kind === 'filings' ? 'admin.grade.filing.audit' : 'admin.grade.report.audit',
 ))
+const filingSections = [
+  { id: 'filing-overview', title: '基本信息' },
+  { id: 'filing-materials', title: '业务材料' },
+  { id: 'filing-precheck', title: '材料规则预审' },
+  { id: 'filing-history', title: '审核记录' },
+]
 const reportTab = ref<'overview' | 'extraction' | 'compliance' | 'comparison' | 'result' | 'history' | 'attachments'>('overview')
 const attachments = shallowRef<Attachment[]>([])
 const history = shallowRef<Review[]>([])
@@ -146,6 +152,17 @@ async function loadHistory() {
  */
 function refresh() {
   return Promise.all([loadRecord(), loadAttachments(), loadHistory()])
+}
+
+/**
+ * 用途 在备案详情窗口内滚动到指定分区，并将键盘焦点移入该分区。
+ * 参数 id 为分区的元素标识。
+ * 返回值 无。
+ */
+function jumpToFilingSection(id: string) {
+  const section = document.getElementById(id)
+  section?.scrollIntoView({ block: 'start' })
+  section?.focus({ preventScroll: true })
 }
 
 /**
@@ -291,6 +308,10 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </header>
+        <nav v-if="kind === 'filings'" class="v2-tabs filing-section-nav" aria-label="备案详情分区">
+          <a v-for="section in filingSections" :key="section.id" class="v2-tab"
+            :href="'#' + section.id" @click.prevent="jumpToFilingSection(section.id)">{{ section.title }}</a>
+        </nav>
         <p v-if="actionNotice" class="form-message success-message detail-notice" role="status">{{ actionNotice }}</p>
         <FilingWithdrawalPanel v-if="hasPermission('admin.grade.case.edit') && kind === 'filings' && record.initialReviewAudience"
           :path="path" :version="record.version" :disabled="changing" @changed="refresh" />
@@ -321,6 +342,8 @@ onBeforeUnmount(() => {
         <div class="detail-grid">
           <div v-show="kind === 'filings' || reportTab !== 'history'" class="detail-main">
             <section v-show="kind === 'filings' || reportTab === 'overview'" class="panel detail-panel"
+              :id="kind === 'filings' ? 'filing-overview' : undefined"
+              :tabindex="kind === 'filings' ? -1 : undefined"
               aria-labelledby="overview-title">
               <header class="panel-heading panel-compact"><h2 id="overview-title">基本信息</h2></header>
               <dl class="facts">
@@ -356,6 +379,8 @@ onBeforeUnmount(() => {
               </div>
             </section>
             <AttachmentPanel v-show="kind === 'filings' || reportTab === 'attachments'" :key="path"
+              :id="kind === 'filings' ? 'filing-materials' : undefined"
+              :tabindex="kind === 'filings' ? -1 : undefined"
               :path="path" :kind="kind" :attachments="attachments"
               :required="record.requiredMaterials"
               :editable="canEditCase && record.allowedActions.includes('edit')" :loading="attachmentsLoading" :error="attachmentError"
@@ -364,7 +389,21 @@ onBeforeUnmount(() => {
               :assessment="record.classificationAssessment" :declared="record.level" />
             <FilingPolicyMaterials v-if="kind === 'filings' && record.policyMaterials?.length"
               :rules="record.policyMaterials" :files="attachments" />
-            <PrecheckPanel v-if="hasPermission('admin.grade.case.edit') && kind === 'filings'" :path="path" :revision="revision" />
+            <template v-if="kind === 'filings'">
+              <PrecheckPanel v-if="canEditCase" id="filing-precheck" tabindex="-1"
+                :path="path" :revision="revision" />
+              <section v-else id="filing-precheck" tabindex="-1" class="panel detail-panel"
+                aria-labelledby="precheck-title">
+                <header class="panel-heading panel-compact">
+                  <div class="heading-icon">
+                    <FileSearch :size="20" aria-hidden="true" /><h2 id="precheck-title">材料规则预审</h2>
+                  </div>
+                </header>
+                <div class="precheck-body">
+                  <p class="hint-row">当前账号无权查看或发起材料规则预审。</p>
+                </div>
+              </section>
+            </template>
             <div v-if="canEditCase && reportTab === 'extraction'">
               <ReportExtractionPanel :key="path" :path="path" :attachments="attachments" />
             </div>
@@ -377,6 +416,8 @@ onBeforeUnmount(() => {
           </div>
 
           <section v-show="kind === 'filings' || reportTab === 'history'" class="panel detail-panel timeline-panel"
+            :id="kind === 'filings' ? 'filing-history' : undefined"
+            :tabindex="kind === 'filings' ? -1 : undefined"
             aria-labelledby="history-title">
             <header class="panel-heading panel-compact">
               <div class="heading-icon"><History :size="20" aria-hidden="true" /><h2 id="history-title">审核记录</h2></div>
@@ -423,4 +464,5 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .return-reason { white-space: pre-wrap; overflow-wrap: anywhere; }
+.filing-section-nav { flex-wrap: wrap; }
 </style>

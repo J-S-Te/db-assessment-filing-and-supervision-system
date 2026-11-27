@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { canVisit, refreshSession, session } from './lib/session'
+import { canVisit, deniedRoute, refreshSession, session } from './lib/session'
 import { caseLabels, type CaseKind } from './lib/domain'
 
 /**
@@ -206,7 +206,10 @@ router.beforeEach(async to => {
   }
   if (actor.mustChangePassword) return to.path === '/account/password' ? true : '/account/password'
   if (to.path === '/account/password') return true
-  if (!canVisit(actor, to.path)) return actor.home
+  if (!canVisit(actor, to.path)) {
+    if (!publicPage) deniedRoute.value = to.path
+    return actor.home
+  }
   if (actor.subjectName) {
     const key = actor.portal === 'institution' ? 'institution' : 'organization'
     const other = actor.portal === 'institution' ? 'organization' : 'institution'
@@ -219,6 +222,10 @@ router.beforeEach(async to => {
     }
   }
   return true
+})
+
+router.afterEach((to, _from, failure) => {
+  if (!failure && to.redirectedFrom?.path !== deniedRoute.value) deniedRoute.value = undefined
 })
 
 window.addEventListener('grade-business-session-expired', () => {
