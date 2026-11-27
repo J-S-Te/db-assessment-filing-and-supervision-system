@@ -14,22 +14,19 @@ let textureRequest: AbortController | undefined
 let layout = { width: 0, height: 0, modelWidth: 0 }
 let impactStarted = -Infinity
 let frameId = 0
-let lastDraw = -Infinity
-let needsDraw = true
 let mounted = false
 
 /**
- * 用途 合并同一帧内的姿态变更与响应式渲染请求。
+ * 用途 合并尺寸、姿态与冲击波的绘制请求，每帧最多绘制一次。
  * 参数 无。
  * 返回值 无。
  */
 function requestDraw() {
-  needsDraw = true
   if (renderer && !frameId) frameId = requestAnimationFrame(draw)
 }
 
 /**
- * 用途 根据姿态、呼吸灯和点击时刻重绘同一个盾牌画布。
+ * 用途 绘制当前姿态，只有冲击波尚未结束时才继续安排下一帧。
  * 参数 time 为浏览器当前的动画帧时间。
  * 返回值 无。
  */
@@ -37,21 +34,10 @@ function draw(time: number) {
   frameId = 0
   if (!renderer || !layout.width || !layout.height || !layout.modelWidth) return
 
-  if (needsDraw || time - lastDraw >= 30) {
-    const reduceMotion = motion?.matches
-    renderer.draw({
-      ...layout,
-      pitch: props.pitch,
-      yaw: props.yaw,
-      glow: reduceMotion ? .85 : .85 + .15 * Math.cos(time / 3400 * 2 * Math.PI),
-      impact: reduceMotion ? 1 : Math.max(0, Math.min(1, (time - impactStarted) / 500)),
-    })
-    if (!rendered.value) rendered.value = true
-    needsDraw = false
-    lastDraw = time
-  }
-  // 转动时按指针更新，待机呼吸灯每秒绘制约 30 帧，悬浮由 CSS 单独合成。
-  if (!motion?.matches) frameId = requestAnimationFrame(draw)
+  const impact = motion?.matches ? 1 : Math.max(0, Math.min(1, (time - impactStarted) / 500))
+  renderer.draw({ ...layout, pitch: props.pitch, yaw: props.yaw, impact })
+  if (!rendered.value) rendered.value = true
+  if (impact < 1) requestDraw()
 }
 
 /**

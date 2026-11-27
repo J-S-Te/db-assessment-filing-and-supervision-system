@@ -32,7 +32,6 @@ void main() {
 const fragmentShader = `
 precision mediump float;
 uniform sampler2D u_texture;
-uniform float u_glow;
 uniform mediump float u_impact;
 varying mediump vec2 v_uv;
 varying mediump vec4 v_style;
@@ -51,7 +50,7 @@ void main() {
       float line = smoothstep(0.90, 0.96, radius) * (1.0 - smoothstep(0.98, 1.0, radius));
       vec3 light = delta.x > 0.0 && abs(delta.y) < 0.67
         ? vec3(1.0, 0.36, 0.50) : vec3(0.40, 0.80, 1.0);
-      gl_FragColor = vec4(light, line * u_glow * 0.65);
+      gl_FragColor = vec4(light, line * 0.55);
     } else {
       if (u_impact >= 1.0) discard;
       float line = smoothstep(0.87, 0.94, radius) * (1.0 - smoothstep(0.95, 1.0, radius));
@@ -68,9 +67,11 @@ interface RenderFrame {
   modelWidth: number
   pitch: number
   yaw: number
-  glow: number
   impact: number
 }
+
+const maxCanvasPixels = 540_000
+const maxPixelRatio = 1.75
 
 /**
  * 用途 构建 WebGL 着色器，在编译失败时释放对象。
@@ -158,20 +159,19 @@ export function createShieldRenderer(canvas: HTMLCanvasElement, image: ImageBitm
   gl.uniform1i(gl.getUniformLocation(program, 'u_texture'), 0)
   const camera = gl.getUniformLocation(program, 'u_camera')
   const angles = gl.getUniformLocation(program, 'u_angles')
-  const glow = gl.getUniformLocation(program, 'u_glow')
   const impact = gl.getUniformLocation(program, 'u_impact')
   gl.enable(gl.DEPTH_TEST)
   gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
   return {
     /**
-     * 用途 先绘制实体并写入深度，再叠加核心的呼吸光与冲击波。
-     * 参数 frame 为布局尺寸、姿态以及当前时刻的发光和冲击波状态。
+     * 用途 先绘制盾牌实体，再按深度叠加核心光环和冲击波。
+     * 参数 frame 为布局尺寸、姿态以及当前时刻的冲击波状态。
      * 返回值 无。
      */
     draw(frame: RenderFrame) {
-      // 控制彩色和深度缓冲占用，高像素密度设备也只分配有限画素。
-      const ratio = Math.min(window.devicePixelRatio, 2, Math.sqrt(720_000 / (frame.width * frame.height)))
+      const ratio = Math.min(window.devicePixelRatio, maxPixelRatio,
+        Math.sqrt(maxCanvasPixels / (frame.width * frame.height)))
       const width = Math.max(1, Math.floor(frame.width * ratio))
       const height = Math.max(1, Math.floor(frame.height * ratio))
       if (canvas.width !== width || canvas.height !== height) {
@@ -182,7 +182,6 @@ export function createShieldRenderer(canvas: HTMLCanvasElement, image: ImageBitm
       gl.uniform2f(angles, frame.pitch * Math.PI / 180, frame.yaw * Math.PI / 180)
       gl.uniform3f(camera, 2 * frame.modelWidth / frame.width,
         2 * frame.modelWidth / frame.height, frame.modelWidth / 1000)
-      gl.uniform1f(glow, frame.glow)
       gl.uniform1f(impact, frame.impact)
       gl.depthMask(true)
       gl.disable(gl.BLEND)
