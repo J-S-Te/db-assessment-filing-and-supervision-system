@@ -4,29 +4,36 @@ import { ArrowUpRight, ListOrdered, Map } from '@lucide/vue'
 import type { RouteLocationRaw } from 'vue-router'
 import DashboardDistrictMap from './DashboardDistrictMap.vue'
 import { dashboardNumber } from '../lib/dashboard'
+import { districtAsset, loadPublishedDistrictBoundaries } from '../lib/dashboardBoundary'
 import { vDashboardScroll } from '../lib/dashboardAutoScroll'
 import { districtHeatMap, projectDistrictBoundaries, readDistrictBoundaries } from '../lib/dashboardGeo'
 import { loadDistrictBoundaryFile } from '../lib/dashboardGeoStorage'
 import type { DistrictResponse, ResponseSummary } from '../lib/districtResponse'
 import { risks } from '../lib/domain'
 import { hazardPath, hazardStatuses } from '../lib/hazards'
+import type { DashboardArea } from '../lib/session'
 
 const props = defineProps<{
   summary?: ResponseSummary; selected: string | null; detail?: DistrictResponse
   loadingSummary: boolean; failedSummary: boolean; loadingDetail: boolean; failedDetail: boolean
-  mapSettings: RouteLocationRaw
+  mapSettings: RouteLocationRaw; area?: DashboardArea; locked?: boolean
 }>()
 const emit = defineEmits<{ select: [district: string | null]; retrySummary: []; retryDetail: [] }>()
-const districtAssets = import.meta.glob<string>('../assets/district-boundaries.geojson', {
-  eager: true, import: 'default', query: '?url&no-inline',
-})
-const districtAsset = districtAssets['../assets/district-boundaries.geojson']
 const mapVisible = ref(Boolean(districtAsset))
 const boundaryPaths = shallowRef<ReturnType<typeof projectDistrictBoundaries>>([])
 const boundaryLoading = ref(false)
 const boundaryIssue = ref(false)
+const rankedDistricts = computed(() => {
+  const items = props.summary?.items ?? []
+  if (!props.area || !props.summary) return items
+  const reported = new Set(items.map(item => item.district))
+  const empty = props.area.districts
+    .filter(district => !reported.has(district) && (props.locked || district !== props.area?.name))
+    .map(district => ({ district, systems: 0, high: 0, medium: 0, low: 0, overdue: 0 }))
+  return [...items, ...empty]
+})
 const heatmap = computed(() => boundaryPaths.value.length
-  ? districtHeatMap(boundaryPaths.value, props.summary?.items ?? [], 'high') : undefined)
+  ? districtHeatMap(boundaryPaths.value, rankedDistricts.value, 'high') : undefined)
 const detailDistrict = computed(() => props.detail ? props.detail.district : props.selected)
 const measures = [
   { key: 'high', label: '高风险', tone: 'high' },
@@ -46,17 +53,12 @@ async function showMap() {
   boundaryLoading.value = true
   boundaryIssue.value = false
   try {
-    let source: string | null
-    if (districtAsset) {
-      const response = await fetch(districtAsset, {
-        signal: AbortSignal.timeout(8_000), redirect: 'error', mode: 'same-origin',
-      })
-      if (!response.ok) throw new Error('辖区地图读取失败')
-      source = await response.text()
+    if (districtAsset || props.area) {
+      boundaryPaths.value = projectDistrictBoundaries(await loadPublishedDistrictBoundaries(), props.area?.districts)
     } else {
-      source = loadDistrictBoundaryFile().source
+      const { source } = loadDistrictBoundaryFile()
+      boundaryPaths.value = source ? projectDistrictBoundaries(readDistrictBoundaries(source)) : []
     }
-    boundaryPaths.value = source ? projectDistrictBoundaries(readDistrictBoundaries(source)) : []
   } catch {
     boundaryPaths.value = []
     boundaryIssue.value = true
@@ -80,8 +82,8 @@ onMounted(() => { if (districtAsset) void showMap() })
             <Map aria-hidden="true" />地图
           </button>
         </div>
-        <button class="response-button" type="button" :aria-pressed="selected === null"
-          @click="emit('select', null)">全域</button>
+        <button v-if="!locked" class="response-button" type="button" :aria-pressed="selected === null"
+          @click="emit('select', null)">{{ area ? '市域' : '全域' }}</button>
       </header>
       <p v-if="failedSummary" class="response-status" role="status">
         {{ summary ? '区县排序更新失败' : '暂时无法读取区县排序' }}
@@ -103,16 +105,16 @@ onMounted(() => { if (districtAsset) void showMap() })
           <p class="response-note" role="status">{{ boundaryLoading ? '正在加载辖区地图…'
             : boundaryIssue ? '辖区地图读取失败' : '尚未配置辖区地图' }}</p>
           <button v-if="boundaryIssue" class="response-button" type="button" @click="showMap">重试</button>
-          <RouterLink v-if="!districtAsset && !boundaryLoading" :to="mapSettings" class="screen-link">
+          <RouterLink v-if="!area && !districtAsset && !boundaryLoading" :to="mapSettings" class="screen-link">
             导入区县边界<ArrowUpRight aria-hidden="true" />
           </RouterLink>
         </div>
       </template>
-      <div v-else-if="summary?.items.length" class="district-scroll">
+      <div v-else-if="rankedDistricts.length" class="district-scroll">
         <table>
           <thead><tr><th scope="col">区县</th><th scope="col">高风险</th><th scope="col">逾期</th></tr></thead>
           <tbody>
-            <tr v-for="item in summary.items" :key="item.district" :class="{ picked: selected === item.district }">
+            <tr v-for="item in rankedDistricts" :key="item.district" :class="{ picked: selected === item.district }">
               <th scope="row">
                 <button class="district-name" type="button" :aria-pressed="selected === item.district"
                   @click="emit('select', item.district)">{{ item.district }}</button>
@@ -127,7 +129,7 @@ onMounted(() => { if (districtAsset) void showMap() })
       <p v-if="summary?.omittedDistricts" class="response-note">
         另有 {{ dashboardNumber(summary.omittedDistricts) }} 个区县超出展示上限
       </p>
-      <button v-if="summary?.withoutDistrict.systems" class="unassigned response-button" type="button"
+      <button v-if="!area && summary?.withoutDistrict.systems" class="unassigned response-button" type="button"
         :aria-pressed="selected === ''" @click="emit('select', '')">
         未归区 · {{ dashboardNumber(summary.withoutDistrict.systems) }} 个系统
       </button>
@@ -135,9 +137,9 @@ onMounted(() => { if (districtAsset) void showMap() })
 
     <section class="district-detail" aria-label="当前范围处置详情" :aria-busy="loadingDetail">
       <header class="response-heading">
-        <h3>{{ detailDistrict === null ? '全域' : detailDistrict || '未归区' }}</h3>
+        <h3>{{ detailDistrict === null ? (area?.name ?? '全域') : detailDistrict || '未归区' }}</h3>
         <span v-if="loadingDetail && detailDistrict !== selected" class="response-note response-switching">
-          正在切换至{{ selected === null ? '全域' : selected || '未归区' }}
+          正在切换至{{ selected === null ? (area?.name ?? '全域') : selected || '未归区' }}
         </span>
         <span v-else-if="detail" class="response-note">涉及 {{ dashboardNumber(detail.counts.systems) }} 个系统</span>
       </header>
@@ -159,7 +161,8 @@ onMounted(() => { if (districtAsset) void showMap() })
           v-dashboard-scroll>
           <ul class="district-task-rows" data-dashboard-loop-original aria-label="重点隐患">
             <li v-for="item in detail.tasks" :key="item.id">
-              <RouterLink class="district-task" :to="hazardPath(item.id)">
+              <component :is="area ? 'div' : 'RouterLink'" class="district-task"
+                :to="area ? undefined : hazardPath(item.id)">
                 <span>
                   <strong>{{ item.title }}</strong>
                   <small>{{ item.systemName }} · {{ item.organizationName }}</small>
@@ -170,8 +173,8 @@ onMounted(() => { if (districtAsset) void showMap() })
                     <time :datetime="item.deadline">截止 {{ item.deadline }}</time>
                   </span>
                 </span>
-                <ArrowUpRight aria-hidden="true" />
-              </RouterLink>
+                <ArrowUpRight v-if="!area" aria-hidden="true" />
+              </component>
             </li>
           </ul>
           <ul class="district-task-rows" data-dashboard-loop-copy aria-hidden="true" hidden></ul>

@@ -47,7 +47,13 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: () => import('./views/SignIn.vue'), meta: { authLayout: true } },
+    { path: '/operator-register', component: () => import('./views/OperatorRegister.vue'),
+      meta: { authLayout: true, title: '运营单位注册' } },
+    { path: '/operator-registrations', component: () => import('./views/OperatorRegistrationReview.vue'),
+      meta: { section: 'operator-registrations', title: '注册审核' } },
     { path: '/account/password', component: () => import('./views/SignIn.vue'), meta: { authLayout: true } },
+    { path: '/institution-accounts', component: () => import('./views/InstitutionAccounts.vue'),
+      meta: { section: 'institution-accounts', title: '机构用户' } },
     { path: '/', component: () => import('./views/Workbench.vue'), meta: { section: 'home', title: '工作台' } },
     ...caseRoutes('filings'),
     { path: '/filing-material-policy', component: () => import('./views/FilingMaterialPolicy.vue'),
@@ -187,15 +193,16 @@ export const router = createRouter({
 })
 
 router.beforeEach(async to => {
+  const publicPage = to.path === '/login' || to.path === '/operator-register'
   let actor
   try {
     actor = await refreshSession()
   } catch {
     session.value = null
-    return to.path === '/login' ? true : { path: '/login', query: { redirect: to.fullPath } }
+    return publicPage ? true : { path: '/login', query: { redirect: to.fullPath } }
   }
   if (!actor) {
-    return to.path === '/login' ? true : { path: '/login', query: { redirect: to.fullPath } }
+    return publicPage ? true : { path: '/login', query: { redirect: to.fullPath } }
   }
   if (actor.mustChangePassword) return to.path === '/account/password' ? true : '/account/password'
   if (to.path === '/account/password') return true

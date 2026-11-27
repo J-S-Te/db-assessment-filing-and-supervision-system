@@ -236,6 +236,8 @@ func respond(w http.ResponseWriter, status int, result any, err error) {
 		httpx.Error(w, http.StatusBadRequest, "validation_error", "请核对名录字段、筛选条件和所选归属。")
 	case errors.Is(err, pgx.ErrNoRows):
 		httpx.Error(w, http.StatusNotFound, "not_found", "未找到当前范围内的目录记录。")
+	case errors.Is(err, errDistrictManaged):
+		httpx.Error(w, http.StatusForbidden, "directory_district_managed", "衢州单位的监管区划由系统管理员调整。")
 	case errors.Is(err, errForbidden):
 		httpx.Error(w, http.StatusForbidden, "directory_read_only", "此记录由监管端或已共享单位统一维护。")
 	case errors.Is(err, errVersion):

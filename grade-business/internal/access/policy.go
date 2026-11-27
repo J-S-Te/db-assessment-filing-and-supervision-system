@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -36,36 +37,19 @@ func Current(ctx context.Context) (Principal, bool) {
 	return value, ok
 }
 
-var districtNames = map[string]string{
-	"331000": "台州市", "331002": "椒江区", "331003": "黄岩区", "331004": "路桥区",
-	"331022": "三门县", "331023": "天台县", "331024": "仙居县",
-	"331081": "温岭市", "331082": "临海市", "331083": "玉环市",
-}
-
-// Districts 为辖区查询提供当前账号可访问的标准区县名称与编码。
-// 参数 ctx 为带监管身份的业务请求上下文。
-// 返回值 nil 表示无需辖区过滤，非空切片用于匹配已归属的单位。
-func Districts(ctx context.Context) []string {
-	actor, ok := Current(ctx)
-	if !ok || actor.Role != Regulator {
-		return nil
-	}
-	if actor.AreaCode != "331000" {
-		return []string{actor.AreaCode, districtNames[actor.AreaCode]}
-	}
-	result := make([]string, 0, 2*len(districtNames))
-	for code, name := range districtNames {
-		result = append(result, code, name)
-	}
-	return result
-}
-
 const directoryOptions = "/api/v1/directory/options"
 
 // allowed 按实际匹配的服务端路由与方法判断角色授权。
-// 参数 role 为会话角色，pattern 为 ServeMux 解析的路由模式。
+// 参数 actor 为当前会话身份，pattern 为 ServeMux 解析的路由模式。
 // 返回值 当前角色能进入该业务路由时为真。
-func allowed(role Role, pattern string) bool {
+func allowed(actor Principal, pattern string) bool {
+	role := actor.Role
+	if pattern == institutionAccountPattern {
+		return role == SystemAdmin
+	}
+	if pattern == registrationListPattern || pattern == registrationReviewPattern {
+		return role == SystemAdmin || role == Regulator
+	}
 	method, path, ok := strings.Cut(pattern, " ")
 	if !ok || !strings.HasPrefix(path, "/api/v1/") {
 		return false
@@ -81,6 +65,10 @@ func allowed(role Role, pattern string) bool {
 	case role == SystemAdmin:
 		return true
 	case role == Regulator:
+		if pattern == "GET /api/v1/dashboard/district-response" ||
+			pattern == "GET /api/v1/dashboard/risk-by-district" {
+			return slices.Contains(cityDistricts[quzhouCityCode], actor.AreaCode)
+		}
 		return regulatorAllowed(method, path)
 	default:
 		return false
@@ -142,12 +130,13 @@ func bindSubject(r *http.Request, actor Principal, pattern string) bool {
 
 type sessionView struct {
 	Principal
-	Portal      string   `json:"portal"`
-	DataScope   string   `json:"dataScope"`
-	Home        string   `json:"home"`
-	Pages       []string `json:"pages"`
-	Menu        []string `json:"menu"`
-	Permissions []string `json:"permissions"`
+	Portal      string         `json:"portal"`
+	DataScope   string         `json:"dataScope"`
+	Home        string         `json:"home"`
+	Pages       []string       `json:"pages"`
+	Menu        []string       `json:"menu"`
+	Permissions []string       `json:"permissions"`
+	Dashboard   *dashboardArea `json:"dashboardArea,omitempty"`
 }
 
 // view 提供当前角色可用的数据范围、页面、菜单和操作权限。
@@ -162,14 +151,18 @@ func view(actor Principal) sessionView {
 		data.Pages = []string{"/", "/flow", "/filings", "/filing-applications", "/filing-material-policy",
 			"/implementations", "/reports", "/remediations", "/hazards", "/archives", "/alerts",
 			"/supervisions", "/material-expiries", "/assessment-dues", "/monitor/publications",
-			"/knowledge", "/dashboard", "/audit", "/workday-calendar", "/tag-catalog"}
+			"/knowledge", "/dashboard", "/audit", "/workday-calendar", "/tag-catalog", "/institution-accounts", "/operator-registrations"}
 		data.Permissions = []string{"admin.agent.kb.edit", "admin.monitor.rule.config",
-			"admin.grade.case.edit", "admin.grade.filing.audit", "admin.grade.report.audit"}
+			"admin.grade.case.edit", "admin.grade.filing.audit", "admin.grade.report.audit", "admin.sys.user.edit", registrationPermission}
 	case Regulator:
 		data.DataScope, data.Home = "AREA", "/filings"
-		data.Menu = []string{"grade", "agent", "ai-review"}
-		data.Pages = []string{"/filings", "/reports", "/knowledge", "/flow"}
-		data.Permissions = []string{"admin.grade.filing.audit", "admin.grade.report.audit"}
+		data.Menu = []string{"grade", "agent", "ai-review", "system"}
+		data.Pages = []string{"/filings", "/reports", "/knowledge", "/flow", "/operator-registrations"}
+		if data.Dashboard = quzhouDashboard(actor.AreaCode); data.Dashboard != nil {
+			data.Menu = append(data.Menu, "screen")
+			data.Pages = append(data.Pages, "/dashboard")
+		}
+		data.Permissions = []string{"admin.grade.filing.audit", "admin.grade.report.audit", registrationPermission}
 	case OrgAdmin:
 		return scopedView(data, "institution", "ORG", []string{"workbench", "filings", "implementations",
 			"reports", "hazards", "directory", "publications", "alerts", "feedback"},

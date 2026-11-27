@@ -89,7 +89,7 @@ func Register(mux *http.ServeMux, pool *pgxpool.Pool, reviewWindows ...workflowr
 			httpx.Error(w, http.StatusBadRequest, "invalid_input", "驾驶舱统计无需查询参数。")
 			return
 		}
-		result, err := readStatistics(r.Context(), pool, nil)
+		result, err := readStatistics(r.Context(), pool, districtScope{})
 		if err != nil {
 			slog.Error("驾驶舱统计读取失败", "error_type", fmt.Sprintf("%T", err))
 			httpx.Error(w, http.StatusInternalServerError, "internal_error", "暂时无法读取驾驶舱统计。")
@@ -177,13 +177,13 @@ CROSS JOIN report_counts r CROSS JOIN recent_activity a CROSS JOIN coverage_coun
 `
 
 // readStatistics 在同一语句快照中读取备案、风险、测评首轮结论、资产、覆盖清册和每日趋势。
-// 参数 ctx 控制读取，db 为数据库或读取事务，district 为空指针时统计全域。
+// 参数 ctx 控制读取，db 为数据库或读取事务，scope 为区划范围，未指定时统计全域。
 // 返回值 仅用于大屏显示的统计字段，或查询错误。
-func readStatistics(ctx context.Context, db dashboardQueryer, district *string) (statistics, error) {
+func readStatistics(ctx context.Context, db dashboardQueryer, scope districtScope) (statistics, error) {
 	var result statistics
 	f, h, open, review := &result.Filings, &result.Hazards, &result.OpenHazards, &result.ReportFirstReview
 	coverage, assets := &result.FilingCoverage, &result.RegisteredAssets
-	err := db.QueryRow(ctx, statisticsSQL, district).Scan(&result.UpdatedAt,
+	err := db.QueryRow(ctx, statisticsSQL, scope.aliases, scope.requireUnit).Scan(&result.UpdatedAt,
 		&f.Active, &f.Cancelled, &f.UnderReview, &f.Returned, &f.Draft, &f.ActiveOrganizations,
 		&h.High, &h.Medium, &h.Low, &open.High, &open.Medium, &open.Low,
 		&result.HighRiskSystems, &review.Approved, &review.Decided, &result.Trend,

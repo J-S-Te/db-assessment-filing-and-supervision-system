@@ -110,11 +110,13 @@ const modules = [
     key: 'system',
     title: '系统管理',
     subtitle: '基础配置 · 运维审计',
-    selected: ['tag-catalog', 'workday-calendar', 'audit'],
+    selected: ['tag-catalog', 'workday-calendar', 'audit', 'institution-accounts', 'operator-registrations'],
     tabs: [
       { key: 'tag-catalog', name: '标签管理', path: '/tag-catalog' },
       { key: 'workday-calendar', name: '工作日历', path: '/workday-calendar' },
       { key: 'audit', name: '操作日志', path: '/audit' },
+      { key: 'institution-accounts', name: '机构用户', path: '/institution-accounts' },
+      { key: 'operator-registrations', name: '注册审核', path: '/operator-registrations' },
     ],
   },
 ]
@@ -170,7 +172,10 @@ const scopedNavigation = {
   },
 }
 const visibleNavigation = computed(() => navigation.map(group => ({
-  ...group, items: group.items.filter(item => session.value?.menu.includes(item.key)),
+  ...group,
+  items: group.items.filter(item => session.value?.menu.includes(item.key)).map(item =>
+    item.key === 'system' && session.value?.roleCode === 'ROLE_REGULATOR'
+      ? { ...item, path: '/operator-registrations' } : item),
 })).filter(group => group.items.length))
 const activeScopedNavigation = computed(() => scopedAudience.value && scopedNavigation[scopedAudience.value])
 const activeScopedGroup = computed(() => {

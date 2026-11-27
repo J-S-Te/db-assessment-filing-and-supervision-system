@@ -1,6 +1,11 @@
 import { shallowRef } from 'vue'
 import { api, ApiError } from './api'
 
+export interface DashboardArea {
+  name: string
+  districts: string[]
+}
+
 export interface Session {
   id: string
   name: string
@@ -9,6 +14,7 @@ export interface Session {
   portal: 'admin' | 'institution' | 'operator'
   dataScope: 'ALL' | 'AREA' | 'ORG' | 'UNIT'
   areaCode?: string
+  dashboardArea?: DashboardArea
   subjectId?: string
   subjectName?: string
   home: string

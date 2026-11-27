@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import {
   Activity, ArrowLeft, ArrowRight, BellRing, Boxes, CalendarClock, ChartNoAxesCombined, CircleCheck,
   ClipboardList, ClipboardPenLine, FileChartColumn, FileSearch, Files, MapPinned, Maximize, Minimize, RefreshCw,
@@ -17,6 +17,7 @@ import DashboardRanking from '../components/DashboardRanking.vue'
 import DashboardRisk from '../components/DashboardRisk.vue'
 import DashboardTrend from '../components/DashboardTrend.vue'
 import { alertPath, alertStatuses, type AlertStatus } from '../lib/alerts'
+import { dashboardAccessEvent, sessionChangeKey } from '../lib/api'
 import { archivePaths } from '../lib/archives'
 import {
   dashboardNumber, dashboardPath, dashboardPercent, dashboardTabFlag, dashboardTime, useDashboard,
@@ -24,6 +25,8 @@ import {
 import type { ClassificationKind } from '../lib/dashboardAnalytics'
 import { vDashboardScroll } from '../lib/dashboardAutoScroll'
 import { useDistrictDetail, useDistrictSummary } from '../lib/districtResponse'
+import { refreshBusinessOnFocus } from '../lib/scopedBusiness'
+import { refreshSession, session } from '../lib/session'
 import {
   dashboardColors, type DashboardTone, type DashboardTrendRange, type MetricSlice,
 } from '../lib/dashboardMetrics'
@@ -44,19 +47,30 @@ const tab = computed(() => {
   const selected = route.query.tab
   return typeof selected === 'string' && Object.hasOwn(tabs, selected) ? selected as keyof typeof tabs : 'overview'
 })
+const openedSession = session.value
+const area = openedSession?.dashboardArea
+const sessionAvailable = ref(true)
+const sessionCheckPending = ref(false)
+const fixedDistrict = area?.districts.length === 1 ? area.name : undefined
 const { statistics: globalStatistics, analytics: globalAnalytics, overview: globalOverview, alerts,
-  alertCounts: globalAlertCounts, alertsUpdatedAt, failure, loading, refresh } = useDashboard()
-const selectedDistrict = computed(() => typeof route.query.district === 'string' ? route.query.district : null)
+  alertCounts: globalAlertCounts, alertsUpdatedAt, failure, loading, refresh } = useDashboard(!area)
+const selectedDistrict = computed(() => {
+  if (fixedDistrict) return fixedDistrict
+  const district = route.query.district
+  return typeof district === 'string' && (!area || area.districts.includes(district)) ? district : null
+})
 const overviewVisible = computed(() => tab.value === 'overview')
 const districts = useDistrictSummary(overviewVisible)
-const showScopedDetail = computed(() => overviewVisible.value || selectedDistrict.value !== null)
+const showScopedDetail = computed(() => Boolean(area) || overviewVisible.value || selectedDistrict.value !== null)
 const districtDetail = useDistrictDetail(selectedDistrict, showScopedDetail)
 const snapshot = districtDetail.snapshot
 // 区县按钮立即反映选择，整屏内容和范围说明随成功响应一起更新。
 const displayedDistrict = computed(() => snapshot.value ? snapshot.value.district : selectedDistrict.value)
-const districtScoped = computed(() => displayedDistrict.value !== null)
-const displayedDistrictName = computed(() => districtScoped.value ? displayedDistrict.value || '未归区' : '')
-const targetDistrictName = computed(() => selectedDistrict.value === null ? '全域' : selectedDistrict.value || '未归区')
+const districtScoped = computed(() => Boolean(area) || displayedDistrict.value !== null)
+const displayedDistrictName = computed(() => displayedDistrict.value === null
+  ? area?.name ?? '' : displayedDistrict.value || '未归区')
+const targetDistrictName = computed(() => selectedDistrict.value === null
+  ? area?.name ?? '全域' : selectedDistrict.value || '未归区')
 const scopeChanging = computed(() => displayedDistrict.value !== selectedDistrict.value)
 const statistics = computed(() => districtScoped.value ? snapshot.value?.statistics : globalStatistics.value)
 const overview = computed(() => districtScoped.value ? snapshot.value?.overview : globalOverview.value)
@@ -233,7 +247,8 @@ function tabLocation(key: keyof typeof tabs) {
  * 返回值 范围改变时返回路由切换任务。
  */
 function selectDistrict(district: string | null) {
-  if (district === selectedDistrict.value) return
+  if (fixedDistrict || district === selectedDistrict.value) return
+  if (area && district !== null && !area.districts.includes(district)) return
   return router.replace({ query: { ...route.query, district: district ?? undefined } })
 }
 
@@ -287,16 +302,63 @@ async function toggleFullscreen() {
  */
 function returnFromDashboard() {
   if (!standalone.value) {
-    void router.replace('/')
+    void router.replace(session.value?.home ?? '/')
     return
   }
   window.close()
   if (!window.closed && returnTimer === undefined) {
-    returnTimer = window.setTimeout(() => { void router.replace('/') }, 150)
+    returnTimer = window.setTimeout(() => { void router.replace(session.value?.home ?? '/') }, 150)
   }
 }
 
+/**
+ * 用途 立即隐藏原会话的驾驶舱，再由路由按当前会话重新进入。
+ * 参数 无。
+ * 返回值 无。
+ */
+function reloadDashboardSession() {
+  if (!sessionAvailable.value) return
+  sessionAvailable.value = false
+  window.location.reload()
+}
+
+watch(session, actor => {
+  if (actor?.id !== openedSession?.id || actor?.areaCode !== openedSession?.areaCode ||
+    actor?.roleCode !== openedSession?.roleCode || actor?.mustChangePassword !== openedSession?.mustChangePassword) {
+    reloadDashboardSession()
+  }
+}, { flush: 'sync' })
+
+/**
+ * 用途 核对独立标签页原账号是否仍有权展示驾驶舱。
+ * 参数 无。
+ * 返回值 本次会话校验完成的任务。
+ */
+async function verifyDashboardSession() {
+  if (!sessionAvailable.value || sessionCheckPending.value) return
+  sessionCheckPending.value = true
+  try {
+    await refreshSession()
+  } catch {
+    // 临时网络故障由驾驶舱现有的刷新提示显示。
+  } finally {
+    sessionCheckPending.value = false
+  }
+}
+
+/**
+ * 用途 接收同源标签页登录、注销或改密后的会话变更信号。
+ * 参数 event 为浏览器共享存储的键变更。
+ * 返回值 无。
+ */
+function onSessionStorage(event: StorageEvent) {
+  if (event.key === sessionChangeKey) reloadDashboardSession()
+}
+
+refreshBusinessOnFocus(() => void verifyDashboardSession(), 30_000)
 onMounted(() => {
+  window.addEventListener('storage', onSessionStorage)
+  window.addEventListener(dashboardAccessEvent, verifyDashboardSession)
   try {
     if (standalone.value) window.sessionStorage.setItem(tabSessionKey, '1')
     else standalone.value = window.sessionStorage.getItem(tabSessionKey) === '1'
@@ -307,13 +369,15 @@ onMounted(() => {
   document.addEventListener('fullscreenchange', syncFullscreen)
 })
 onScopeDispose(() => {
+  window.removeEventListener('storage', onSessionStorage)
+  window.removeEventListener(dashboardAccessEvent, verifyDashboardSession)
   window.clearTimeout(returnTimer)
   document.removeEventListener('fullscreenchange', syncFullscreen)
 })
 </script>
 
 <template>
-  <section ref="screen" class="command-screen" aria-label="指挥驾驶舱">
+  <section v-if="sessionAvailable" ref="screen" class="command-screen" aria-label="指挥驾驶舱">
     <div class="screen-circuit-rail" aria-hidden="true"></div>
     <div class="screen-circuit-rail screen-circuit-rail-end" aria-hidden="true"></div>
     <main class="command-stage">
@@ -322,7 +386,7 @@ onScopeDispose(() => {
           <span class="screen-title-mark" aria-hidden="true"><ShieldCheck class="title-icon" /></span>
           <div>
             <h1>网络安全等级保护<span>指挥驾驶舱</span></h1>
-            <p>浙江省衢州市 · {{ displayedDistrictName || '全域' }}</p>
+            <p>浙江省衢州市 · {{ displayedDistrict === null && area ? '市域' : displayedDistrictName || '全域' }}</p>
           </div>
         </div>
         <nav class="screen-tabs" aria-label="驾驶舱分区">
@@ -414,7 +478,7 @@ onScopeDispose(() => {
                 :detail="snapshot" :loading-summary="districts.loading.value"
                 :failed-summary="districts.failed.value" :loading-detail="districtDetail.loading.value"
                 :failed-detail="districtDetail.failed.value" :map-settings="overviewMapLocation"
-                @select="selectDistrict"
+                :area="area" :locked="Boolean(fixedDistrict)" @select="selectDistrict"
                 @retry-summary="districts.refresh" @retry-detail="districtDetail.refresh" />
             </section>
             <div class="overview-lists">
@@ -425,7 +489,7 @@ onScopeDispose(() => {
                 </header>
                 <p v-if="displayedDistrictName" class="screen-caption">当前范围 · {{ displayedDistrictName }}</p>
                 <DashboardRanking :key="JSON.stringify(displayedDistrict)" :systems="visibleRiskSystems"
-                  :loading="scopedLoading" compact />
+                  :loading="scopedLoading" :filing-links="Boolean(area)" compact />
               </section>
               <section class="screen-card" aria-labelledby="dashboard-feed">
                 <header class="card-heading">
@@ -436,7 +500,7 @@ onScopeDispose(() => {
                 </header>
                 <p v-if="displayedDistrictName" class="screen-caption">当前范围 · {{ displayedDistrictName }}</p>
                 <DashboardAlerts :key="JSON.stringify(displayedDistrict)" :items="visibleAlerts"
-                  :loading="scopedLoading" compact highlight-new />
+                  :loading="scopedLoading" :read-only="Boolean(area)" compact highlight-new />
               </section>
             </div>
           </div>
@@ -500,11 +564,13 @@ onScopeDispose(() => {
           <div class="scoped-panel-heading">
             <span class="screen-caption">{{ riskByDistrict ? '有效备案系统未销项隐患'
               : (displayedDistrictName ? displayedDistrictName + ' · ' : '') + '未销项高风险隐患数 · 前 10' }}</span>
-            <RouterLink v-if="displayedDistrictName" class="screen-link" :to="systemRiskLocation">查看全域</RouterLink>
+            <RouterLink v-if="displayedDistrict !== null && !fixedDistrict" class="screen-link"
+              :to="systemRiskLocation">{{ area ? '查看市域' : '查看全域' }}</RouterLink>
           </div>
-          <DashboardDistrictRisk v-if="riskByDistrict" ref="districtRisk" />
+          <DashboardDistrictRisk v-if="riskByDistrict" ref="districtRisk"
+            :area="area" :locked="Boolean(fixedDistrict)" />
           <DashboardRanking v-else :key="JSON.stringify(displayedDistrict)" :systems="visibleRiskSystems"
-            :loading="scopedLoading" />
+            :loading="scopedLoading" :filing-links="Boolean(area)" />
         </section>
         <div class="screen-column layout-detail">
           <section class="screen-card risk-feature" aria-labelledby="open-hazards">
@@ -548,9 +614,11 @@ onScopeDispose(() => {
             <RouterLink v-if="!districtScoped" class="screen-link" :to="alertPath">
               预警中心<ArrowRight aria-hidden="true" />
             </RouterLink>
-            <button v-else class="screen-link district-switch" type="button" @click="selectDistrict(null)">查看全域</button>
+            <button v-else-if="displayedDistrict !== null && !fixedDistrict" class="screen-link district-switch"
+              type="button" @click="selectDistrict(null)">{{ area ? '查看市域' : '查看全域' }}</button>
           </header>
-          <DashboardAlerts :key="JSON.stringify(displayedDistrict)" :items="visibleAlerts" :loading="scopedLoading" />
+          <DashboardAlerts :key="JSON.stringify(displayedDistrict)" :items="visibleAlerts"
+            :loading="scopedLoading" :read-only="Boolean(area)" />
         </section>
       </div>
 

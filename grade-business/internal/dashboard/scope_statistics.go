@@ -11,17 +11,17 @@ import (
 const dashboardScopeSQL = `
 WITH scope_filings AS (
 	SELECT f.* FROM business_cases f ` + filingDistrictJoinSQL + `
-	WHERE f.kind='filing' AND ($1::text IS NULL OR ` + filingDistrictSQL + `=$1)
+	WHERE f.kind='filing' AND ` + scopedFilingDistrictSQL + `
 ), scope_reports AS (
 	SELECT r.* FROM business_cases r JOIN scope_filings f ON f.id=r.filing_id WHERE r.kind='report'
 ), scope_hazards AS (
 	SELECT h.*,f.id AS scope_filing_id
 	FROM hazard_items h JOIN hazard_context hc ON hc.id=h.id
 	JOIN scope_filings f ON f.id=hc.filing_id
-	WHERE $1::text IS NULL OR (` + eligibleIndustrySQL + `)
+	WHERE $1::jsonb IS NULL OR (` + eligibleIndustrySQL + `)
 ), scope_alerts AS (
 	SELECT a.* FROM local_alerts a JOIN scope_hazards h ON h.id=a.hazard_id
-	WHERE $1::text IS NULL OR h.status<>'pending_dispatch'
+	WHERE $1::jsonb IS NULL OR h.status<>'pending_dispatch'
 )`
 
 type districtAlertTotals struct {
@@ -62,9 +62,9 @@ scope_implementations AS (
 	FROM workflow_tasks w JOIN review_records r ON r.id=w.id AND r.resource=w.resource
 	WHERE w.audience='regulator' AND w.recipient='' AND w.window_kind<>''
 	 AND COALESCE(w.explicit_deadline,workflow_due((w.stage_at AT TIME ZONE 'Asia/Shanghai')::date,
-		CASE w.window_kind WHEN 'filing_initial' THEN $2::int WHEN 'filing_final' THEN $3::int
-		     WHEN 'report' THEN $4::int WHEN 'implementation' THEN $5::int
-		     WHEN 'remediation' THEN $6::int END)) < ` + districtBusinessDaySQL + `
+		CASE w.window_kind WHEN 'filing_initial' THEN $3::int WHEN 'filing_final' THEN $4::int
+		     WHEN 'report' THEN $5::int WHEN 'implementation' THEN $6::int
+		     WHEN 'remediation' THEN $7::int END)) < ` + districtBusinessDaySQL + `
 ), filings AS (
 	SELECT count(*) AS total,
 	       count(*) FILTER (WHERE created_at>=date_trunc('year',CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')
@@ -89,15 +89,15 @@ FROM filings f CROSS JOIN reports r CROSS JOIN hazards h CROSS JOIN alerts a CRO
 `
 
 // readDistrictOverview 汇总所选区县的业务总量、预警和审核逾期指标。
-// 参数 ctx 为查询上下文，db 为读取事务，district 为区县，windows 为业务审核时限。
+// 参数 ctx 为查询上下文，db 为读取事务，scope 为授权区县，windows 为业务审核时限。
 // 返回值 区县概览及查询错误，未启用审核时限时省略该指标。
-func readDistrictOverview(ctx context.Context, db dashboardQueryer, district *string,
+func readDistrictOverview(ctx context.Context, db dashboardQueryer, scope districtScope,
 	windows workflowreminders.Windows,
 ) (districtOverview, error) {
 	var result districtOverview
 	var overdue districtDeadlines
 	alerts := &result.AlertCounts
-	err := db.QueryRow(ctx, districtOverviewSQL, district, windows.FilingInitial, windows.FilingFinal,
+	err := db.QueryRow(ctx, districtOverviewSQL, scope.aliases, scope.requireUnit, windows.FilingInitial, windows.FilingFinal,
 		windows.Report, windows.Implementation, windows.Remediation).
 		Scan(&result.FilingTotal, &result.FilingsThisYear, &result.ImplementationOpen,
 			&result.ReportInitial, &result.ReportFinal, &result.HazardTotal, &result.HazardClosed,

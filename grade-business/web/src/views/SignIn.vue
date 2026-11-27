@@ -158,6 +158,9 @@ async function logout() {
             当前暂未开通生物识别，请使用账号密码登录。
           </p>
         </div>
+        <RouterLink v-if="!changing" class="signin-registration" to="/operator-register">
+          运营单位注册与进度查询
+        </RouterLink>
       </section>
     </div>
     <CopyrightFooter />
@@ -254,6 +257,7 @@ async function logout() {
 .signin-heading p { margin-top: 9px; color: var(--muted); }
 .signin-heading .signin-message { color: #9de2ff; }
 .signin-heading .signin-success { color: #8aefb1; }
+.signin-registration { display: block; margin-top: 16px; text-align: center; color: #9de2ff; }
 .signin-form { display: grid; gap: 17px; margin-top: 30px; }
 .signin-field { display: grid; gap: 7px; color: #d9e7fa; font-weight: 520; }
 .signin-control { position: relative; display: block; }

@@ -28,7 +28,7 @@ func TestPolicy(t *testing.T) {
 		{SystemAdmin, "GET /api/v1/operator/filings", false},
 		{"", "GET /api/v1/filings", false},
 	} {
-		if got := allowed(item.role, item.pattern); got != item.want {
+		if got := allowed(Principal{Role: item.role}, item.pattern); got != item.want {
 			t.Errorf("%s %s = %v, want %v", item.role, item.pattern, got, item.want)
 		}
 	}

@@ -34,9 +34,16 @@ func (s *Service) Protect(mux *http.ServeMux) http.Handler {
 	mux.HandleFunc(sessionPattern, s.current)
 	mux.HandleFunc(logoutPattern, s.logout)
 	mux.HandleFunc(passwordPattern, s.changePassword)
+	mux.HandleFunc(institutionAccountPattern, s.createInstitutionAccount)
+	s.registerOperatorRegistration(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, pattern := mux.Handler(r)
-		if pattern == loginPattern || !strings.HasPrefix(r.URL.Path, "/api/") && !strings.Contains(pattern, " /api/") {
+		switch pattern {
+		case loginPattern, registrationSubmitPattern, registrationStatusPattern:
+			mux.ServeHTTP(w, r)
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.Contains(pattern, " /api/") {
 			mux.ServeHTTP(w, r)
 			return
 		}
@@ -69,7 +76,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, next http.Ha
 		httpx.Error(w, 403, "password_change_required", "请先修改初始密码。")
 		return
 	}
-	if !allowed(actor.Role, pattern) || !bindSubject(r, actor, pattern) {
+	if !allowed(actor, pattern) || !bindSubject(r, actor, pattern) {
 		s.record(ctx, actor, "denied", pattern)
 		httpx.Error(w, 403, "permission_denied", "当前账号无权访问此业务。")
 		return

@@ -80,18 +80,18 @@ export function dashboardTime(value: string) {
 }
 
 /**
- * 用途 获取独立驾驶舱的数据来源，并在页面可见时更新。
- * 参数 无。
+ * 用途 获取系统管理员的驾驶舱数据，并在页面可见时更新。
+ * 参数 enabled 为当前会话是否允许读取全域接口。
  * 返回值 当前可用的业务快照及刷新状态。
  */
-export function useDashboard() {
+export function useDashboard(enabled = true) {
   const statistics = shallowRef<DashboardStatistics>()
   const analytics = shallowRef<DashboardAnalytics>()
   const overview = shallowRef<DashboardOverview>()
   const alerts = shallowRef<AlertItem[]>()
   const alertCounts = shallowRef<AlertCounts>()
   const failure = ref(false)
-  const loading = ref(true)
+  const loading = ref(enabled)
   const alertsUpdatedAt = ref<string>()
   let request: AbortController | undefined
   let refreshQueued = false
@@ -102,6 +102,7 @@ export function useDashboard() {
    * 返回值 本轮刷新结束后的任务。
    */
   async function refresh() {
+    if (!enabled) return
     if (request) {
       refreshQueued = true
       return
