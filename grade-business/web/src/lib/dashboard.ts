@@ -19,6 +19,64 @@ export interface DashboardRisks {
   low: number
 }
 
+export type DashboardRiskLevel = 'high' | 'mid' | 'low' | 'none'
+
+/** 综合风险指数：逾期 40%、高风险 40%、待复测 20% 加权后封顶 100。 */
+export interface DashboardRiskIndex {
+  index: number
+  score: number
+  level: DashboardRiskLevel
+  weights: string
+}
+
+/** 当前范围的待办汇总，用于驾驶舱顶部的态势结论。 */
+export interface DashboardDutySummary {
+  total: number
+  overdueHazards: number
+  pendingReview: number
+  pendingAlerts: number
+  pendingPlanReview: number
+  topDistrict?: string
+  topDistrictIndex: number
+  conclusion: string
+}
+
+/** 单个指标在当前窗口、上期窗口与去年同期窗口的真实对比。 */
+export interface DashboardMetricDelta {
+  current: number
+  previous: number
+  yearAgo: number
+  change: number
+  /** 相对上期的变化率百分比，上期为 0 时为空。 */
+  rate: number | null
+  /** 相对上期是否恶化，流量型业务量指标恒为 false。 */
+  worse: boolean
+}
+
+/** 比率型指标的对比，单位为百分点。 */
+export interface DashboardCompletionDelta {
+  current: number
+  previous: number
+  yearAgo: number
+  change: number
+  hasCurrent: boolean
+}
+
+/** 当前范围的同比环比结果，全部基于真实事件与时点重放。 */
+export interface DashboardComparison {
+  windowDays: number
+  hasYearAgo: boolean
+  filingsCreated: DashboardMetricDelta
+  reportsCreated: DashboardMetricDelta
+  alertsTriggered: DashboardMetricDelta
+  hazardsClosed: DashboardMetricDelta
+  openHazards: DashboardMetricDelta
+  activeAlerts: DashboardMetricDelta
+  riskIndex: DashboardMetricDelta
+  completionRate: DashboardCompletionDelta
+  scopeNote: string
+}
+
 export interface DashboardSystemRisk {
   filingId: string
   systemName: string

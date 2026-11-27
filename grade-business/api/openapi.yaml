@@ -9500,7 +9500,7 @@ paths:
   "/dashboard/risk-by-district":
     get:
       operationId: getDashboardRiskByDistrict
-      description: 按当前备案单位名录区县统计已派发、未销项隐患。高风险数优先，同数按逾期数排序。逾期按北京时间日期计算。衢州监管员只返回账号所辖区划，未归区数据仅对系统管理员可见。
+      description: 按当前备案单位名录区县统计已派发、未销项隐患，并给出综合风险指数。指数按逾期 40%、高风险 40%、待机构复测 20% 加权后封顶 100，按指数降序排列。逾期按北京时间日期计算。衢州监管员只返回账号所辖区划，未归区数据仅对系统管理员可见。
       responses:
         '200':
           description: 区县风险分布
@@ -9525,7 +9525,7 @@ paths:
   "/dashboard/district-response":
     get:
       operationId: getDashboardDistrictResponse
-      description: 按选定范围读取风险和待办。衢州监管员的所有请求均按账号辖区过滤并返回整屏快照。系统管理员传 district 时同时返回整屏统计、概览和分类分析。必须且只能传 district 或 scope 之一。
+      description: 按选定范围读取风险、待办和同比环比。衢州监管员的所有请求均按账号辖区过滤并返回整屏快照。系统管理员传 district 时同时返回整屏统计、概览和分类分析。必须且只能传 district 或 scope 之一，可另加 window 指定对比窗口天数。
       parameters:
         - name: district
           in: query
@@ -9538,6 +9538,11 @@ paths:
           required: false
           description: all 表示账号可见的完整范围。仅系统管理员可见未归区记录。
           schema: {type: string, enum: [all]}
+        - name: window
+          in: query
+          required: false
+          description: 同比环比的窗口天数，当前窗口、上期窗口与去年同期窗口长度相同。缺省为 30。
+          schema: {type: integer, minimum: 1, maximum: 365, default: 30}
       responses:
         '200':
           description: 所选范围的处置态势
@@ -14537,17 +14542,18 @@ components:
     DashboardDistrictRiskCounts:
       type: object
       additionalProperties: false
-      required: [systems, high, medium, low, overdue]
+      required: [systems, high, medium, low, overdue, pendingRetest]
       properties:
         systems: {type: integer, minimum: 0}
         high: {type: integer, minimum: 0}
         medium: {type: integer, minimum: 0}
         low: {type: integer, minimum: 0}
         overdue: {type: integer, minimum: 0}
+        pendingRetest: {type: integer, minimum: 0}
     DashboardDistrictRisk:
       type: object
       additionalProperties: false
-      required: [district, systems, high, medium, low, overdue]
+      required: [district, systems, high, medium, low, overdue, pendingRetest, riskIndex, riskLevel]
       properties:
         district: {type: string}
         systems: {type: integer, minimum: 0}
@@ -14555,12 +14561,89 @@ components:
         medium: {type: integer, minimum: 0}
         low: {type: integer, minimum: 0}
         overdue: {type: integer, minimum: 0}
+        pendingRetest: {type: integer, minimum: 0}
+        riskIndex: {type: integer, minimum: 0, maximum: 100, description: 综合风险指数，按逾期 40%、高风险 40%、待复测 20% 加权后封顶 100。}
+        riskLevel: {type: string, enum: [high, mid, low, none], description: 综合风险指数分级，66 及以上为 high。}
+    DashboardRiskIndex:
+      type: object
+      additionalProperties: false
+      required: [index, score, level, weights]
+      properties:
+        index: {type: integer, minimum: 0, maximum: 100, description: 当前范围的综合风险指数。}
+        score: {type: integer, minimum: 0, description: 未封顶的加权分。}
+        level: {type: string, enum: [high, mid, low, none]}
+        weights: {type: string, description: 指数口径说明。}
+    DashboardMetricDelta:
+      type: object
+      additionalProperties: false
+      required: [current, previous, yearAgo, change, worse]
+      properties:
+        current: {type: integer, description: 当前窗口的取值。}
+        previous: {type: integer, description: 紧邻的上期窗口取值。}
+        yearAgo: {type: integer, description: 去年同期的窗口取值。}
+        change: {type: integer, description: 相对上期的增减量。}
+        rate: {type: integer, nullable: true, description: 相对上期的变化率百分比，上期为 0 时为空。}
+        worse: {type: boolean, description: 相对上期是否恶化，流量型业务量指标恒为 false。}
+    DashboardCompletionDelta:
+      type: object
+      additionalProperties: false
+      required: [current, previous, yearAgo, change, hasCurrent]
+      properties:
+        current: {type: integer, description: 当前窗口的完成率百分比。}
+        previous: {type: integer, description: 上期窗口的完成率百分比。}
+        yearAgo: {type: integer, description: 去年同期的完成率百分比。}
+        change: {type: integer, description: 相对上期的百分点变化。}
+        hasCurrent: {type: boolean, description: 三个窗口是否存在可用数据。}
+    DashboardComparison:
+      type: object
+      additionalProperties: false
+      required: [windowDays, hasYearAgo, filingsCreated, reportsCreated, alertsTriggered,
+        hazardsClosed, openHazards, activeAlerts, riskIndex, completionRate, scopeNote]
+      properties:
+        windowDays: {type: integer, description: 当前、上期与去年同期窗口的天数。}
+        hasYearAgo: {type: boolean, description: 去年同期窗口是否有可用数据。}
+        filingsCreated:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        reportsCreated:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        alertsTriggered:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        hazardsClosed:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        openHazards:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        activeAlerts:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        riskIndex:
+          "$ref": "#/components/schemas/DashboardMetricDelta"
+        completionRate:
+          "$ref": "#/components/schemas/DashboardCompletionDelta"
+        scopeNote: {type: string, description: 对比口径说明。}
+    DashboardDutySummary:
+      type: object
+      additionalProperties: false
+      required: [total, overdueHazards, pendingReview, pendingAlerts, pendingPlanReview, topDistrictIndex, conclusion]
+      properties:
+        total: {type: integer, minimum: 0, description: 当前范围待办总数。}
+        overdueHazards: {type: integer, minimum: 0}
+        pendingReview: {type: integer, minimum: 0}
+        pendingAlerts: {type: integer, minimum: 0}
+        pendingPlanReview: {type: integer, minimum: 0}
+        topDistrict: {type: string, description: 范围内综合风险指数最高的区县。}
+        topDistrictIndex: {type: integer, minimum: 0, maximum: 100}
+        conclusion: {type: string, description: 当前范围的态势结论文字。}
     DashboardDistrictResponse:
       type: object
       additionalProperties: false
-      required: [district, counts, tasks, highRiskSystems, alerts]
+      required: [district, counts, risk, duty, comparison, tasks, highRiskSystems, alerts]
       properties:
         district: {type: string, nullable: true, description: 全域为 null，未归区为空字符串。}
+        risk:
+          "$ref": "#/components/schemas/DashboardRiskIndex"
+        duty:
+          "$ref": "#/components/schemas/DashboardDutySummary"
+        comparison:
+          "$ref": "#/components/schemas/DashboardComparison"
         statistics:
           "$ref": "#/components/schemas/DashboardScopedStatistics"
         overview:

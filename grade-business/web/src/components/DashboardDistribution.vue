@@ -43,7 +43,7 @@ function selectSlice(name: string) {
         <button type="button" :aria-pressed="picked === slice.label" @click="selectSlice(slice.label)"
           @focus="focused = slice.label" @blur="focused = ''"
           @pointerenter="focused = slice.label" @pointerleave="focused = ''">
-          <span class="legend-name"><i :style="{ background: dashboardColors[slice.tone] }" aria-hidden="true"></i>
+          <span class="legend-name"><i :style="{ background: slice.color ?? dashboardColors[slice.tone] }" aria-hidden="true"></i>
             {{ slice.label }}</span><strong>{{ dashboardNumber(slice.count) }}</strong>
         </button>
       </li>

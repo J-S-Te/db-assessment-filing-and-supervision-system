@@ -19,11 +19,14 @@ type districtCounts struct {
 type districtRisk struct {
 	District string `json:"district"`
 	districtResponseCounts
+	RiskIndex int64  `json:"riskIndex"`
+	RiskLevel string `json:"riskLevel"`
 }
 
 type districtResponseCounts struct {
 	districtCounts
-	Overdue int64 `json:"overdue"`
+	Overdue       int64 `json:"overdue"`
+	PendingRetest int64 `json:"pendingRetest"`
 }
 
 type districtRiskSummary struct {
@@ -43,26 +46,32 @@ const scopedFilingDistrictSQL = `($1::jsonb IS NULL OR $1::jsonb ? (` + filingDi
 	AND (NOT $2::boolean OR unit.id=f.directory_unit_id)`
 const districtPrioritySQL = `high DESC, overdue DESC, medium DESC, low DESC, district`
 
-const districtRiskSQL = `
+var districtRiskSQL = `
 WITH groups AS (
 	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
 	       count(DISTINCT f.id) AS systems,
 	       count(*) FILTER (WHERE h.severity='high') AS high,
 	       count(*) FILTER (WHERE h.severity='medium') AS medium,
 	       count(*) FILTER (WHERE h.severity='low') AS low,
-	       count(*) FILTER (WHERE h.deadline<` + districtBusinessDaySQL + `) AS overdue
+	       count(*) FILTER (WHERE h.deadline<` + districtBusinessDaySQL + `) AS overdue,
+	       count(*) FILTER (WHERE h.status='pending_retest') AS "pendingRetest"
 	FROM hazard_items h JOIN hazard_context hc ON hc.id=h.id
 	JOIN business_cases f ON f.id=hc.filing_id AND f.kind='filing'
 	` + filingDistrictJoinSQL + `
 	WHERE h.status NOT IN ('pending_dispatch','closed')
 	  AND ` + eligibleIndustrySQL + ` AND ` + scopedFilingDistrictSQL + `
 	GROUP BY 1
+), scored AS (
+	SELECT g.*,` + riskIndexSQL("g") + `
+	FROM groups g
 ), ranked AS (
-	SELECT * FROM groups WHERE district<>'' ORDER BY ` + districtPrioritySQL + ` LIMIT $3
+	SELECT * FROM scored WHERE district<>'' ORDER BY "riskScore" DESC,"riskIndex" DESC,high DESC,overdue DESC,district LIMIT $3
 )
-SELECT COALESCE((SELECT jsonb_agg(to_jsonb(r) ORDER BY ` + districtPrioritySQL + `)
-	FROM ranked r),'[]'::jsonb),
-	COALESCE((SELECT to_jsonb(g)-'district' FROM groups g WHERE district=''),'{}'::jsonb),
+SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object(
+		'district',district,'systems',systems,'high',high,'medium',medium,'low',low,
+		'overdue',overdue,'pendingRetest',"pendingRetest",'riskIndex',"riskIndex",'riskLevel',"riskLevel")
+		ORDER BY "riskScore" DESC,"riskIndex" DESC,high DESC,overdue DESC,district) FROM ranked r),'[]'::jsonb),
+	COALESCE((SELECT to_jsonb(s)-'district'-'riskScore' FROM scored s WHERE district=''),'{}'::jsonb),
 	GREATEST((SELECT count(*) FROM groups WHERE district<>'')-$3,0)
 `
 

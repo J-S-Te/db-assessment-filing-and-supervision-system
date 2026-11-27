@@ -10,6 +10,8 @@ export interface MetricSlice {
   label: string
   count: number
   tone: DashboardTone
+  /** 可选的自定义色值，用于同一色系的深浅序列。 */
+  color?: string
 }
 
 export interface DashboardDay {
@@ -63,7 +65,8 @@ export function metricPercent(part?: number, total?: number) {
  */
 export function dashboardRingOption(slices: readonly MetricSlice[]) {
   const data = slices.filter(slice => slice.count > 0).map(slice => ({
-    name: slice.label, value: slice.count, itemStyle: { color: dashboardColors[slice.tone] },
+    name: slice.label, value: slice.count,
+    itemStyle: { color: slice.color ?? dashboardColors[slice.tone] },
   }))
   return {
     animation: false,
