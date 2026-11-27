@@ -7,7 +7,7 @@ import { newHighAlertIds } from '../lib/dashboardMetrics'
 import { formatTime, risks } from '../lib/domain'
 
 const props = defineProps<{
-  items?: DashboardAlert[]; loading: boolean; compact?: boolean; highlightNew?: boolean; readOnly?: boolean
+  items?: DashboardAlert[]; loading: boolean; failed?: boolean; compact?: boolean; highlightNew?: boolean; readOnly?: boolean
 }>()
 const highlighted = shallowRef(new Set<string>())
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
@@ -44,7 +44,7 @@ onScopeDispose(() => clearTimeout(highlightTimer))
     <div class="alert-rows" data-dashboard-loop-copy aria-hidden="true" hidden></div>
   </div>
   <p v-else class="dashboard-empty">
-    {{ items ? '暂无站内预警。' : loading ? '正在读取预警…' : '暂时无法读取预警。' }}
+    {{ items ? '暂无站内预警。' : failed ? '暂时无法读取预警。' : loading ? '正在读取预警…' : '暂无站内预警。' }}
   </p>
 </template>
 

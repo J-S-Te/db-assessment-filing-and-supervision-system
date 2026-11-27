@@ -4,7 +4,7 @@ import { dashboardNumber } from '../lib/dashboard'
 import { dashboardColors, dashboardRingOption, metricPercent, type MetricSlice } from '../lib/dashboardMetrics'
 
 const DashboardChart = defineAsyncComponent(() => import('./DashboardChart.vue'))
-const props = defineProps<{ slices: MetricSlice[]; label: string; loading: boolean; center?: string }>()
+const props = defineProps<{ slices: MetricSlice[]; label: string; loading: boolean; failed?: boolean; center?: string }>()
 const total = computed(() => props.slices.reduce((sum, current) => sum + current.count, 0))
 const option = computed(() => dashboardRingOption(props.slices))
 const picked = ref('')
@@ -29,7 +29,7 @@ function selectSlice(name: string) {
 </script>
 
 <template>
-  <div v-if="slices.length" class="distribution">
+  <div v-if="total > 0" class="distribution">
     <div class="ring">
       <DashboardChart :option="option" :highlight="highlight"
         @slice-hover="hoverSlice = $event" @slice-click="selectSlice" />
@@ -49,7 +49,7 @@ function selectSlice(name: string) {
       </li>
     </ul>
   </div>
-  <p v-else class="dashboard-empty">{{ loading ? '正在读取统计…' : '暂时无法读取统计。' }}</p>
+  <p v-else class="dashboard-empty">{{ failed && !slices.length ? '暂时无法读取统计。' : loading && !slices.length ? '正在读取统计…' : '暂无' + label + '。' }}</p>
 </template>
 
 <style scoped>

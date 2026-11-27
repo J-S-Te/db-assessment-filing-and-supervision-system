@@ -48,7 +48,8 @@ const districtPrioritySQL = `high DESC, overdue DESC, medium DESC, low DESC, dis
 
 var districtRiskSQL = `
 WITH groups AS (
-	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
+	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `),
+	       $4::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
 	       count(DISTINCT f.id) AS systems,
 	       count(*) FILTER (WHERE h.severity='high') AS high,
 	       count(*) FILTER (WHERE h.severity='medium') AS medium,
@@ -91,7 +92,7 @@ func handleDistrictRisk(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 		var result districtRiskSummary
-		err := pool.QueryRow(r.Context(), districtRiskSQL, scope.aliases, scope.requireUnit, limit).
+		err := pool.QueryRow(r.Context(), districtRiskSQL, scope.aliases, scope.requireUnit, limit, dashboardDistrictNames).
 			Scan(&result.Items, &result.WithoutDistrict, &result.OmittedDistricts)
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal_error", "暂时无法读取区县风险。")

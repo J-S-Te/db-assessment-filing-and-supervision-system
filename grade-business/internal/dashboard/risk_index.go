@@ -126,7 +126,7 @@ func dutyConclusion(summary districtDutySummary, risk districtRiskIndex) string 
 		details = append(details, fmt.Sprintf("%d 项已逾期", summary.OverdueHazards))
 	}
 	if summary.PendingAlerts > 0 {
-		details = append(details, fmt.Sprintf("%d 项活跃预警待处置", summary.PendingAlerts))
+		details = append(details, fmt.Sprintf("%d 条待处理预警", summary.PendingAlerts))
 	}
 	if summary.PendingReview > 0 {
 		details = append(details, fmt.Sprintf("%d 项待监管复核", summary.PendingReview))

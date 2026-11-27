@@ -14606,16 +14606,20 @@ components:
         change: {type: integer, description: 相对上期的增减量。}
         rate: {type: integer, nullable: true, description: 相对上期的变化率百分比，上期为 0 时为空。}
         worse: {type: boolean, description: 相对上期是否恶化，流量型业务量指标恒为 false。}
+        previousUnavailable: {type: boolean, description: 为 true 时上期风险指数无法完整重建，应忽略上期和变化字段。}
+        yearAgoUnavailable: {type: boolean, description: 为 true 时去年同期风险指数无法完整重建，应忽略去年同期取值。}
     DashboardCompletionDelta:
       type: object
       additionalProperties: false
-      required: [current, previous, yearAgo, change, hasCurrent]
+      required: [current, previous, yearAgo, change, hasCurrent, hasPrevious, hasYearAgo]
       properties:
         current: {type: integer, description: 当前窗口的完成率百分比。}
         previous: {type: integer, description: 上期窗口的完成率百分比。}
         yearAgo: {type: integer, description: 去年同期的完成率百分比。}
         change: {type: integer, description: 相对上期的百分点变化。}
-        hasCurrent: {type: boolean, description: 三个窗口是否存在可用数据。}
+        hasCurrent: {type: boolean, description: 当前窗口是否有已登记隐患作为分母。}
+        hasPrevious: {type: boolean, description: 上期窗口是否有已登记隐患作为分母。}
+        hasYearAgo: {type: boolean, description: 去年同期窗口是否有已登记隐患作为分母。}
     DashboardComparison:
       type: object
       additionalProperties: false

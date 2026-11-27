@@ -39,3 +39,35 @@ func TestDashboardDistrictsUseDirectory(t *testing.T) {
 		t.Fatalf("区县统计与备案归属不符：%+v", result)
 	}
 }
+
+// TestDashboardDistrictUsesCanonicalNames 核对同一区县的编码与全称合并，点击全称读取完整明细。
+// 参数 t 为隔离数据库测试上下文。
+// 返回值 无。
+func TestDashboardDistrictUsesCanonicalNames(t *testing.T) {
+	db := dashboardTestPool(t)
+	coded := dashboardTestFiling(t, db, "编码备案", "编码单位", "approved", false)
+	named := dashboardTestFiling(t, db, "名称备案", "名称单位", "approved", false)
+	seedDashboardAssessments(t, db, coded, named)
+	dashboardExec(t, db, `INSERT INTO directory_parties (kind,scope_name,name,code,district)
+		VALUES ('unit','编码单位','编码单位','123456789012345678','330802'),
+		       ('unit','名称单位','名称单位','223456789012345678','柯城区')`)
+	mux := http.NewServeMux()
+	Register(mux, db)
+	var ranking districtRiskSummary
+	readDistrictTest(t, mux, "/api/v1/dashboard/risk-by-district", 200, &ranking)
+	if len(ranking.Items) != 1 || ranking.Items[0].District != "柯城区" || ranking.Items[0].Systems != 2 {
+		t.Fatalf("同一区县的编码和全称应合并：%+v", ranking)
+	}
+	var detail districtResponse
+	readDistrictTest(t, mux, "/api/v1/dashboard/district-response?district=柯城区", 200, &detail)
+	if detail.District == nil || *detail.District != "柯城区" ||
+		detail.Counts.Systems != ranking.Items[0].Systems || detail.Counts.High != ranking.Items[0].High {
+		t.Fatalf("区县排行与选中区县明细不一致：%+v", detail)
+	}
+	var empty districtResponse
+	readDistrictTest(t, mux, "/api/v1/dashboard/district-response?district=衢江区", 200, &empty)
+	if empty.District == nil || *empty.District != "衢江区" || len(empty.Tasks) != 0 ||
+		empty.Overview == nil || empty.Overview.FilingTotal != 0 || empty.Comparison.CompletionRate.HasCurrent {
+		t.Fatalf("空区县应返回该区县的空记录：%+v", empty)
+	}
+}

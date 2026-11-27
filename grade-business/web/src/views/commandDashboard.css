@@ -134,6 +134,7 @@
   display:flex;align-items:center;gap:.55em;white-space:nowrap}
 .card-heading h2:before{content:"";width:3px;height:.92em;border-radius:2px;background:var(--accent);box-shadow:0 0 8px rgba(95,216,255,.9)}
 .screen-caption{font-size:.78em;color:var(--muted)}
+.district-risk-card{grid-column:1/-1;min-height:26em}
 .map-card{border-color:rgba(111,198,255,.42)}
 
 /* ================= 核心指标 ================= */
