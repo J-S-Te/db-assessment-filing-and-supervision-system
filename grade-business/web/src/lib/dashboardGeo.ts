@@ -59,17 +59,20 @@ export function readDistrictBoundaries(source: string): DistrictBoundary[] {
 
 /**
  * 用途 用 D3 将导入的市域边界等比例拟合到本地视口并生成路径。
- * 参数 boundaries 为校验通过的 WGS84 区县面。
+ * 参数 boundaries 为校验通过的 WGS84 区县面，allowed 为会话允许展示的区县。
  * 返回值 各区县路径和主要面标签坐标；无边界时返回空列表。
  */
-export function projectDistrictBoundaries(boundaries: readonly DistrictBoundary[]): DistrictPath[] {
-  if (!boundaries.length) return []
-  const geometry = { type: 'GeometryCollection' as const, geometries: boundaries.map(row => row.geometry) }
+export function projectDistrictBoundaries(
+  boundaries: readonly DistrictBoundary[], allowed?: readonly string[],
+): DistrictPath[] {
+  const visible = allowed ? boundaries.filter(row => allowed.includes(row.district)) : boundaries
+  if (!visible.length) return []
+  const geometry = { type: 'GeometryCollection' as const, geometries: visible.map(row => row.geometry) }
   const viewport = geoIdentity().reflectY(true).fitExtent(
     [[mapPadding, mapPadding], [mapWidth - mapPadding, mapHeight - mapPadding]], geometry,
   )
   const draw = geoPath(viewport).digits(2)
-  return boundaries.map(({ district, geometry }) => {
+  return visible.map(({ district, geometry }) => {
     const polygons = geometry.coordinates.map(coordinates => ({ type: 'Polygon' as const, coordinates }))
     // 沿海区县可能有多个岛屿，将标签放在面积最大的多边形上。
     const mainArea = polygons.reduce((largest, polygon) => draw.area(polygon) > draw.area(largest)

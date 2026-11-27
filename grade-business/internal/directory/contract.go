@@ -25,12 +25,13 @@ const (
 )
 
 var (
-	errInvalid     = errors.New("invalid directory request")
-	errForbidden   = errors.New("directory entry cannot be maintained in this scope")
-	errVersion     = errors.New("directory version changed")
-	errDuplicate   = errors.New("duplicate directory entry")
-	errUnavailable = errors.New("directory institution or unit unavailable")
-	errInFlight    = errors.New("directory entry has in-flight business")
+	errInvalid         = errors.New("invalid directory request")
+	errForbidden       = errors.New("directory entry cannot be maintained in this scope")
+	errDistrictManaged = errors.New("quzhou district assignment is managed by the system administrator")
+	errVersion         = errors.New("directory version changed")
+	errDuplicate       = errors.New("duplicate directory entry")
+	errUnavailable     = errors.New("directory institution or unit unavailable")
+	errInFlight        = errors.New("directory entry has in-flight business")
 )
 
 type entry struct {

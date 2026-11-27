@@ -1,4 +1,7 @@
 const basePath = '/api/v1'
+export const sessionChangeKey = 'grade-business.auth-change'
+export const dashboardAccessEvent = 'grade-business-dashboard-access-changed'
+const sessionMutations = new Set(['/auth/login', '/auth/logout', '/auth/password'])
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -52,7 +55,18 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     if (error.code === 'authentication_required' && !path.startsWith('/auth/')) {
       window.dispatchEvent(new Event('grade-business-session-expired'))
     }
+    if (path.startsWith('/dashboard/') &&
+      (error.status === 401 || error.status === 403)) {
+      window.dispatchEvent(new Event(dashboardAccessEvent))
+    }
     throw error
+  }
+  if (sessionMutations.has(path) && options.method === 'POST') {
+    try {
+      localStorage.setItem(sessionChangeKey, String(Date.now()) + ':' + String(Math.random()))
+    } catch {
+      // 驾驶舱在聚焦及定时刷新时也会核对会话。
+    }
   }
   return response.status === 204 ? undefined as T : await response.json() as T
 }

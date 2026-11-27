@@ -69,7 +69,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, next http.Ha
 		httpx.Error(w, 403, "password_change_required", "请先修改初始密码。")
 		return
 	}
-	if !allowed(actor.Role, pattern) || !bindSubject(r, actor, pattern) {
+	if !allowed(actor, pattern) || !bindSubject(r, actor, pattern) {
 		s.record(ctx, actor, "denied", pattern)
 		httpx.Error(w, 403, "permission_denied", "当前账号无权访问此业务。")
 		return

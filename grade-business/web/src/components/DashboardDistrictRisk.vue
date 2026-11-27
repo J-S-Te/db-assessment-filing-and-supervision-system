@@ -6,14 +6,16 @@ import DashboardCityScene from './DashboardCityScene.vue'
 import DashboardDistrictMap from './DashboardDistrictMap.vue'
 import { api, errorText, isAbort } from '../lib/api'
 import { dashboardNumber, dashboardPath } from '../lib/dashboard'
+import { loadPublishedDistrictBoundaries } from '../lib/dashboardBoundary'
 import {
   districtBoundaryMaxBytes, districtHeatMap, projectDistrictBoundaries, readDistrictBoundaries,
   type DistrictMetric, type DistrictRiskSummary,
 } from '../lib/dashboardGeo'
 import { loadDistrictBoundaryFile, saveDistrictBoundaryFile } from '../lib/dashboardGeoStorage'
 import { refreshBusinessOnFocus } from '../lib/scopedBusiness'
+import type { DashboardArea } from '../lib/session'
 
-const props = defineProps<{ compact?: boolean }>()
+const props = defineProps<{ compact?: boolean; area?: DashboardArea; locked?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const summary = shallowRef<DistrictRiskSummary>()
@@ -29,7 +31,7 @@ let request: AbortController | undefined
 const metrics = {
   all: '全部未销项', high: '高风险', medium: '中风险', low: '低风险',
 }
-const paths = computed(() => projectDistrictBoundaries(boundaries.value))
+const paths = computed(() => projectDistrictBoundaries(boundaries.value, props.area?.districts))
 const map = computed(() => paths.value.length && summary.value
   ? districtHeatMap(paths.value, summary.value.items, metric.value) : undefined)
 const districts = computed(() => {
@@ -41,8 +43,10 @@ const districts = computed(() => {
 })
 const highlightedDistricts = computed(() => summary.value?.items.slice(0, 4) ?? [])
 const districtScope = computed(() => {
+  if (props.locked) return props.area?.name ?? null
   if (props.compact) return compactSelection.value || null
-  return typeof route.query.district === 'string' ? route.query.district : null
+  const district = route.query.district
+  return typeof district === 'string' && (!props.area || props.area.districts.includes(district)) ? district : null
 })
 const districtOptions = computed(() => [...new Set([
   ...(summary.value?.items.map(item => item.district) ?? []),
@@ -61,6 +65,8 @@ const shownDistricts = computed(() => districtScope.value === null ? districts.v
  * 返回值 无。
  */
 function selectDistrict(district: string) {
+  if (props.locked) return
+  if (props.area && district !== allDistricts && !props.area.districts.includes(district)) return
   if (props.compact) {
     compactSelection.value = district === allDistricts ? '' : district
   } else {
@@ -146,7 +152,13 @@ function restoreBoundary() {
 }
 
 onMounted(() => {
-  restoreBoundary()
+  if (props.area) {
+    void loadPublishedDistrictBoundaries().then(result => {
+      boundaries.value = result
+    }).catch(() => { boundaryWarning.value = '辖区地图暂时无法读取。' })
+  } else {
+    restoreBoundary()
+  }
   void load()
 })
 refreshBusinessOnFocus(() => void load(), 30_000)
@@ -160,7 +172,7 @@ onScopeDispose(() => {
 <template>
   <div class="district-risk" :class="{ compact }">
     <DashboardCityScene v-if="compact && !map" />
-    <div v-if="!compact" class="geo-toolbar">
+    <div v-if="!compact && !area" class="geo-toolbar">
       <label class="geo-upload">
         <input type="file" accept=".geojson,.json" :disabled="importing" @change="importBoundary" />
         <span>{{ importing ? '正在读取边界…' : '导入区县 GeoJSON' }}</span>
@@ -175,7 +187,7 @@ onScopeDispose(() => {
       <button type="button" @click="load()">重试</button>
     </p>
     <p v-else-if="!summary" role="status">正在读取区县风险…</p>
-    <p v-if="!boundaries.length && !compact" class="geo-notice">当前浏览器未导入区县边界，以下按名录区县展示实际风险。</p>
+    <p v-if="!boundaries.length && !compact && !area" class="geo-notice">当前浏览器未导入区县边界，以下按名录区县展示实际风险。</p>
     <div v-if="!compact && (districtOptions.length || summary?.withoutDistrict.systems || districtScope === '')"
       class="geo-filters">
       <label v-if="map">热力指标
@@ -183,17 +195,17 @@ onScopeDispose(() => {
           <option v-for="(label, value) in metrics" :key="value" :value="value">{{ label }}</option>
         </select>
       </label>
-      <label>区县
+      <label v-if="!locked">区县
         <select :value="districtScope ?? allDistricts"
           @change="selectDistrict(($event.target as HTMLSelectElement).value)">
-          <option :value="allDistricts">全部区县</option>
-          <option v-if="summary?.withoutDistrict.systems || districtScope === ''" value="">未归区</option>
+          <option :value="allDistricts">{{ area ? '市域' : '全部区县' }}</option>
+          <option v-if="!area && (summary?.withoutDistrict.systems || districtScope === '')" value="">未归区</option>
           <option v-for="name in districtOptions" :key="name" :value="name">{{ name }}</option>
         </select>
       </label>
     </div>
     <template v-if="map">
-      <DashboardDistrictMap :heatmap="map" :selected="selected" :metric-label="metrics[metric]"
+      <DashboardDistrictMap :heatmap="map" :selected="selected" :metric-label="metrics[metric]" :show-labels="Boolean(area)"
         @select="selectDistrict($event)" />
       <div v-if="!compact" class="geo-legend">
         <span><i class="unmatched"></i>无匹配统计</span>

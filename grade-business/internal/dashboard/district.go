@@ -39,11 +39,13 @@ const filingDistrictSQL = `COALESCE(NULLIF(btrim(unit.district),''), '') COLLATE
 const filingDistrictJoinSQL = `LEFT JOIN directory_parties unit ON unit.kind='unit' AND (
 	unit.id=f.directory_unit_id OR (f.directory_unit_id IS NULL
 	AND lower(unit.scope_name)=lower(f.organization_name)))`
+const scopedFilingDistrictSQL = `($1::jsonb IS NULL OR $1::jsonb ? (` + filingDistrictSQL + `))
+	AND (NOT $2::boolean OR unit.id=f.directory_unit_id)`
 const districtPrioritySQL = `high DESC, overdue DESC, medium DESC, low DESC, district`
 
 const districtRiskSQL = `
 WITH groups AS (
-	SELECT ` + filingDistrictSQL + ` AS district,
+	SELECT COALESCE($1::jsonb ->> (` + filingDistrictSQL + `), ` + filingDistrictSQL + `) AS district,
 	       count(DISTINCT f.id) AS systems,
 	       count(*) FILTER (WHERE h.severity='high') AS high,
 	       count(*) FILTER (WHERE h.severity='medium') AS medium,
@@ -53,15 +55,15 @@ WITH groups AS (
 	JOIN business_cases f ON f.id=hc.filing_id AND f.kind='filing'
 	` + filingDistrictJoinSQL + `
 	WHERE h.status NOT IN ('pending_dispatch','closed')
-	  AND ` + eligibleIndustrySQL + `
+	  AND ` + eligibleIndustrySQL + ` AND ` + scopedFilingDistrictSQL + `
 	GROUP BY 1
 ), ranked AS (
-	SELECT * FROM groups WHERE district<>'' ORDER BY ` + districtPrioritySQL + ` LIMIT $1
+	SELECT * FROM groups WHERE district<>'' ORDER BY ` + districtPrioritySQL + ` LIMIT $3
 )
 SELECT COALESCE((SELECT jsonb_agg(to_jsonb(r) ORDER BY ` + districtPrioritySQL + `)
 	FROM ranked r),'[]'::jsonb),
 	COALESCE((SELECT to_jsonb(g)-'district' FROM groups g WHERE district=''),'{}'::jsonb),
-	GREATEST((SELECT count(*) FROM groups WHERE district<>'')-$1,0)
+	GREATEST((SELECT count(*) FROM groups WHERE district<>'')-$3,0)
 `
 
 // handleDistrictRisk 返回使用当前名录区县登记的未销项风险分布。
@@ -74,8 +76,13 @@ func handleDistrictRisk(pool *pgxpool.Pool) http.HandlerFunc {
 			httpx.Error(w, http.StatusBadRequest, "invalid_input", "区县统计上限须为 1 至 200。")
 			return
 		}
+		_, scope, authorized := resolveDistrictScope(r.Context(), nil)
+		if !authorized {
+			httpx.Error(w, http.StatusForbidden, "permission_denied", "当前账号无权查看区县风险。")
+			return
+		}
 		var result districtRiskSummary
-		err := pool.QueryRow(r.Context(), districtRiskSQL, limit).
+		err := pool.QueryRow(r.Context(), districtRiskSQL, scope.aliases, scope.requireUnit, limit).
 			Scan(&result.Items, &result.WithoutDistrict, &result.OmittedDistricts)
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal_error", "暂时无法读取区县风险。")

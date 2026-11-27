@@ -9651,7 +9651,7 @@ paths:
   "/dashboard/risk-by-district":
     get:
       operationId: getDashboardRiskByDistrict
-      description: 按当前备案单位名录区县统计已派发、未销项隐患。高风险数优先，同数按逾期数排序。逾期按北京时间日期计算。缺失区县、超出上限单列。
+      description: 按当前备案单位名录区县统计已派发、未销项隐患。高风险数优先，同数按逾期数排序。逾期按北京时间日期计算。衢州监管员只返回账号所辖区划，未归区数据仅对系统管理员可见。
       responses:
         '200':
           description: 区县风险分布
@@ -9676,18 +9676,18 @@ paths:
   "/dashboard/district-response":
     get:
       operationId: getDashboardDistrictResponse
-      description: 按选定范围读取风险和待办。传 district 时同时返回同一快照的整屏统计、概览和分类分析。必须且只能传 district 或 scope 之一。
+      description: 按选定范围读取风险和待办。衢州监管员的所有请求均按账号辖区过滤并返回整屏快照。系统管理员传 district 时同时返回整屏统计、概览和分类分析。必须且只能传 district 或 scope 之一。
       parameters:
         - name: district
           in: query
           required: false
           allowEmptyValue: true
-          description: 区县名称。显式空值表示未归区。
+          description: 区县名称。衢州监管员可使用辖区编码。系统管理员的显式空值表示未归区。
           schema: {type: string, maxLength: 200}
         - name: scope
           in: query
           required: false
-          description: all 表示全域，包含未归区记录。
+          description: all 表示账号可见的完整范围。仅系统管理员可见未归区记录。
           schema: {type: string, enum: [all]}
       responses:
         '200':

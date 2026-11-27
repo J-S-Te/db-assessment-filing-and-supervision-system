@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"grade-business/internal/geoarea"
 )
 
 // create 完成主档登记、机构关联和首条历史的同一事务。
@@ -145,6 +146,13 @@ func (s service) patch(ctx context.Context, kind, scope, id string, input change
 func applyChange(ctx context.Context, tx pgx.Tx, kind, scope string, before, candidate entry) (entry, error) {
 	if !validEntry(kind, candidate) {
 		return entry{}, errInvalid
+	}
+	if kind == unit && scope != "" {
+		oldArea := geoarea.QuzhouAreaCode(before.District)
+		newArea := geoarea.QuzhouAreaCode(candidate.District)
+		if oldArea != newArea {
+			return entry{}, errDistrictManaged
+		}
 	}
 	moving := before.InstitutionID != candidate.InstitutionID
 	if kind == person && (moving || candidate.Status == active && before.Status != active) {

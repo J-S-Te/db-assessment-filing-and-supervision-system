@@ -7,7 +7,7 @@ import { newHighAlertIds } from '../lib/dashboardMetrics'
 import { formatTime, risks } from '../lib/domain'
 
 const props = defineProps<{
-  items?: DashboardAlert[]; loading: boolean; compact?: boolean; highlightNew?: boolean
+  items?: DashboardAlert[]; loading: boolean; compact?: boolean; highlightNew?: boolean; readOnly?: boolean
 }>()
 const highlighted = shallowRef(new Set<string>())
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
@@ -27,9 +27,9 @@ onScopeDispose(() => clearTimeout(highlightTimer))
   <div v-if="items?.length" class="alert-feed" :class="{ compact }" v-dashboard-scroll
     :aria-label="compact ? '最新预警' : '实时预警'" tabindex="0">
     <div class="alert-rows" data-dashboard-loop-original>
-      <RouterLink v-for="item in items" :key="item.id" class="alert-card" :data-severity="item.severity"
+      <component :is="readOnly ? 'div' : 'RouterLink'" v-for="item in items" :key="item.id" class="alert-card" :data-severity="item.severity"
         :class="{ 'new-alert': highlighted.has(item.id) && item.status !== 'closed' }"
-        :to="{ path: alertPath, query: { alert: item.id } }">
+        :to="readOnly ? undefined : { path: alertPath, query: { alert: item.id } }">
         <div>
           <strong :title="item.systemName">{{ item.systemName }}</strong>
           <span>{{ alertTypes[item.type] }} · {{ alertStatuses[item.status] }}<template v-if="!compact"> · {{ item.organizationName }}</template></span>
@@ -39,7 +39,7 @@ onScopeDispose(() => clearTimeout(highlightTimer))
             {{ risks[item.severity] }}</span>
           <time :datetime="item.triggeredAt">{{ formatTime(item.triggeredAt) }}</time>
         </div>
-      </RouterLink>
+      </component>
     </div>
     <div class="alert-rows" data-dashboard-loop-copy aria-hidden="true" hidden></div>
   </div>

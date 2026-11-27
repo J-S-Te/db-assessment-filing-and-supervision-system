@@ -4,7 +4,7 @@ import { archiveRecordPath } from '../lib/archives'
 import { dashboardNumber, type DashboardSystemRisk } from '../lib/dashboard'
 import { vDashboardScroll } from '../lib/dashboardAutoScroll'
 
-defineProps<{ systems?: DashboardSystemRisk[]; loading: boolean; compact?: boolean }>()
+defineProps<{ systems?: DashboardSystemRisk[]; loading: boolean; compact?: boolean; filingLinks?: boolean }>()
 </script>
 
 <template>
@@ -12,7 +12,7 @@ defineProps<{ systems?: DashboardSystemRisk[]; loading: boolean; compact?: boole
     v-dashboard-scroll>
     <ol class="rank-rows" data-dashboard-loop-original aria-label="高风险系统排行">
       <li v-for="(system, index) in systems" :key="system.filingId">
-        <RouterLink :to="archiveRecordPath('systems', system.filingId)">
+        <RouterLink :to="filingLinks ? '/filings/' + system.filingId : archiveRecordPath('systems', system.filingId)">
           <span class="rank-index" aria-hidden="true">{{ index + 1 }}</span>
           <span class="rank-name"><b>{{ system.systemName }}</b><small>{{ system.organizationName }}</small></span>
           <strong>{{ dashboardNumber(system.count) }}</strong>

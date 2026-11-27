@@ -43,7 +43,7 @@ func caseDistrictScope(parameter string) string {
 	return ` AND (` + parameter + `::text[] IS NULL OR EXISTS (
 	    SELECT 1 FROM directory_parties u
 	    WHERE u.id=COALESCE(f.directory_unit_id,c.directory_unit_id)
-	      AND u.kind='unit' AND u.district=ANY(` + parameter + `::text[])))`
+	      AND u.kind='unit' AND btrim(u.district)=ANY(` + parameter + `::text[])))`
 }
 
 // parseListQuery 解析受限分页参数并验证允许的筛选条件。

@@ -27,6 +27,17 @@ test('衢州底图覆盖六个法定县级行政区并可生成地图标签', ()
   }
 })
 
+test('区县账号的地图只投影本辖区，市本级投影衢州六区县', () => {
+  const source = readFileSync(new URL('../assets/district-boundaries.geojson', import.meta.url), 'utf8')
+  const features = readDistrictBoundaries(source)
+  const county = projectDistrictBoundaries(features, ['柯城区'])
+  assert.deepEqual(county.map(({ district }) => district), ['柯城区'])
+  assert.ok(county[0].label.every(Number.isFinite))
+  assert.deepEqual(projectDistrictBoundaries(features, []), [])
+  assert.equal(projectDistrictBoundaries(features,
+    ['衢州市', '柯城区', '衢江区', '常山县', '开化县', '龙游县', '江山市']).length, 6)
+})
+
 test('按区县名精确匹配真实统计，多面区县共享一个计数，未匹配保留', () => {
   const rows = [
     { district: '测试一区', systems: 1, high: 2, medium: 1, low: 0 },

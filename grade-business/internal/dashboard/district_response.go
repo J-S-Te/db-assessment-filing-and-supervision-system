@@ -56,7 +56,7 @@ const districtResponseSQL = `
 WITH scoped_filings AS (
 	SELECT f.id,f.system_name,f.organization_name
 	FROM business_cases f ` + filingDistrictJoinSQL + `
-	WHERE ` + eligibleIndustrySQL + ` AND ($1::text IS NULL OR ` + filingDistrictSQL + `=$1)
+	WHERE ` + eligibleIndustrySQL + ` AND ` + scopedFilingDistrictSQL + `
 ), scoped_alerts AS (
 	SELECT a.id,a.kind,a.severity,hc.system_name,hc.organization_name,a.status,a.triggered_at
 	FROM scoped_filings f JOIN hazard_context hc ON hc.filing_id=f.id
@@ -119,8 +119,13 @@ func handleDistrictResponse(pool *pgxpool.Pool, windows workflowreminders.Window
 			httpx.Error(w, http.StatusBadRequest, "invalid_input", "请选择全域或一个有效的区县范围。")
 			return
 		}
+		district, scope, authorized := resolveDistrictScope(r.Context(), district)
+		if !authorized {
+			httpx.Error(w, http.StatusForbidden, "permission_denied", "当前账号无权查看该区县。")
+			return
+		}
 		result := districtResponse{District: district}
-		err := readDistrictResponse(r.Context(), pool, &result, windows)
+		err := readDistrictResponse(r.Context(), pool, &result, scope, windows)
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal_error", "暂时无法读取区县处置态势。")
 			return
@@ -130,28 +135,28 @@ func handleDistrictResponse(pool *pgxpool.Pool, windows workflowreminders.Window
 }
 
 // readDistrictResponse 用同一个只读快照查询区县处置和全屏指标。
-// 参数 ctx 控制读取，pool 为数据库，result 为选定范围及输出，windows 为审核时限。
+// 参数 ctx 控制读取，pool 为数据库，result 为响应，scope 为授权区县，windows 为审核时限。
 // 返回值 任一查询失败时的错误。
 func readDistrictResponse(ctx context.Context, pool *pgxpool.Pool, result *districtResponse,
-	windows workflowreminders.Windows,
+	scope districtScope, windows workflowreminders.Windows,
 ) error {
-	if result.District == nil {
-		return scanDistrictDetails(ctx, pool, result)
+	if scope.aliases == nil {
+		return scanDistrictDetails(ctx, pool, result, scope)
 	}
 	options := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
 	return pgx.BeginTxFunc(ctx, pool, options, func(tx pgx.Tx) error {
-		if err := scanDistrictDetails(ctx, tx, result); err != nil {
+		if err := scanDistrictDetails(ctx, tx, result, scope); err != nil {
 			return err
 		}
-		stats, err := readStatistics(ctx, tx, result.District)
+		stats, err := readStatistics(ctx, tx, scope)
 		if err != nil {
 			return err
 		}
-		overview, err := readDistrictOverview(ctx, tx, result.District, windows)
+		overview, err := readDistrictOverview(ctx, tx, scope, windows)
 		if err != nil {
 			return err
 		}
-		analysis, err := readAnalysis(ctx, tx, result.District)
+		analysis, err := readAnalysis(ctx, tx, scope)
 		if err != nil {
 			return err
 		}
@@ -161,10 +166,10 @@ func readDistrictResponse(ctx context.Context, pool *pgxpool.Pool, result *distr
 }
 
 // scanDistrictDetails 读取当前范围的重点隐患、排行和预警。
-// 参数 ctx 控制读取，db 为数据库或事务，result 保存范围和查询结果。
+// 参数 ctx 控制读取，db 为数据库或事务，result 保存查询结果，scope 为授权区县。
 // 返回值 查询或解码错误。
-func scanDistrictDetails(ctx context.Context, db dashboardQueryer, result *districtResponse) error {
-	return db.QueryRow(ctx, districtResponseSQL, result.District).
+func scanDistrictDetails(ctx context.Context, db dashboardQueryer, result *districtResponse, scope districtScope) error {
+	return db.QueryRow(ctx, districtResponseSQL, scope.aliases, scope.requireUnit).
 		Scan(&result.Counts, &result.Tasks, &result.HighRiskSystems, &result.Alerts)
 }
 

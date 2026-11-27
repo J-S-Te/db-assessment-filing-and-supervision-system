@@ -81,7 +81,7 @@ func handleAnalysis(pool *pgxpool.Pool) http.HandlerFunc {
 			httpx.Error(w, http.StatusBadRequest, "invalid_input", "驾驶舱分析无需查询参数。")
 			return
 		}
-		result, err := readAnalysis(r.Context(), pool, nil)
+		result, err := readAnalysis(r.Context(), pool, districtScope{})
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal_error", "暂时无法读取驾驶舱分析。")
 			return
@@ -91,12 +91,12 @@ func handleAnalysis(pool *pgxpool.Pool) http.HandlerFunc {
 }
 
 // readAnalysis 读取同一辖区的行业及隐患问题分布。
-// 参数 ctx 为查询上下文，db 为数据库或读取事务，district 为空指针时读取全域。
+// 参数 ctx 为查询上下文，db 为数据库或读取事务，scope 为区划范围，未指定时读取全域。
 // 返回值 归类统计及查询错误。
-func readAnalysis(ctx context.Context, db dashboardQueryer, district *string) (dashboardAnalysis, error) {
+func readAnalysis(ctx context.Context, db dashboardQueryer, scope districtScope) (dashboardAnalysis, error) {
 	var result dashboardAnalysis
 	industries, issues := &result.Industries, &result.CommonIssues
-	err := db.QueryRow(ctx, dashboardAnalysisSQL, district).Scan(
+	err := db.QueryRow(ctx, dashboardAnalysisSQL, scope.aliases, scope.requireUnit).Scan(
 		&industries.Items, &industries.Unclassified, &issues.Items, &issues.Unclassified)
 	return result, err
 }

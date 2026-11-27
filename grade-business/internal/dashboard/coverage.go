@@ -21,15 +21,17 @@ type registeredAssets struct {
 }
 
 const coverageStatisticsSQL = `
-coverage_counts AS (
+scoped_coverage AS (
+    SELECT COALESCE(NULLIF(COALESCE($1::jsonb ->> btrim(district),btrim(district)),''),'未登记区县') AS district,
+           covered AND (NOT $2::boolean OR filing_id IN (SELECT id FROM scope_filings)) AS covered
+    FROM archive_coverage_status
+    WHERE active AND ($1::jsonb IS NULL OR $1::jsonb ? COALESCE(btrim(district),''))
+), coverage_counts AS (
     SELECT count(*) FILTER (WHERE covered) AS covered,count(*) AS eligible
-    FROM archive_coverage_status WHERE active AND
-      ($1::text IS NULL OR COALESCE(NULLIF(btrim(district),''),'') COLLATE "C"=$1)
+    FROM scoped_coverage
 ), district_coverage AS (
-    SELECT COALESCE(NULLIF(btrim(district),''),'未登记区县') AS district,
-           count(*) FILTER (WHERE covered) AS covered,count(*) AS eligible
-    FROM archive_coverage_status WHERE active AND
-      ($1::text IS NULL OR COALESCE(NULLIF(btrim(district),''),'') COLLATE "C"=$1)
+    SELECT district,count(*) FILTER (WHERE covered) AS covered,count(*) AS eligible
+    FROM scoped_coverage
     GROUP BY 1 ORDER BY eligible DESC,district LIMIT 20
 ), asset_counts AS (
     SELECT count(*) FILTER (WHERE a.kind='ip') AS ip,count(*) FILTER (WHERE a.kind='domain') AS domain,
