@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, ref } from 'vue'
 import { ChevronLeft, ChevronRight, Plus, Settings } from '@lucide/vue'
 import { useRoute } from 'vue-router'
@@ -33,7 +34,7 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
   <section class="v2-list" :aria-label="caseLabels[kind].module">
       <form class="v2-list-toolbar" @submit.prevent="search">
         <div class="v2-toolbar-row">
-          <nav v-if="kind === 'filings'" class="v2-views" aria-label="备案视图">
+          <nav v-if="kind === 'filings' && hasPermission('admin.grade.case.edit')" class="v2-views" aria-label="备案视图">
             <RouterLink class="active" to="/filings" aria-current="page">全部</RouterLink>
             <RouterLink :to="{ path: '/filing-applications', query: { type: 'change' } }">变更</RouterLink>
             <RouterLink :to="{ path: '/filing-applications', query: { type: 'cancel' } }">注销</RouterLink>
@@ -63,12 +64,12 @@ refreshBusinessOnFocus(() => { if (route.path === '/' + props.kind) void refresh
         <button class="button neutral" type="button" @click="reset">重置</button>
         </div>
         <div class="v2-toolbar-row">
-          <RouterLink class="button primary" :to="'/' + kind + '/new'">
+          <RouterLink v-if="hasPermission('admin.grade.case.edit')" class="button primary" :to="'/' + kind + '/new'">
             <Plus :size="16" aria-hidden="true" />{{ kind === 'filings' ? '备案录入' : '上传测评报告' }}
           </RouterLink>
-          <RouterLink v-if="kind === 'filings'" class="button neutral" to="/filings/history-import">导入历史材料</RouterLink>
+          <RouterLink v-if="kind === 'filings' && hasPermission('admin.grade.case.edit')" class="button neutral" to="/filings/history-import">导入历史材料</RouterLink>
           <span class="v2-toolbar-spacer"></span>
-          <a v-if="kind === 'reports' && !failure" class="button neutral" :href="reportExportURL"
+          <a v-if="kind === 'reports' && !failure && hasPermission('admin.grade.case.edit')" class="button neutral" :href="reportExportURL"
             title="按已应用的筛选导出测评报告台账">导出台账</a>
           <label v-if="kind === 'filings'" class="field filing-lifecycle">
             <span>备案效力</span>

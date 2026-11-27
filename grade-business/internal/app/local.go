@@ -87,7 +87,7 @@ func Frontend(assets fs.FS) (http.Handler, error) {
 // 返回值 true 表示可以回退到统一的应用入口。
 func appRoute(path string) bool {
 	switch path {
-	case "/", "/alerts", "/monitor/publications", "/dashboard", "/audit", "/flow", "/tag-catalog",
+	case "/", "/login", "/account/password", "/alerts", "/monitor/publications", "/dashboard", "/audit", "/flow", "/tag-catalog",
 		"/archives/directory", "/institution/directory", "/operator/assessment-history", "/workday-calendar",
 		"/filing-material-policy":
 		return true
@@ -115,8 +115,7 @@ func appRoute(path string) bool {
 // 返回值 属于已注册工作台、收件箱、业务列表、表单和详情时为真。
 func scopedAppRoute(path, module string) bool {
 	item := strings.TrimPrefix(path, "/"+module+"/")
-	if item == "workbench" || item == "feedback" || item == "publications" || item == "alerts" ||
-		(module == "institution" && item == "report-feedback") {
+	if item == "workbench" || item == "feedback" || item == "publications" || item == "alerts" {
 		return true
 	}
 	resource, detail, found := strings.Cut(item, "/")

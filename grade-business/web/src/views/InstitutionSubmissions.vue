@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../components/AsyncState.vue'
@@ -26,7 +27,7 @@ const onReports = computed(() => !operator.value && props.resource === 'reports'
 const failedReports = computed(() => onReports.value && queryValue(route.query.view) === 'failed')
 const scopeKey = computed(() => businessScopes[audience.value].key)
 const scope = computed(() => queryValue(route.query[scopeKey.value]).trim())
-const canReview = computed(() => !operator.value
+const canReview = computed(() => hasPermission('org.filing.audit') && !operator.value
   && (props.resource === 'filings' || props.resource === 'filing-applications'))
 const reviewQueue = computed(() => canReview.value && queryValue(route.query.review) === 'assigned')
 const heading = computed(() => operator.value ? '我的备案办理' : reviewQueue.value ? '机构初审' : '机构报送')
@@ -141,7 +142,7 @@ refreshBusinessOnFocus(() => { if (scope.value && !failedReports.value) void ref
     <form class="v2-list-toolbar" @submit.prevent="chooseScope">
       <div class="v2-toolbar-row">
         <label class="field filter-keyword"><span>{{ businessScopes[audience].label }}</span>
-          <input v-model="scopeDraft" maxlength="200" required :placeholder="'输入登记的' + businessScopes[audience].label">
+          <input v-model="scopeDraft" readonly maxlength="200" required :placeholder="'输入登记的' + businessScopes[audience].label">
         </label>
         <button class="button primary" type="submit">查看办理记录</button>
       </div>

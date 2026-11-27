@@ -1,19 +1,27 @@
 package cases
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 )
 
 const institutionReviewAudience = "institution"
 
 // checkReviewRole 验证当前审核阶段是否由对应机构或监管席位办理。
-// 参数 status 为加锁后的状态，operatorOrigin 为持久化的运营者发起标记。
+// 参数 ctx 携带真实账号，status 为加锁后的状态，operatorOrigin 为运营者发起标记。
 // 返回值 当前席位不允许执行审核时返回状态冲突。
-func (input reviewInput) checkReviewRole(status string, operatorOrigin bool) error {
+func (input reviewInput) checkReviewRole(ctx context.Context, status string, operatorOrigin bool) error {
 	if input.Decision != approve && input.Decision != returnForFix {
+		return nil
+	}
+	if actor, ok := access.Current(ctx); ok {
+		if actor.Role != access.SystemAdmin && actor.Role != access.Regulator {
+			return ErrConflict
+		}
 		return nil
 	}
 	institutionRequired := operatorOrigin && status == pendingInitial
@@ -24,9 +32,12 @@ func (input reviewInput) checkReviewRole(status string, operatorOrigin bool) err
 }
 
 // reviewActor 确定审核轨迹需要登记的真实办理席位。
-// 参数 regulator 为监管配置席位，organization 为本地运营者范围。
+// 参数 ctx 携带真实账号，regulator、organization 供未挂载权限网关的内部调用使用。
 // 返回值 能区分机构、运营者及监管的办理人名称。
-func (input reviewInput) reviewActor(regulator, organization string) string {
+func (input reviewInput) reviewActor(ctx context.Context, regulator, organization string) string {
+	if actor, ok := access.Current(ctx); ok {
+		return actor.Name
+	}
 	if input.institutionReviewer != "" {
 		return "本地机构：" + input.institutionReviewer
 	}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, Check, ChevronRight, History, Pencil, Send } from '@lucide/vue'
@@ -29,6 +30,10 @@ const id = computed(() => typeof route.params.id === 'string' ? route.params.id 
 const path = computed(() => '/' + props.kind + '/' + encodeURIComponent(id.value))
 const label = computed(() => caseLabels[props.kind])
 const record = shallowRef<CaseDetail>()
+const canEditCase = computed(() => hasPermission('admin.grade.case.edit'))
+const canReviewCase = computed(() => hasPermission(
+  props.kind === 'filings' ? 'admin.grade.filing.audit' : 'admin.grade.report.audit',
+))
 const reportTab = ref<'overview' | 'extraction' | 'compliance' | 'comparison' | 'result' | 'history' | 'attachments'>('overview')
 const attachments = shallowRef<Attachment[]>([])
 const history = shallowRef<Review[]>([])
@@ -260,7 +265,8 @@ onBeforeUnmount(() => {
             </div>
             <p>{{ label.number }} <span class="code">{{ record.number }}</span></p>
           </div>
-          <div class="page-actions">
+          <div v-if="canEditCase || canReviewCase" class="page-actions">
+            <template v-if="canEditCase">
             <BusinessReceiptDialog v-if="kind === 'filings'" resource="filings" :record-id="record.id" />
             <RouterLink v-if="kind === 'reports' && record.status === 'approved'" class="button neutral"
               :to="{ path: '/material-expiries', query: { reportId: record.id } }">测评材料有效期</RouterLink>
@@ -276,16 +282,17 @@ onBeforeUnmount(() => {
               :disabled="changing" @click="confirm('submit')">
               <Send :size="16" aria-hidden="true" />{{ submitText }}
             </button>
-            <button v-if="record.allowedActions.includes('return_for_correction')" type="button"
+            </template>
+            <button v-if="canReviewCase && record.allowedActions.includes('return_for_correction')" type="button"
               class="button neutral" :disabled="changing" @click="confirm('return_for_correction')">退回补正</button>
-            <button v-if="record.allowedActions.includes('approve')" type="button" class="button primary"
+            <button v-if="canReviewCase && record.allowedActions.includes('approve')" type="button" class="button primary"
               :disabled="changing" @click="confirm('approve')">
               <Check :size="17" aria-hidden="true" />{{ decisionText }}
             </button>
           </div>
         </header>
         <p v-if="actionNotice" class="form-message success-message detail-notice" role="status">{{ actionNotice }}</p>
-        <FilingWithdrawalPanel v-if="kind === 'filings' && record.initialReviewAudience"
+        <FilingWithdrawalPanel v-if="hasPermission('admin.grade.case.edit') && kind === 'filings' && record.initialReviewAudience"
           :path="path" :version="record.version" :disabled="changing" @changed="refresh" />
         <div v-if="returnReason" class="form-message warning-message detail-notice">
           <strong>最近退回意见</strong>
@@ -294,13 +301,17 @@ onBeforeUnmount(() => {
         <nav v-if="kind === 'reports'" class="v2-tabs v2-detail-tabs" aria-label="测评报告详情分区">
           <button class="v2-tab" type="button" :class="{ active: reportTab === 'overview' }"
             :aria-pressed="reportTab === 'overview'" @click="reportTab = 'overview'">基本信息</button>
-          <button class="v2-tab" type="button" :class="{ active: reportTab === 'extraction' }"
+          <button v-if="hasPermission('admin.grade.case.edit')" class="v2-tab" type="button"
+            :class="{ active: reportTab === 'extraction' }"
             :aria-pressed="reportTab === 'extraction'" @click="reportTab = 'extraction'">AI 抽取</button>
-          <button class="v2-tab" type="button" :class="{ active: reportTab === 'compliance' }"
+          <button v-if="hasPermission('admin.grade.case.edit')" class="v2-tab" type="button"
+            :class="{ active: reportTab === 'compliance' }"
             :aria-pressed="reportTab === 'compliance'" @click="reportTab = 'compliance'">合规比对</button>
-          <button class="v2-tab" type="button" :class="{ active: reportTab === 'comparison' }"
+          <button v-if="hasPermission('admin.grade.case.edit')" class="v2-tab" type="button"
+            :class="{ active: reportTab === 'comparison' }"
             :aria-pressed="reportTab === 'comparison'" @click="reportTab = 'comparison'">历史对比</button>
-          <button class="v2-tab" type="button" :class="{ active: reportTab === 'result' }"
+          <button v-if="hasPermission('admin.grade.case.edit')" class="v2-tab" type="button"
+            :class="{ active: reportTab === 'result' }"
             :aria-pressed="reportTab === 'result'" @click="reportTab = 'result'">测评结论登记</button>
           <button class="v2-tab" type="button" :class="{ active: reportTab === 'history' }"
             :aria-pressed="reportTab === 'history'" @click="reportTab = 'history'">审核留痕</button>
@@ -334,7 +345,7 @@ onBeforeUnmount(() => {
                   </div>
                 </template>
               </dl>
-              <div v-if="kind === 'filings' && record.status === 'approved'" class="panel-footer page-actions">
+              <div v-if="kind === 'filings' && record.status === 'approved' && hasPermission('admin.grade.case.edit')" class="panel-footer page-actions">
                 <RouterLink class="button neutral" :to="{ path: '/filing-applications', query: { filingId: record.id } }">
                   变更与注销记录
                 </RouterLink>
@@ -347,14 +358,14 @@ onBeforeUnmount(() => {
             <AttachmentPanel v-show="kind === 'filings' || reportTab === 'attachments'" :key="path"
               :path="path" :kind="kind" :attachments="attachments"
               :required="record.requiredMaterials"
-              :editable="record.allowedActions.includes('edit')" :loading="attachmentsLoading" :error="attachmentError"
+              :editable="canEditCase && record.allowedActions.includes('edit')" :loading="attachmentsLoading" :error="attachmentError"
               @uploaded="refresh" @retry="loadAttachments" />
             <ClassificationSummary v-if="kind === 'filings' && record.classificationAssessment"
               :assessment="record.classificationAssessment" :declared="record.level" />
             <FilingPolicyMaterials v-if="kind === 'filings' && record.policyMaterials?.length"
               :rules="record.policyMaterials" :files="attachments" />
-            <PrecheckPanel v-if="kind === 'filings'" :path="path" :revision="revision" />
-            <div v-else v-show="reportTab === 'extraction'">
+            <PrecheckPanel v-if="hasPermission('admin.grade.case.edit') && kind === 'filings'" :path="path" :revision="revision" />
+            <div v-if="canEditCase && reportTab === 'extraction'">
               <ReportExtractionPanel :key="path" :path="path" :attachments="attachments" />
             </div>
             <ReportHistory v-if="kind === 'reports' && reportTab === 'comparison'" :key="path" :path="path" />
@@ -384,7 +395,7 @@ onBeforeUnmount(() => {
               </ol>
             </AsyncState>
           </section>
-          <ReportFeedbackReceipts v-if="kind === 'reports' && reportTab === 'history'"
+          <ReportFeedbackReceipts v-if="hasPermission('admin.grade.case.edit') && kind === 'reports' && reportTab === 'history'"
             :path="path" :institution="record.assessmentOrg" />
         </div>
       </template>

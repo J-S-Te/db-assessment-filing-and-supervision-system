@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { ArrowLeft, Download, Upload } from '@lucide/vue'
 import { useRoute } from 'vue-router'
@@ -81,7 +82,7 @@ const fileKinds: Partial<Record<BusinessResource, Record<string, string>>> = {
 }
 const historySupported = computed(() => operator.value
   || resource.value === 'filings' || resource.value === 'filing-applications')
-const canReviewFiling = computed(() => props.audience === 'institution'
+const canReviewFiling = computed(() => hasPermission('org.filing.audit') && props.audience === 'institution'
   && (record.value?.resource === 'filings' || record.value?.resource === 'filing-applications')
   && record.value.detail.allowedActions.includes('approve'))
 const phaseLabel = computed(() => {

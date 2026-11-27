@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/filingpolicy"
 )
 
@@ -153,7 +154,9 @@ func (s *Service) applicationInScope(ctx context.Context, id, institution string
 		return applicationDetail{}, err
 	}
 	detail.AllowedActions = allowedActions(detail.Status)
-	if operatorOrigin && (institution != "" || detail.Status == pendingInitial) {
+	actor, authenticated := access.Current(ctx)
+	if operatorOrigin && (institution != "" || (detail.Status == pendingInitial &&
+		(!authenticated || actor.Role != access.SystemAdmin))) {
 		detail.AllowedActions = initialReviewActions(detail.Status, institution != "")
 	} else if institution != "" {
 		detail.AllowedActions = institutionEditActions(detail.Status)

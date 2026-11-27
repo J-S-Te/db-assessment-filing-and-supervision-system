@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import InstitutionFeedback from './InstitutionFeedback.vue'
 import OperatorWorkflowTabs from '../components/OperatorWorkflowTabs.vue'
 import AsyncState from '../components/AsyncState.vue'
 import { api, errorText, isAbort, params } from '../lib/api'
 import { formatTime, type Page } from '../lib/domain'
 import { queryValue } from '../lib/paging'
-import { feedbackPath as reportFeedbackPath, institutionReportPath, type FeedbackReceipt } from '../lib/reportFeedback'
+import { institutionReportPath, type FeedbackReceipt } from '../lib/reportFeedback'
 import {
   acceptsResource, businessBadge, businessResources, businessScopes, businessStatus, scopedBusinessPath,
   type BusinessAudience, type BusinessFeedbackMessage,
@@ -18,6 +19,7 @@ const router = useRouter()
 const settings = computed(() => businessScopes[props.audience])
 const feedbackPath = computed(() => '/' + props.audience + '/feedback')
 const scope = computed(() => queryValue(route.query[settings.value.key]).trim())
+const reportView = computed(() => props.audience === 'institution' && route.query.view === 'reports')
 const before = computed(() => queryValue(route.query.before))
 const criteria = computed(() => ({ [settings.value.key]: scope.value || undefined }))
 const term = ref('')
@@ -37,7 +39,7 @@ let interval: ReturnType<typeof setInterval> | undefined
  */
 async function load(quiet = false) {
   readRequest?.abort()
-  if (!scope.value) {
+  if (!scope.value || reportView.value) {
     readRequest = undefined
     loading.value = false
     return
@@ -124,7 +126,7 @@ watch([feedbackPath, scope], () => {
   receiptRequest = undefined
   acknowledging.value = ''
 }, { immediate: true })
-watch([feedbackPath, scope, before], () => {
+watch([feedbackPath, scope, before, reportView], () => {
   page.value = { items: [] }
   failure.value = actionFailure.value = ''
   void load()
@@ -149,16 +151,23 @@ onScopeDispose(() => {
         <h1 id="business-inbox">{{ settings.title }}</h1>
         <p>{{ audience === 'institution' ? '备案、实施、测评与隐患复测' : '备案、整改与预警处置' }}</p>
       </div>
-      <RouterLink v-if="audience === 'institution'" class="button neutral"
-        :to="{ path: reportFeedbackPath, query: criteria }">测评报告审核意见</RouterLink>
+
     </header>
 
     <OperatorWorkflowTabs group="messages" :audience="audience" />
+    <nav v-if="audience === 'institution'" class="v2-tabs" aria-label="消息分类">
+      <RouterLink class="v2-tab" :class="{ active: !reportView }"
+        :to="{ path: feedbackPath, query: criteria }">办理通知</RouterLink>
+      <RouterLink class="v2-tab" :class="{ active: reportView }"
+        :to="{ path: feedbackPath, query: { ...criteria, view: 'reports' } }">测评报告意见</RouterLink>
+    </nav>
+    <InstitutionFeedback v-if="reportView" />
+    <template v-else>
     <form class="v2-list-toolbar" @submit.prevent="search">
       <div class="v2-toolbar-row">
         <label class="field filter-keyword">
           <span>{{ settings.label }}</span>
-          <input v-model="term" required maxlength="200" :placeholder="'输入登记的' + settings.label">
+          <input v-model="term" readonly required maxlength="200" :placeholder="'输入登记的' + settings.label">
         </label>
         <button class="button primary" type="submit">查询意见</button>
         <button v-if="scope" class="button neutral" type="button" :disabled="loading || Boolean(acknowledging)"
@@ -258,6 +267,7 @@ onScopeDispose(() => {
             :to="{ path: feedbackPath, query: { ...criteria, before: page.nextCursor } }">下一页</RouterLink>
         </div>
       </footer>
+    </template>
     </template>
   </section>
 </template>
