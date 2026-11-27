@@ -64,17 +64,31 @@ verify_external_schema() (
   fi
 )
 
-# 用途 优先使用已缓存的官方 PostgreSQL 镜像，缺少时只拉取匹配的主版本。
+# 用途 使用同主版本的官方 PostgreSQL 镜像，拉取失败时依次尝试公开镜像源。
 # 参数 $1 为已从运行数据库确认的 PostgreSQL 主版本。
-# 返回值 演练容器使用的本地不可变镜像 ID，准备失败时返回非零。
+# 返回值 本地不可变镜像 ID，所有镜像源均不可用时返回非零。
 external_rehearsal_image() {
-  local tag="docker.io/library/postgres:$1-alpine" image
-  if ! image=$(docker image inspect --format '{{.Id}}' "$tag" 2>/dev/null); then
-    docker pull "$tag" >/dev/null || return 1
-    image=$(docker image inspect --format '{{.Id}}' "$tag") || return 1
-  fi
-  [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]] || return 1
-  printf '%s\n' "$image"
+  local -a sources=(docker.io mirror.gcr.io public.ecr.aws/docker)
+  local registry tag image
+  for registry in "${sources[@]}"; do
+    tag="$registry/library/postgres:$1-alpine"
+    if image=$(docker image inspect --format '{{.Id}}' "$tag" 2>/dev/null) &&
+      [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+      printf '%s\n' "$image"
+      return 0
+    fi
+  done
+  for registry in "${sources[@]}"; do
+    tag="$registry/library/postgres:$1-alpine"
+    printf '准备 PostgreSQL 演练镜像：%s\n' "$tag" >&2
+    if timeout --kill-after=10s 90s docker pull "$tag" >/dev/null &&
+      image=$(docker image inspect --format '{{.Id}}' "$tag") &&
+      [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+      printf '%s\n' "$image"
+      return 0
+    fi
+  done
+  return 1
 }
 
 # 用途 先确认托管库与发布配置一致，再为待执行迁移做可恢复备份。
