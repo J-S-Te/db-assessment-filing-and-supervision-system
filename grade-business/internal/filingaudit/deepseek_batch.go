@@ -57,6 +57,16 @@ type summaryFile struct {
 func (d *DeepSeek) AssessBatch(ctx context.Context, docs []Document, unit Unit,
 	progress BatchProgress,
 ) (BatchResult, error) {
+	return d.AssessWithCheckpoints(ctx, docs, unit, progress, nil)
+}
+
+// AssessWithCheckpoints 用途 逐件审核并汇总，复用相同输入对应的已核验结论。
+// 参数 ctx、docs、unit 为批次上下文、原件与单位名录，progress 记录进度，
+// store 为本备案的可选检查点存储。
+// 返回值 本次材料状态、终审结论及任何中断原因。
+func (d *DeepSeek) AssessWithCheckpoints(ctx context.Context, docs []Document, unit Unit,
+	progress BatchProgress, store ReviewCheckpoints,
+) (BatchResult, error) {
 	var batch BatchResult
 	if len(docs) == 0 {
 		return batch, ErrNoEvidence
@@ -64,33 +74,80 @@ func (d *DeepSeek) AssessBatch(ctx context.Context, docs []Document, unit Unit,
 	if progress == nil {
 		progress = func(string, []MaterialReview, int) error { return nil }
 	}
-	reviewed, err := d.reviewDocuments(ctx, docs, unit, progress, &batch)
+	var batchKey string
+	var docKeys []string
+	if store != nil {
+		var err error
+		batchKey, docKeys, err = d.checkpointKeys(docs, unit)
+		if err != nil {
+			return batch, err
+		}
+		cached, hit, err := store.Load(ctx, batchKey)
+		if err != nil {
+			return batch, err
+		}
+		if hit && len(cached.Materials) == len(docs) && reusableChecks(cached.Checks) {
+			return cached, progress(ReviewingMaterials, cached.Materials, len(docs))
+		}
+	}
+	reviewed, err := d.reviewDocuments(ctx, docs, unit, progress, &batch, store, docKeys)
 	if err != nil {
 		return batch, err
 	}
 	if err := progress(SummarizingReview, batch.Materials, len(docs)); err != nil {
 		return batch, err
 	}
+	if store != nil {
+		if err := store.BeforeRequest(ctx); err != nil {
+			return batch, err
+		}
+	}
 	batch.Checks, err = d.summarizeReviews(ctx, reviewed, unit)
+	if err == nil && store != nil && reusableBatch(batch, reviewed) {
+		err = store.Save(ctx, batchKey, batch)
+	}
 	return batch, err
 }
 
+// reusableBatch 用途 确保整批及参与汇总的每份材料都通过了证据校验。
+// 参数 batch 为最终结论，files 为逐件核验结果。
+// 返回值 整批结论可安全复用时为真。
+func reusableBatch(batch BatchResult, files []reviewedDocument) bool {
+	if !reusableChecks(batch.Checks) {
+		return false
+	}
+	for _, file := range files {
+		if !reusableChecks(file.checks) {
+			return false
+		}
+	}
+	return true
+}
+
 // reviewDocuments 对本次快照逐份发起无历史消息的模型调用，随后记录实际状态。
-// 参数 ctx、docs、unit、progress、batch 为审核上下文、原件、名录、进度回调与本批记录。
+// 参数 ctx、docs、unit、progress、batch 为审核上下文、原件、名录、进度回调与本批记录，
+// store、keys 为可选复用存储及按原件排列的指纹。
 // 返回值 可用于终审的已核验材料结果，或不可完整汇总的原因。
 func (d *DeepSeek) reviewDocuments(ctx context.Context, docs []Document, unit Unit,
-	progress BatchProgress, batch *BatchResult,
+	progress BatchProgress, batch *BatchResult, store ReviewCheckpoints, keys []string,
 ) ([]reviewedDocument, error) {
 	if err := progress(ReviewingMaterials, nil, len(docs)); err != nil {
 		return nil, err
 	}
 	reviewed := make([]reviewedDocument, 0, len(docs))
 	var reviewErr error
-	for _, doc := range docs {
+	for index, doc := range docs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		checks, err := d.reviewDocument(ctx, doc, unit)
+		var key string
+		if store != nil {
+			key = keys[index]
+		}
+		checks, err, checkpointErr := d.reviewWithCheckpoint(ctx, doc, unit, store, key)
+		if checkpointErr != nil {
+			return nil, checkpointErr
+		}
 		batch.Materials = append(batch.Materials, materialOutcome(doc, checks, err))
 		if err := progress(ReviewingMaterials, batch.Materials, len(docs)); err != nil {
 			return nil, err
@@ -106,6 +163,31 @@ func (d *DeepSeek) reviewDocuments(ctx context.Context, docs []Document, unit Un
 	return reviewed, reviewErr
 }
 
+// reviewWithCheckpoint 用途 在调用模型前检查单件是否已有可复用的原文结论。
+// 参数 ctx、doc、unit 为本次审核输入，store、key 为复用存储及输入指纹。
+// 返回值 逐项结论、模型错误及独立的存储错误。
+func (d *DeepSeek) reviewWithCheckpoint(ctx context.Context, doc Document, unit Unit,
+	store ReviewCheckpoints, key string,
+) ([]Result, error, error) {
+	if store != nil {
+		cached, hit, err := store.Load(ctx, key)
+		if err != nil {
+			return nil, nil, err
+		}
+		if hit && reusableChecks(cached.Checks) {
+			return cached.Checks, nil, nil
+		}
+		if err := store.BeforeRequest(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
+	checks, err := d.reviewDocument(ctx, doc, unit)
+	if err == nil && store != nil && reusableChecks(checks) {
+		return checks, nil, store.Save(ctx, key, BatchResult{Checks: checks})
+	}
+	return checks, err, nil
+}
+
 // reviewDocument 仅使用一份原件的有界摘录及已启用的图像审核。
 // 参数 ctx、doc、unit 为本轮上下文、单件原件和可信名录。
 // 返回值 该文档的 11 项核验结果或模型错误。
@@ -118,7 +200,7 @@ func (d *DeepSeek) reviewDocument(ctx context.Context, doc Document, unit Unit) 
 	if err != nil {
 		return nil, err
 	}
-	raw, err := d.complete(ctx, input)
+	raw, err := d.complete(withUsageStage(ctx, ReviewingMaterials), input)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +263,7 @@ func (d *DeepSeek) summarizeReviews(ctx context.Context, files []reviewedDocumen
 	if err != nil {
 		return nil, err
 	}
-	raw, err := d.complete(ctx, request)
+	raw, err := d.complete(withUsageStage(ctx, SummarizingReview), request)
 	if err != nil {
 		return nil, err
 	}

@@ -26,11 +26,7 @@ type AuditText func(context.Context, string, io.ReaderAt, int64) ([]filingaudit.
 func (s *Service) FilingAuditContent(ctx context.Context, id string, materials []filingpolicy.Material,
 	read AuditText,
 ) ([]filingaudit.Document, filingaudit.Unit, error) {
-	var unit filingaudit.Unit
-	err := s.db.QueryRow(ctx, `SELECT COALESCE(u.name,''),COALESCE(u.code,''),COALESCE(u.district,'')
-		FROM business_cases c LEFT JOIN directory_parties u ON u.id=c.directory_unit_id AND u.kind='unit'
-		WHERE c.id=$1 AND c.kind='filing' AND c.discarded_at IS NULL`, id).
-		Scan(&unit.Name, &unit.Code, &unit.District)
+	unit, err := s.FilingAuditUnit(ctx, id)
 	if err != nil {
 		return nil, unit, err
 	}
@@ -58,6 +54,18 @@ func (s *Service) FilingAuditContent(ctx context.Context, id string, materials [
 		result = append(result, docs...)
 	}
 	return result, unit, ctx.Err()
+}
+
+// FilingAuditUnit 用途 读取备案当前绑定的审核用单位名录。
+// 参数 ctx 控制查询，id 为备案标识。
+// 返回值 审核输入中的单位名称、信用代码、行政区划及查询错误。
+func (s *Service) FilingAuditUnit(ctx context.Context, id string) (filingaudit.Unit, error) {
+	var unit filingaudit.Unit
+	err := s.db.QueryRow(ctx, `SELECT COALESCE(u.name,''),COALESCE(u.code,''),COALESCE(u.district,'')
+		FROM business_cases c LEFT JOIN directory_parties u ON u.id=c.directory_unit_id AND u.kind='unit'
+		WHERE c.id=$1 AND c.kind='filing' AND c.discarded_at IS NULL`, id).
+		Scan(&unit.Name, &unit.Code, &unit.District)
+	return unit, err
 }
 
 // auditMaterialPriority 优先读取基础材料与可识别的专家、摸底和证明附件。

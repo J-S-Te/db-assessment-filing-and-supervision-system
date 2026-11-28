@@ -140,6 +140,8 @@ PDF 文字提取需要应用进程的 `PATH` 包含 Poppler 的 `pdfinfo`、`pdf
 - `reasoning_effort` 默认 `high`，支持 `none`、`low`、`high` 和 `max`。
 - `include_images` 默认关闭。开启后，发起预审时会随摘录发送选定的 PDF 页图和 DOCX 内嵌图片。无法从送检材料确定的签章、签名或拓扑由监管员核实。
 - 进程启动时读取参数。修改后重启，再从备案详情发起预审。运行环境提供密钥后优先调用 DeepSeek，模型不可用时自动完成本地规则审核，并在结果中显示来源和原因。
+- 备案、名录、规则和模型输入一致时，重复发起预审可复用已核验的 DeepSeek 结果。补报材料或恢复中断任务时，系统续用仍有效的逐件结果，再核对整套材料。需要显式重新推理时可调用 `POST /api/v1/filings/{id}/prechecks?force=true`。
+- 数据库表 `filing_precheck_ai_usage` 按任务和审核阶段保存实际模型请求、用量、缓存细分和结果状态。按 `job_id` 查询并汇总可估算该批次费用。供应商未上报用量的请求通过 `usage_reported` 标记，费用应计为未知。
 
 ## 执行验收
 

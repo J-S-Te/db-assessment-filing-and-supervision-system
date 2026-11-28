@@ -18,6 +18,7 @@ import (
 )
 
 var ErrNotFound = errors.New("precheck filing or job not found")
+var errPrecheckInProgress = errors.New("existing precheck is already running")
 
 type Material = filingpolicy.Material
 type Snapshot struct {
@@ -64,6 +65,7 @@ type Service struct {
 	pool     *pgxpool.Pool
 	source   Source
 	content  ContentSource
+	unit     func(context.Context, string) (filingaudit.Unit, error)
 	assessor Assessor
 }
 
@@ -82,6 +84,13 @@ func New(pool *pgxpool.Pool, source Source, content ...ContentSource) *Service {
 // 参数 assessor 为配置好的模型实现。
 // 返回值 无。
 func (s *Service) WithAssessor(assessor Assessor) { s.assessor = assessor }
+
+// WithUnitSource 用途 在运行任务和读取结果时检查当前备案的单位名录。
+// 参数 source 为不读取原件、只查询当前名录事实的函数。
+// 返回值 无。
+func (s *Service) WithUnitSource(source func(context.Context, string) (filingaudit.Unit, error)) {
+	s.unit = source
+}
 
 // profile 返回结果应使用的模型或本地规则版本。
 // 参数 无。
@@ -108,6 +117,13 @@ func (s *Service) Register(mux *http.ServeMux) {
 // 参数 ctx 控制读写，id 为备案标识。
 // 返回值 对应版本的任务或备案、数据库错误。
 func (s *Service) Start(ctx context.Context, id string) (Job, error) {
+	return s.start(ctx, id, false)
+}
+
+// start 用途 按当前材料与政策快照排队，按需开启显式重审。
+// 参数 ctx、id 为操作上下文和备案标识，force 表示跳过旧批次的 AI 结果。
+// 返回值 对应版本的任务，或读取与保存错误。
+func (s *Service) start(ctx context.Context, id string, force bool) (Job, error) {
 	snapshot, err := s.source(ctx, id)
 	if err != nil {
 		return Job{}, err
@@ -119,7 +135,7 @@ func (s *Service) Start(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	return s.startBatch(ctx, id, snapshot, policy)
+	return s.startBatch(ctx, id, snapshot, policy, force)
 }
 
 // Get 读取指定备案中的一条预审任务并比较当前材料版本。
@@ -139,9 +155,11 @@ func (s *Service) Get(ctx context.Context, id, jobID string) (Job, error) {
 		wanted = jobID
 	}
 	var job Job
+	var unitKey string
 	err = s.pool.QueryRow(ctx, `SELECT id::text,status,
  revision<>$2 OR policy_version<>(SELECT version FROM filing_material_policy WHERE singleton) OR check_profile<>$4,
- findings,check_results,check_source,fallback_reason,failure,progress_stage,material_reviews,material_review_total
+ findings,check_results,check_source,fallback_reason,failure,progress_stage,material_reviews,material_review_total,
+ unit_fingerprint
  FROM (
    SELECT `+readBatchFields+` FROM filing_prechecks WHERE filing_id=$1
    UNION ALL
@@ -150,14 +168,31 @@ func (s *Service) Get(ctx context.Context, id, jobID string) (Job, error) {
  WHERE filing_id=$1 AND ($3::uuid IS NULL OR id=$3::uuid) ORDER BY created_at DESC,id DESC LIMIT 1`,
 		id, snapshot.Revision, wanted, s.profile()).
 		Scan(&job.ID, &job.Status, &job.Stale, &job.Findings, &job.Checks,
-			&job.Source, &job.Fallback, &job.Failure, &job.Stage, &job.MaterialReviews, &job.MaterialReviewTotal)
+			&job.Source, &job.Fallback, &job.Failure, &job.Stage, &job.MaterialReviews, &job.MaterialReviewTotal, &unitKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
+	}
+	if err == nil && !job.Stale && s.unit != nil && job.Status == "succeeded" {
+		job.Stale, err = s.unitChanged(ctx, id, unitKey, job.Source)
 	}
 	return job, err
 }
 
-// startHTTP 受理空请求体的业务预审动作。
+// unitChanged 用途 判断保存结果对应的审核名录是否仍有效。
+// 参数 ctx、id、key、source 为查询上下文、备案、已保存名录指纹和结论来源。
+// 返回值 审核名录是否过时及查询错误。
+func (s *Service) unitChanged(ctx context.Context, id, key, source string) (bool, error) {
+	if key == "" {
+		return source == "deepseek", nil
+	}
+	unit, err := s.unit(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+	return unitFingerprint(unit) != key, err
+}
+
+// startHTTP 用途 受理空请求体的业务预审动作及可选的显式重审。
 // 参数 w 和 r 是响应和携带备案标识的请求。
 // 返回值 无。
 func (s *Service) startHTTP(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +200,15 @@ func (s *Service) startHTTP(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "invalid_input", "发起预审无需额外字段")
 		return
 	}
-	job, err := s.Start(r.Context(), r.PathValue("id"))
+	var force bool
+	if values, ok := r.URL.Query()["force"]; ok {
+		if len(values) != 1 || (values[0] != "true" && values[0] != "false") {
+			httpx.Error(w, 400, "invalid_input", "force 必须是 true 或 false")
+			return
+		}
+		force = values[0] == "true"
+	}
+	job, err := s.start(r.Context(), r.PathValue("id"), force)
 	reply(w, 202, job, err)
 }
 
@@ -185,6 +228,10 @@ func (s *Service) getHTTP(w http.ResponseWriter, r *http.Request) {
 // 参数 w 为响应对象，status 为成功状态，job 和 err 是查询结果。
 // 返回值 无。
 func reply(w http.ResponseWriter, status int, job Job, err error) {
+	if errors.Is(err, errPrecheckInProgress) {
+		httpx.Error(w, http.StatusConflict, "precheck_in_progress", "普通预审正在执行，完成后可发起强制重审")
+		return
+	}
 	if errors.Is(err, ErrNotFound) {
 		httpx.Error(w, 404, "not_found", "未找到该备案预审任务")
 		return
@@ -234,8 +281,7 @@ func (s *Service) runOne(ctx context.Context) error {
  WHERE status='running' AND attempt>=3 AND lease_until<now()`); err != nil {
 		return err
 	}
-	var id, filingID, claim string
-	var revision int64
+	run := aiExecution{service: s}
 	var materials []Material
 	var rules []filingpolicy.Rule
 	lease := 60 * time.Second
@@ -248,17 +294,19 @@ func (s *Service) runOne(ctx context.Context) error {
  claim_token=gen_random_uuid(),material_reviews='[]'::jsonb,material_review_total=0,
  lease_until=now()+$1::integer*interval '1 second'
  FROM target WHERE p.id=target.id
- RETURNING p.id::text,p.filing_id::text,p.revision,p.claim_token::text,p.materials,p.policy_rules`, int(lease.Seconds())).
-		Scan(&id, &filingID, &revision, &claim, &materials, &rules)
+ RETURNING p.id::text,p.filing_id::text,p.revision,p.claim_token::text,p.materials,p.policy_rules,
+ p.policy_version,p.force_ai`, int(lease.Seconds())).
+		Scan(&run.job, &run.filing, &run.revision, &run.claim, &materials, &rules, &run.policy, &run.force)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	result, err := s.checkContents(ctx, filingID, revision, materials, func(stage string, reviews []filingaudit.MaterialReview, total int) error {
-		return s.advanceProgress(ctx, id, claim, stage, reviews, total, lease)
-	})
+	recordProgress := func(stage string, reviews []filingaudit.MaterialReview, total int) error {
+		return s.advanceProgress(ctx, run.job, run.claim, stage, reviews, total, lease)
+	}
+	result, err := s.checkContents(ctx, run.filing, run.revision, materials, &run, recordProgress)
 	if err != nil {
 		return err
 	}
@@ -270,11 +318,11 @@ func (s *Service) runOne(ctx context.Context) error {
 		status = "failed"
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE filing_prechecks SET status=$3,findings=$4,
-		check_results=$5,check_source=$6,check_profile=$7,failure=$8,fallback_reason=$9,
+		check_results=$5,check_source=$6,check_profile=$7,failure=$8,fallback_reason=$9,unit_fingerprint=$10,
 		lease_until=NULL,claim_token=NULL,progress_stage=''
 		WHERE id=$1 AND claim_token=$2 AND status='running' AND lease_until>now()`,
-		id, claim, status, evaluateWithPolicy(materials, rules), result.checks, result.source,
-		s.profile(), result.failure, result.fallback)
+		run.job, run.claim, status, evaluateWithPolicy(materials, rules), result.checks, result.source,
+		s.profile(), result.failure, result.fallback, run.unitKey)
 	return err
 }
 
@@ -305,10 +353,11 @@ type contentResult struct {
 }
 
 // checkContents 优先使用 DeepSeek，模型不可用时自动完成本地规则预审。
-// 参数 ctx、id、revision、materials 为执行上下文、备案、版本和快照，progress 记录当前阶段。
+// 参数 ctx、id、revision、materials 为执行上下文、备案、版本和快照，
+// run 记录本次领取，progress 记录阶段。
 // 返回值 内容结论、回退或失败原因，以及无法更新任务状态时的错误。
 func (s *Service) checkContents(ctx context.Context, id string, revision int64,
-	materials []Material, progress filingaudit.BatchProgress,
+	materials []Material, run *aiExecution, progress filingaudit.BatchProgress,
 ) (result contentResult, resultErr error) {
 	defer func() {
 		if recover() != nil {
@@ -336,9 +385,15 @@ func (s *Service) checkContents(ctx context.Context, id string, revision int64,
 		result.failure = "材料正文暂时无法检查，请重新发起预审。"
 		return result, nil
 	}
+	if run != nil {
+		run.unit, run.unitKey = unit, unitFingerprint(unit)
+	}
 	stage := "local_rules"
 	if s.assessor != nil {
-		checks, modelErr, progressErr := s.assessContents(ctx, docs, materials, unit, progress)
+		checks, modelErr, progressErr := s.assessContents(ctx, docs, materials, unit, run, progress)
+		if errors.Is(progressErr, errAIInputSuperseded) {
+			return result, nil
+		}
 		if progressErr != nil {
 			return result, progressErr
 		}

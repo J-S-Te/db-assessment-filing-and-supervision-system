@@ -197,6 +197,7 @@ func serve(ctx context.Context, cfg settings) error {
 		return errors.New("请先构建前端产物，确认 GRADE_BUSINESS_WEB_DIR")
 	}
 	checks := precheck.New(pool, materialSource(records), materialContent(records, cfg.filingAI.UsesImages()))
+	checks.WithUnitSource(records.FilingAuditUnit)
 	if cfg.filingAI != nil {
 		checks.WithAssessor(cfg.filingAI)
 	}
