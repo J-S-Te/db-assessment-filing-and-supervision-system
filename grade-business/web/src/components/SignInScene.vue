@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import type { SignInSceneController } from '../features/signin3d/mount.js'
+import widePreview from '../assets/signin-preview-wide.webp'
+import portraitPreview from '../assets/signin-preview-portrait.webp'
+import shortPreview from '../assets/signin-preview-short.webp'
 
 const canvas = ref<HTMLCanvasElement>()
 const layer = ref<HTMLDivElement>()
@@ -28,15 +31,26 @@ async function initialize() {
         dimensions.value = `${width} × ${height}`
       },
       () => { state.value = 'fallback' },
+      revealScene,
     )
     if (lifetime.signal.aborted) {
       scene.dispose()
       return
     }
-    state.value = 'ready'
   } catch {
     if (!lifetime.signal.aborted) state.value = 'fallback'
   }
+}
+
+/**
+ * 用途 待渲染器完成首帧后，在下一次绘制中淡入画布。
+ * 参数 无，读取当前场景状态以防已退出或绘图上下文丢失。
+ * 返回值 无。
+ */
+function revealScene() {
+  frame = requestAnimationFrame(() => {
+    if (!lifetime.signal.aborted && state.value === 'loading') state.value = 'ready'
+  })
 }
 
 /**
@@ -73,9 +87,16 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <picture class="scene-preview" aria-hidden="true">
+    <source :srcset="shortPreview"
+      media="(min-aspect-ratio: 1/2) and (max-width: 900px), (min-aspect-ratio: 1/2) and (max-height: 620px)">
+    <source :srcset="portraitPreview" media="(max-width: 900px), (max-height: 620px)">
+    <img :src="widePreview" alt="" fetchpriority="high" decoding="async">
+  </picture>
   <canvas ref="canvas" v-show="state !== 'fallback'" class="signin-stage"
+    :class="{ 'is-ready': state === 'ready' }" :aria-hidden="state !== 'ready'"
     aria-label="三维安全舱室场景" />
-  <div ref="layer" class="hud-layer" aria-hidden="true" />
+  <div ref="layer" class="hud-layer" :class="{ 'is-ready': state === 'ready' }" aria-hidden="true" />
 
   <template v-if="state === 'ready'">
     <div class="scene-hint" aria-hidden="true">
@@ -93,8 +114,4 @@ onUnmounted(() => {
     </div>
   </template>
 
-  <div v-if="state === 'loading'" class="boot" role="status">
-    <span class="boot__ring" aria-hidden="true" />
-    <p class="boot__text">正在构建三维舱室…</p>
-  </div>
 </template>
