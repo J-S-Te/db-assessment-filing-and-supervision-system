@@ -167,7 +167,7 @@ func registrationFixture(t *testing.T, areaCode string) (*pgxpool.Pool, http.Han
 		}
 	}
 	return db, handler, accessLogin(t, hit, accounts[0].Username),
-		accessLogin(t, hit, accounts[1].Username), accessLogin(t, hit, accounts[2].Username)
+		accessLogin(t, hit, accounts[1].Username, accounts[1].AreaCode), accessLogin(t, hit, accounts[2].Username)
 }
 
 // registrationInput 构造可直接提交申请测试的合成单位资料。
@@ -376,7 +376,7 @@ func TestOperatorRegistrationQuzhouScopeOnIsolatedDB(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	city := accessLogin(t, hit, username)
+	city := accessLogin(t, hit, username, "330800")
 	own := submitRegistration(t, hit, registrationInput("柯城申请单位", "91330802MA1000001N", "registration-kecheng"))
 	other := submitRegistration(t, hit, registrationInput("衢江申请单位", "91330803MA10000015", "registration-qujiang"))
 	list := hit(district, "GET", registrationPath, nil, 200).Body.String()

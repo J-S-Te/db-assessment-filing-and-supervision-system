@@ -154,7 +154,9 @@ func districtLedgerSession(t *testing.T, s *Service) (http.Handler, string) {
 	mux := http.NewServeMux()
 	s.Register(mux)
 	api := access.New(s.db).Protect(mux)
-	login := ledgerCall(api, "POST", "/api/v1/auth/login", map[string]string{"username": username, "password": password})
+	login := ledgerCall(api, "POST", "/api/v1/auth/login", map[string]string{
+		"username": username, "password": password, "areaCode": "330802",
+	})
 	cookies := login.Result().Cookies()
 	if login.Code != 200 || len(cookies) != 1 {
 		t.Fatalf("监管测试账号登录失败，状态 %d", login.Code)

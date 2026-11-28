@@ -8,6 +8,28 @@ servers:
 security:
 - AccessSession: []
 paths:
+  "/auth/login-areas":
+    get:
+      operationId: listLoginAreas
+      summary: 列出驾驶舱地图范围内的监管登录区划
+      security: []
+      responses:
+        '200':
+          description: 市本级和区县登录选项
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, label]
+                      properties:
+                        code: {type: string}
+                        label: {type: string}
   "/auth/login":
     post:
       operationId: login
@@ -24,9 +46,14 @@ paths:
               properties:
                 username: {type: string}
                 password: {type: string, format: password}
+                areaCode:
+                  type: string
+                  description: 监管员必填，须与绑定辖区完全一致。其他角色留空或省略。
       responses:
         '200':
           description: 已登录并设置会话 Cookie，首次登录时需先改密
+        '401':
+          description: 账号、密码或登录辖区不匹配，或账号不可用
         default:
           "$ref": "#/components/responses/Error"
   "/auth/session":

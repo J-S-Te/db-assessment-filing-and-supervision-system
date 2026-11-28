@@ -363,7 +363,7 @@ func implementationReviewer(t *testing.T, hit requestAccess, db *pgxpool.Pool,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return accessLogin(t, hit, username)
+	return accessLogin(t, hit, username, area)
 }
 
 // implementationAccessEnvironment 为管理端报备权限验收挂载隔离库与真实业务路由。

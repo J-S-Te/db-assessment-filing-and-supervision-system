@@ -48,7 +48,7 @@ func TestInstitutionAccountProvisionOnIsolatedDB(t *testing.T) {
 		precheck.New(db, materialSource(records)), http.NotFoundHandler())
 	hit := accessRequest(t, handler)
 	admin := accessLogin(t, hit, "institution-account-admin")
-	regulator := accessLogin(t, hit, areaUser)
+	regulator := accessLogin(t, hit, areaUser, "331002")
 	form := map[string]string{"institutionId": org, "name": "机构联络人", "username": "QA-MEASURE-01"}
 	hit(nil, "POST", institutionAccountPath, form, 401)
 	hit(regulator, "POST", institutionAccountPath, form, 403)

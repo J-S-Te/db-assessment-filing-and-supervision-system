@@ -347,7 +347,8 @@
   stroke: var(--cyan);
 }
 
-.signin-3d .signin-field input {
+.signin-3d .signin-field input,
+.signin-3d .signin-field select {
   flex: 1 1 0;
   width: 0;
   min-width: 0;
@@ -362,6 +363,11 @@
   caret-color: var(--cyan-soft);
   font: inherit;
   font-size: 14px;
+}
+.signin-3d .signin-field select {
+  color-scheme: dark;
+  cursor: pointer;
+  text-overflow: ellipsis;
 }
 .signin-3d .signin-field input::placeholder {
   color: #7891ac;
@@ -503,62 +509,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.signin-3d .login-form__alt {
-  margin-top: 4px;
-}
-
-.signin-3d .login-form__divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 11px;
-  color: var(--ink-3);
-  letter-spacing: 0.1em;
-}
-.signin-3d .login-form__divider i {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line), transparent);
-}
-
-.signin-3d .login-form__methods {
-  display: flex;
-  gap: var(--sp-sm);
-  margin-top: var(--sp-md);
-}
-
-.signin-3d .method {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-xs);
-  padding: clamp(9px, 0.9vw, 13px) var(--sp-xs);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(6, 16, 34, 0.5);
-  color: var(--ink-2);
-  font-family: inherit;
-  font-size: 11.5px;
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.16s;
-}
-.signin-3d .method svg {
-  width: 19px;
-  height: 19px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.signin-3d .method:hover {
-  color: var(--cyan);
-  border-color: rgba(79, 214, 255, 0.5);
-  background: rgba(79, 214, 255, 0.08);
-  transform: translateY(-2px);
 }
 
 .signin-3d .login-card__foot {
@@ -888,9 +838,6 @@
   .signin-3d .login-form {
     gap: 12px;
   }
-  .signin-3d .login-form__alt {
-    display: none;
-  }
   .signin-3d .scene-hint {
     left: 16px;
     bottom: auto;
@@ -953,9 +900,6 @@
   }
   .signin-3d .login-form {
     gap: 13px;
-  }
-  .signin-3d .login-form__alt {
-    margin-top: 0;
   }
   .signin-3d .login-card__foot {
     margin-top: 14px;
