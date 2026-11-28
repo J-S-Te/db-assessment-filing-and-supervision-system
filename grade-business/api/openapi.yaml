@@ -9174,12 +9174,13 @@ paths:
           "$ref": "#/components/responses/Error"
     post:
       operationId: createDirectoryInstitution
+      description: 登记测评人员时可省略 code，由服务端生成内部编号。登记被测单位时须提供统一社会信用代码。
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              "$ref": "#/components/schemas/DirectoryCreate"
+              "$ref": "#/components/schemas/DirectoryCreateFields"
       responses:
         '201':
           description: 登记名录
@@ -13593,10 +13594,14 @@ components:
       properties:
         expectedVersion: {type: integer, minimum: 1, format: int64}
     DirectoryCreate:
+      description: 单位使用十八位信用代码，监管登记测评机构时提供资质及有效期。
+      allOf:
+      - "$ref": "#/components/schemas/DirectoryCreateFields"
+      - required: [code]
+    DirectoryCreateFields:
       type: object
       additionalProperties: false
-      required: [name, code]
-      description: 单位使用十八位信用代码，监管登记测评机构时提供资质及有效期。
+      required: [name]
       properties:
         name: {type: string, maxLength: 200}
         code: {type: string, maxLength: 80}

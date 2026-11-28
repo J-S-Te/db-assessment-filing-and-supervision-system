@@ -2,6 +2,7 @@ package directory
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 
 var regulatorAreas = geoarea.RegulatorAreas()
 
-// create 完成主档登记、机构关联和首条历史的同一事务。
+// create 完成主档登记、机构关联和首条历史，并为机构端补齐省略的人员内部编号。
 // 参数 ctx 为写入上下文，kind、scope 指定目录和机构范围，input 为登记字段。
 // 返回值 新目录条目或校验、并发和数据库错误。
 func (s service) create(ctx context.Context, kind, scope string, input change) (entry, error) {
@@ -20,6 +21,9 @@ func (s service) create(ctx context.Context, kind, scope string, input change) (
 		return entry{}, errInvalid
 	}
 	item := mergeChange(entry{Status: active}, input)
+	if kind == person && scope != "" && input.Code == nil {
+		item.Code = "AUTO-" + rand.Text()
+	}
 	var result entry
 	err := s.write(ctx, func(tx pgx.Tx) error {
 		var err error
