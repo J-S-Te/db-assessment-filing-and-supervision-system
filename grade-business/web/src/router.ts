@@ -43,15 +43,22 @@ const institutionCaseForm = () => import('./views/CaseForm.vue')
  */
 const scopedWorkbench = () => import('./views/ScopedWorkbench.vue')
 
+/**
+ * 用途 按需载入登录与首登改密共用表单。
+ * 参数 无。
+ * 返回值 登录页模块的加载任务。
+ */
+const loadSignIn = () => import('./views/SignIn.vue')
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', component: () => import('./views/SignIn.vue'), meta: { authLayout: true } },
+    { path: '/login', component: loadSignIn, meta: { authLayout: true } },
     { path: '/operator-register', component: () => import('./views/OperatorRegister.vue'),
       meta: { authLayout: true, title: '运营单位注册' } },
     { path: '/operator-registrations', component: () => import('./views/OperatorRegistrationReview.vue'),
       meta: { section: 'operator-registrations', title: '注册审核' } },
-    { path: '/account/password', component: () => import('./views/SignIn.vue'), meta: { authLayout: true } },
+    { path: '/account/password', component: loadSignIn, meta: { authLayout: true } },
     { path: '/institution-accounts', component: () => import('./views/InstitutionAccounts.vue'),
       meta: { section: 'institution-accounts', title: '机构用户' } },
     { path: '/', component: () => import('./views/Workbench.vue'), meta: { section: 'home', title: '工作台' } },
@@ -190,6 +197,11 @@ export const router = createRouter({
 
 router.beforeEach(async to => {
   const publicPage = to.path === '/login' || to.path === '/operator-register'
+  if (to.path === '/login') {
+    void loadSignIn().catch(() => {
+      // 这里只进行预加载，实际路由加载失败由 Vue Router 报告。
+    })
+  }
   let actor
   try {
     actor = await refreshSession()
