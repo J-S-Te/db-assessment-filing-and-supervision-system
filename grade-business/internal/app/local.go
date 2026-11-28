@@ -27,7 +27,10 @@ func LocalBoundary(address string, lan netip.Prefix, next http.Handler) http.Han
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data:; object-src 'none'; base-uri 'none'; "+
+				"frame-ancestors 'none'; form-action 'self'")
 		if !allowed[r.Host] {
 			httpx.Error(w, 400, "invalid_host", "请使用服务配置的地址访问业务页面")
 			return

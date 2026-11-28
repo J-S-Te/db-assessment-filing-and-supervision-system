@@ -84,6 +84,14 @@ go run ./cmd/access-account --username demo-admin --name '测试管理员' \
 
 反向代理还应覆盖 `X-Real-IP` 后再转发请求，例如 Nginx 使用 `proxy_set_header X-Real-IP $remote_addr;`。应用通过 `GRADE_BUSINESS_AUTH_TRUSTED_PROXY` 配置直接连接它的单一代理 IP，只有该对端发送的合法单一地址参与客户端限流。未配置代理时使用 TCP 连接来源。
 
+GitHub 测试环境的部署探针直接访问应用回环地址 `http://127.0.0.1:18444/readyz`。由主机 Nginx 对外提供服务时，将 [站点加固片段](deploy/nginx-public.conf) 安装到 `/etc/nginx/snippets/grade-business-public.conf`，并在实际转发业务请求的公网 `server` 块中加入以下配置。已有对应指令时，先将它们合并到同一处。
+
+```nginx
+include /etc/nginx/snippets/grade-business-public.conf;
+```
+
+备份原站点配置，执行 `nginx -t` 通过后重载 Nginx。在公网入口检查 `/readyz` 返回 404、`Server` 仅显示 `nginx`、登录页和两个公开区划接口返回 200。再从部署主机确认回环探针仍返回就绪状态。GitHub 工作流负责发布应用镜像，站点配置通过主机 Nginx 单独生效。
+
 PDF 文字提取需要应用进程的 `PATH` 包含 Poppler 的 `pdfinfo`、`pdftotext`。扫描页还需 `pdftoppm`、Tesseract 的 `tesseract` 以及 `chi_sim`、`eng` 语言包。可以使用 `tesseract --list-langs` 核对语言。资料专区发布 PDF 前也使用 `pdfinfo` 检查页面结构。DOCX 提取随 Go 服务提供。
 
 审核期限按上海日期从进入当前阶段后的首个工作日开始计数，退回、通过或撤销后停止该阶段的计时。默认周一至周五，监管可在系统管理的「工作日历」配置休息日、补班或恢复默认，并查变更留痕。整改截止日沿用审批结果。

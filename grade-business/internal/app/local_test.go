@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -39,6 +40,32 @@ func TestBoundaries(t *testing.T) {
 			t.Errorf("%s %s: %d", row.host, row.origin, out.Code)
 		}
 	}
+}
+
+// TestLoginPageRestrictsFormActions 验证登录页只允许向同源地址提交表单。
+// 参数 t 为测试上下文。
+// 返回值 无。
+func TestLoginPageRestrictsFormActions(t *testing.T) {
+	pages, err := Frontend(fstest.MapFS{
+		"index.html": {Data: []byte("<html>业务入口</html>")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const address = "127.0.0.1:18444"
+	handler := LocalBoundary(address, netip.Prefix{}, pages)
+	out := httptest.NewRecorder()
+	handler.ServeHTTP(out, httptest.NewRequest(http.MethodGet, "http://"+address+"/login", nil))
+	if out.Code != http.StatusOK {
+		t.Fatalf("登录页状态码为 %d，应为 200", out.Code)
+	}
+	policy := out.Header().Get("Content-Security-Policy")
+	for _, directive := range strings.Split(policy, ";") {
+		if strings.TrimSpace(directive) == "form-action 'self'" {
+			return
+		}
+	}
+	t.Fatalf("登录页 CSP 缺少同源表单提交限制，实际为 %q", policy)
 }
 
 // TestLANBoundaries 验证内网入口只接受配置地址、同网段客户端和同源 API 请求。
