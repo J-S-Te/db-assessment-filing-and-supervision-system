@@ -4,10 +4,11 @@ import { createFuiOverlay } from './ui/fui.js'
 
 /**
  * 用途 将原型场景与登录页挂载元素关联，并同步可见性和渲染输出。
- * 参数 elements 为画布和标签层，signal 为页面退出信号，onResize、onLost 为状态回调。
+ * 参数 elements 为画布和标签层，signal 为页面退出信号。
+ * onResize、onLost、onFirstFrame 分别通知尺寸、上下文丢失和首帧完成。
  * 返回值 可切换画质和释放的场景控制器。
  */
-export async function mountScene({ canvas, layer }, signal, onResize, onLost) {
+export async function mountScene({ canvas, layer }, signal, onResize, onLost, onFirstFrame) {
   const stage = await createStage(canvas, { signal })
   if (signal.aborted) {
     stage.dispose()
@@ -43,9 +44,14 @@ export async function mountScene({ canvas, layer }, signal, onResize, onLost) {
 
   stage.onSelect = (_info, point, object) => stage.focus(point, object)
   stage.onResize = reportSize
+  let firstFrame = true
   stage.onFrame = () => {
     hud.update(bounds)
     overlay.update(bounds)
+    if (firstFrame && !stage.renderer.getContext().isContextLost()) {
+      firstFrame = false
+      onFirstFrame()
+    }
   }
   let disposed = false
 
@@ -71,8 +77,13 @@ export async function mountScene({ canvas, layer }, signal, onResize, onLost) {
   document.addEventListener('visibilitychange', syncVisibility)
   motion.addEventListener('change', syncMotion)
   narrowLayout.addEventListener('change', measureLayout)
-  syncMotion()
-  reportSize()
-  syncVisibility()
+  try {
+    syncMotion()
+    reportSize()
+    syncVisibility()
+  } catch (error) {
+    dispose()
+    throw error
+  }
   return { setResolution: scale => stage.setResolution(scale), dispose }
 }

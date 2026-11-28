@@ -52,7 +52,7 @@
   height: 100dvh;
   min-height: 570px;
   overflow: clip;
-  background: var(--bg-deep) url('../../assets/signin-space.webp') center / cover no-repeat;
+  background: var(--bg-deep);
   color: var(--ink);
   color-scheme: dark;
   font: 16px / normal var(--font-cn);
@@ -65,7 +65,31 @@
     env(safe-area-inset-left);
 }
 
-/* ---------- 三维画布 ---------- */
+/* ---------- 场景预览和三维画布 ---------- */
+.signin-3d .scene-preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.signin-3d .scene-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 35.5% 48%;
+}
+.signin-3d .signin-stage,
+.signin-3d .hud-layer {
+  opacity: 0;
+  transition: opacity 340ms ease;
+}
+.signin-3d .signin-stage.is-ready,
+.signin-3d .hud-layer.is-ready {
+  opacity: 1;
+}
+.signin-3d .signin-stage:not(.is-ready) {
+  pointer-events: none;
+}
 .signin-3d .signin-stage {
   position: absolute;
   inset: 0;
@@ -763,34 +787,6 @@
   text-align: right;
 }
 
-/* ---------- 加载遮罩 ---------- */
-.signin-3d .boot {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  pointer-events: none;
-}
-.signin-3d .boot__ring {
-  width: 44px;
-  height: 44px;
-  border: 2px solid rgba(79, 214, 255, 0.16);
-  border-top-color: var(--cyan);
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-}
-.signin-3d .boot__text {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
-}
-
 .signin-3d .status--busy .status__dot,
 .signin-3d .status--error .status__dot {
   background: var(--cyan);
@@ -820,6 +816,10 @@
   font-size: 11px;
   pointer-events: none;
 }
+/* 改密页没有三维舱室，继续使用星空背景。 */
+.signin-3d--changing {
+  background: var(--bg-deep) url('../../assets/signin-space.webp') center / cover no-repeat;
+}
 .signin-3d--changing .login-column {
   inset: 0;
   width: 100%;
@@ -841,6 +841,9 @@
 
 /* 平板 / 竖屏：上下布局，3D 在上，表单在下 */
 @media (max-width: 900px), (max-height: 620px) {
+  .signin-3d .scene-preview img {
+    object-position: 50% 33%;
+  }
   .signin-3d .signin-topbar-3d {
     padding: 14px 18px;
   }
