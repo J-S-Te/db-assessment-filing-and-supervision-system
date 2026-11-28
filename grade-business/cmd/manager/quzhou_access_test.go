@@ -41,6 +41,7 @@ func TestQuzhouRegulatorScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedQuzhouDashboardRisks(t, db, own, other)
+	seedQuzhouFilingAttachments(t, db, own, other)
 	hit := quzhouRegulatorRoutes(t, db)
 	accounts := []string{"330800", "330802", "330803", "330822", "330824", "330825", "330881"}
 	for _, code := range accounts {
@@ -155,6 +156,18 @@ func seedQuzhouDashboardRisks(t *testing.T, db *pgxpool.Pool, own, other string)
 	}
 }
 
+// seedQuzhouFilingAttachments 给两个区县的备案分别登记可识别的附件元数据。
+// 参数 t、db 为隔离测试环境，own、other 为不同区县的已绑定备案。
+// 返回值 无，写入测试数据失败时终止测试。
+func seedQuzhouFilingAttachments(t *testing.T, db *pgxpool.Pool, own, other string) {
+	t.Helper()
+	if _, err := db.Exec(t.Context(), `INSERT INTO case_attachments(case_id,kind,file_name,file_key,size_bytes)
+		SELECT id,'filing_form',number||'.pdf','fixture-'||number,16
+		FROM business_cases WHERE id IN ($1,$2)`, own, other); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // quzhouRegulatorRoutes 以真实管理端装配验证监管员会话及查询。
 // 参数 t 为测试上下文，db 为已迁移的隔离数据库。
 // 返回值 可以发起带会话请求的测试函数。
@@ -180,8 +193,9 @@ func assertQuzhouRegulatorScope(t *testing.T, hit requestAccess, own, other stri
 	if !strings.Contains(session, `"/dashboard"`) || !strings.Contains(session, `"柯城区"`) {
 		t.Fatalf("监管员会话缺少驾驶舱或辖区: %s", session)
 	}
-	hit(county, "GET", "/api/v1/filings/"+own, nil, 200)
-	hit(county, "GET", "/api/v1/filings/"+other, nil, 404)
+	otherCounty := accessLogin(t, hit, "reg-330803", "330803")
+	assertCountyFilingBoundary(t, hit, county, own, other, "QZ-KC-ONLY.pdf")
+	assertCountyFilingBoundary(t, hit, otherCounty, other, own, "QZ-QJ-ONLY.pdf")
 	hit(city, "GET", "/api/v1/filings/"+other, nil, 200)
 	const dashboard = "/api/v1/dashboard/"
 	assertQuzhouDashboardCount(t, hit, county, dashboard+"district-response?scope=all", "柯城区", 1)
@@ -200,6 +214,34 @@ func assertQuzhouRegulatorScope(t *testing.T, hit requestAccess, own, other stri
 	if !strings.Contains(ownSnapshot.Body.String(), "QZ-KC-ONLY") ||
 		strings.Contains(ownSnapshot.Body.String(), "QZ-QJ-ONLY") {
 		t.Fatalf("隐患、预警的辖区筛选错误: %s", ownSnapshot.Body.String())
+	}
+}
+
+// assertCountyFilingBoundary 验证区县备案列表和子资源同时限制同区身份与归属。
+// 参数 t、hit、cookie 为测试入口及区县会话，own、foreign 为本区与外区备案，attachment 为本区附件名。
+// 返回值 无，列表、响应内容或权限不符时终止测试。
+func assertCountyFilingBoundary(t *testing.T, hit requestAccess, cookie *http.Cookie,
+	own, foreign, attachment string,
+) {
+	t.Helper()
+	const base = "/api/v1/filings"
+	var list struct{ Items []struct{ ID string } }
+	w := hit(cookie, http.MethodGet, base, nil, http.StatusOK)
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil ||
+		len(list.Items) != 1 || list.Items[0].ID != own {
+		t.Fatalf("区县备案列表应只返回本区且已绑定的记录 %s: %s %v", own, w.Body, err)
+	}
+	for _, suffix := range []string{"", "/review-history", "/attachments"} {
+		result := hit(cookie, http.MethodGet, base+"/"+own+suffix, nil, http.StatusOK)
+		if suffix == "/attachments" && !strings.Contains(result.Body.String(), attachment) {
+			t.Fatalf("本区附件列表缺少 %s: %s", attachment, result.Body)
+		}
+		denied := hit(cookie, http.MethodGet, base+"/"+foreign+suffix, nil, http.StatusNotFound)
+		var problem struct{ Code string }
+		if err := json.Unmarshal(denied.Body.Bytes(), &problem); err != nil ||
+			problem.Code != "not_found" {
+			t.Fatalf("跨区备案必须按不可见资源处理: %s %v", denied.Body, err)
+		}
 	}
 }
 

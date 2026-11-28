@@ -232,30 +232,33 @@ func TestDirectoryPersonnelHistoryAndReviewGuard(t *testing.T) {
 	assertDirectoryTransfer(t, mux, staff, old, next)
 }
 
-// TestRegisterAssessorsWithBlankCode 验证监管和机构可连续登记无工号测评师。
+// TestRegisterAssessorsWithBlankCode 验证人员登记、编辑契约与隔离库工号留空。
 // 参数 t 为隔离 PostgreSQL 与实际名录路由的测试上下文。
 // 返回值 无。
 func TestRegisterAssessorsWithBlankCode(t *testing.T) {
 	pool := directoryTestPool(t)
 	mux := http.NewServeMux()
 	Register(mux, pool)
+	doc := readDirectoryContract(t)
 	org := registerTestInstitution(t, mux, "免工号登记测试机构", "ORG-NO-STAFF-CODE")
 	registry := "/api/v1/directory/people"
-	first := testJSON[entry](t, testRequest(t, mux, "POST", registry, map[string]any{
-		"name": "监管登记测评师", "institutionId": org.ID, "certificateNo": "cert-1128",
-	}, 201))
+	first := assessorContractRequest(t, doc, mux, "/directory/people", http.MethodPost, registry,
+		map[string]any{"name": "监管登记测评师", "institutionId": org.ID, "certificateNo": "cert-1128"},
+		http.StatusCreated)
 	people := scopedDirectory("people", "", org.ScopeName)
-	second := testJSON[entry](t, testRequest(t, mux, "POST", people, map[string]any{
-		"name": "机构登记测评师",
-	}, 201))
+	second := assessorContractRequest(t, doc, mux, "/institution/directory/people",
+		http.MethodPost, people, map[string]any{"name": "机构登记测评师"}, http.StatusCreated)
 	if first.ID == second.ID || first.CertificateNo != "CERT-1128" || second.InstitutionID != org.ID {
 		t.Fatalf("登记结果不正确：%+v，%+v", first, second)
 	}
-	updated := testJSON[entry](t, testRequest(t, mux, "PATCH", registry+"/"+first.ID, map[string]any{
-		"expectedVersion": first.Version, "certificateNo": "cert-1129",
-	}, 200))
-	if updated.CertificateNo != "CERT-1129" {
-		t.Fatalf("证书编号未更新：%+v", updated)
+	updated := assessorContractRequest(t, doc, mux, "/directory/people/{id}", http.MethodPatch,
+		registry+"/"+first.ID, map[string]any{"expectedVersion": first.Version, "certificateNo": "cert-1129"},
+		http.StatusOK)
+	scoped := assessorContractRequest(t, doc, mux, "/institution/directory/people/{id}", http.MethodPatch,
+		scopedDirectory("people", second.ID, org.ScopeName),
+		map[string]any{"expectedVersion": second.Version, "certificateNo": "cert-1130"}, http.StatusOK)
+	if updated.CertificateNo != "CERT-1129" || scoped.CertificateNo != "CERT-1130" {
+		t.Fatalf("两端证书编号未更新：%+v，%+v", updated, scoped)
 	}
 	var count int
 	err := pool.QueryRow(t.Context(),

@@ -9121,7 +9121,7 @@ paths:
           "$ref": "#/components/responses/Error"
   "/directory/{collection}":
     parameters:
-    - "$ref": "#/components/parameters/DirectoryCollection"
+    - "$ref": "#/components/parameters/DirectoryPartyCollection"
     get:
       operationId: listDirectoryRegistry
       parameters:
@@ -9140,7 +9140,6 @@ paths:
           "$ref": "#/components/responses/Error"
     post:
       operationId: createDirectoryRegistry
-      description: 登记测评人员时须提供归属机构，且请求禁止包含 code。登记被测单位和测评机构时须提供对应的证件编号。
       requestBody:
         required: true
         content:
@@ -9156,9 +9155,46 @@ paths:
                 "$ref": "#/components/schemas/DirectoryEntry"
         default:
           "$ref": "#/components/responses/Error"
+  "/directory/people":
+    get:
+      operationId: listDirectoryAssessorsRegistry
+      parameters:
+      - "$ref": "#/components/parameters/DirectoryQuery"
+      - "$ref": "#/components/parameters/DirectoryStatus"
+      - "$ref": "#/components/parameters/DirectoryInstitutionID"
+      - "$ref": "#/components/parameters/DirectoryCursor"
+      responses:
+        '200':
+          description: 范围内的名录档案
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntryPage"
+        default:
+          "$ref": "#/components/responses/Error"
+    post:
+      operationId: createDirectoryAssessorRegistry
+      description: 登记测评人员时须提供归属机构，工号由数据库留空。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DirectoryAssessorRegistryCreate"
+      responses:
+        '201':
+          description: 登记名录
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntry"
+        '400':
+          "$ref": "#/components/responses/Error"
+        default:
+          "$ref": "#/components/responses/Error"
   "/directory/{collection}/{id}":
     parameters:
-    - "$ref": "#/components/parameters/DirectoryCollection"
+    - "$ref": "#/components/parameters/DirectoryPartyCollection"
     - "$ref": "#/components/parameters/DirectoryID"
     get:
       operationId: getDirectoryRegistry
@@ -9173,7 +9209,6 @@ paths:
           "$ref": "#/components/responses/Error"
     patch:
       operationId: updateDirectoryRegistry
-      description: 更新测评人员时，请求禁止包含 code。
       requestBody:
         required: true
         content:
@@ -9187,6 +9222,40 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/DirectoryEntry"
+        default:
+          "$ref": "#/components/responses/Error"
+  "/directory/people/{id}":
+    parameters:
+    - "$ref": "#/components/parameters/DirectoryID"
+    get:
+      operationId: getDirectoryAssessorRegistry
+      responses:
+        '200':
+          description: 名录档案
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntry"
+        default:
+          "$ref": "#/components/responses/Error"
+    patch:
+      operationId: updateDirectoryAssessorRegistry
+      description: 更新测评人员时，请求禁止包含 code。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DirectoryAssessorRegistryChange"
+      responses:
+        '200':
+          description: 更新后的档案
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntry"
+        '400':
+          "$ref": "#/components/responses/Error"
         default:
           "$ref": "#/components/responses/Error"
   "/directory/{collection}/{id}/history":
@@ -9207,7 +9276,7 @@ paths:
           "$ref": "#/components/responses/Error"
   "/institution/directory/{collection}":
     parameters:
-    - "$ref": "#/components/parameters/InstitutionDirectoryCollection"
+    - "$ref": "#/components/parameters/DirectoryPartyCollection"
     - "$ref": "#/components/parameters/FeedbackInstitution"
     get:
       operationId: listDirectoryInstitution
@@ -9227,7 +9296,7 @@ paths:
           "$ref": "#/components/responses/Error"
     post:
       operationId: createDirectoryInstitution
-      description: 登记测评人员时，请求禁止包含 code。登记被测单位时须提供统一社会信用代码。
+      description: 登记被测单位时须提供统一社会信用代码，机构资质在机构端只读。
       requestBody:
         required: true
         content:
@@ -9243,9 +9312,48 @@ paths:
                 "$ref": "#/components/schemas/DirectoryEntry"
         default:
           "$ref": "#/components/responses/Error"
+  "/institution/directory/people":
+    parameters:
+    - "$ref": "#/components/parameters/FeedbackInstitution"
+    get:
+      operationId: listDirectoryAssessorsInstitution
+      parameters:
+      - "$ref": "#/components/parameters/DirectoryQuery"
+      - "$ref": "#/components/parameters/DirectoryStatus"
+      - "$ref": "#/components/parameters/DirectoryInstitutionID"
+      - "$ref": "#/components/parameters/DirectoryCursor"
+      responses:
+        '200':
+          description: 范围内的名录档案
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntryPage"
+        default:
+          "$ref": "#/components/responses/Error"
+    post:
+      operationId: createDirectoryAssessorInstitution
+      description: 在当前机构登记测评人员，工号由数据库留空。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DirectoryAssessorInstitutionCreate"
+      responses:
+        '201':
+          description: 登记名录
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntry"
+        '400':
+          "$ref": "#/components/responses/Error"
+        default:
+          "$ref": "#/components/responses/Error"
   "/institution/directory/{collection}/{id}":
     parameters:
-    - "$ref": "#/components/parameters/InstitutionDirectoryCollection"
+    - "$ref": "#/components/parameters/DirectoryPartyCollection"
     - "$ref": "#/components/parameters/FeedbackInstitution"
     - "$ref": "#/components/parameters/DirectoryID"
     get:
@@ -9261,7 +9369,6 @@ paths:
           "$ref": "#/components/responses/Error"
     patch:
       operationId: updateDirectoryInstitution
-      description: 更新测评人员时，请求禁止包含 code。
       requestBody:
         required: true
         content:
@@ -9275,6 +9382,41 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/DirectoryEntry"
+        default:
+          "$ref": "#/components/responses/Error"
+  "/institution/directory/people/{id}":
+    parameters:
+    - "$ref": "#/components/parameters/FeedbackInstitution"
+    - "$ref": "#/components/parameters/DirectoryID"
+    get:
+      operationId: getDirectoryAssessorInstitution
+      responses:
+        '200':
+          description: 名录档案
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntry"
+        default:
+          "$ref": "#/components/responses/Error"
+    patch:
+      operationId: updateDirectoryAssessorInstitution
+      description: 更新测评人员时，请求禁止包含 code。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DirectoryAssessorInstitutionChange"
+      responses:
+        '200':
+          description: 更新后的档案
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DirectoryEntry"
+        '400':
+          "$ref": "#/components/responses/Error"
         default:
           "$ref": "#/components/responses/Error"
   "/institution/directory/{collection}/{id}/history":
@@ -11815,6 +11957,11 @@ components:
       in: path
       required: true
       schema: {type: string, enum: [units, institutions, people]}
+    DirectoryPartyCollection:
+      name: collection
+      in: path
+      required: true
+      schema: {type: string, enum: [units, institutions]}
     InstitutionDirectoryCollection:
       name: collection
       in: path
@@ -13659,7 +13806,7 @@ components:
     DirectoryCreateFields:
       type: object
       additionalProperties: false
-      required: [name]
+      required: [name, code]
       properties:
         name: {type: string, maxLength: 200}
         code: {type: string, maxLength: 80, description: 被测单位和测评机构的证件编号。测评人员请求禁止此字段。}
@@ -13684,6 +13831,52 @@ components:
         validUntil: {type: string, format: date}
         institutionId: {type: string, format: uuid}
         certificateNo: {type: string}
+        status: {type: string, enum: [active, inactive]}
+    DirectoryAssessorRegistryCreate:
+      type: object
+      additionalProperties: false
+      required: [name, institutionId]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        qualification: {type: string, maxLength: 100}
+        validUntil: {type: string, format: date}
+        certificateNo: {type: string, maxLength: 100}
+        status: {type: string, enum: [active, inactive]}
+        institutionId: {type: string, format: uuid}
+    DirectoryAssessorRegistryChange:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      minProperties: 2
+      properties:
+        expectedVersion: {type: integer, minimum: 1, format: int64}
+        name: {type: string, minLength: 1, maxLength: 200}
+        qualification: {type: string, maxLength: 100}
+        validUntil: {type: string, format: date}
+        certificateNo: {type: string, maxLength: 100}
+        status: {type: string, enum: [active, inactive]}
+        institutionId: {type: string, format: uuid}
+    DirectoryAssessorInstitutionCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        qualification: {type: string, maxLength: 100}
+        validUntil: {type: string, format: date}
+        certificateNo: {type: string, maxLength: 100}
+        status: {type: string, enum: [active, inactive]}
+    DirectoryAssessorInstitutionChange:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      minProperties: 2
+      properties:
+        expectedVersion: {type: integer, minimum: 1, format: int64}
+        name: {type: string, minLength: 1, maxLength: 200}
+        qualification: {type: string, maxLength: 100}
+        validUntil: {type: string, format: date}
+        certificateNo: {type: string, maxLength: 100}
         status: {type: string, enum: [active, inactive]}
     DirectoryEntry:
       type: object
