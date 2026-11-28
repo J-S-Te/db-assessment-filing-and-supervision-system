@@ -22,8 +22,27 @@ import (
 func (s *Service) registerOperatorRegistration(mux *http.ServeMux) {
 	mux.HandleFunc(registrationSubmitPattern, s.createRegistration)
 	mux.HandleFunc(registrationStatusPattern, s.lookupRegistration)
+	mux.HandleFunc(registrationAreasPattern, registrationAreas)
 	mux.HandleFunc(registrationListPattern, s.registrationList)
 	mux.HandleFunc(registrationReviewPattern, s.registrationAction)
+}
+
+// registrationAreas 返回与衢州驾驶舱共用的注册辖区名录。
+// 参数 w 为 HTTP 响应，匿名请求不携带申请资料。
+// 返回值 无。
+func registrationAreas(w http.ResponseWriter, _ *http.Request) {
+	type option struct {
+		Code  string `json:"code"`
+		Label string `json:"label"`
+	}
+	codes := cityDistricts[quzhouCityCode]
+	result := struct {
+		Items []option `json:"items"`
+	}{Items: make([]option, 0, len(codes))}
+	for _, code := range codes {
+		result.Items = append(result.Items, option{Code: code, Label: registrationDistrictLabel(code)})
+	}
+	httpx.JSON(w, 200, result)
 }
 
 // createRegistration 受理匿名运营单位注册申请并发放私密查询码。
@@ -38,7 +57,7 @@ func (s *Service) createRegistration(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	if r.URL.RawQuery != "" || httpx.Decode(w, r, &input) != nil || !normalizeRegistration(&input) {
 		httpx.Error(w, 400, "invalid_registration",
-			"请核对单位名称、统一社会信用代码、联系人、手机号、登录账号及密码。")
+			"请核对单位名称、统一社会信用代码、行政归属、联系人、手机号、登录账号及密码。")
 		return
 	}
 	result, err := s.submitRegistration(r.Context(), input)
@@ -179,7 +198,7 @@ func (s *Service) registrationAction(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	if r.URL.RawQuery != "" || httpx.Decode(w, r, &input) != nil || !validateRegistrationDecision(&input) {
 		httpx.Error(w, 400, "invalid_registration_decision",
-			"通过前须确认已核实单位资料与联系人授权，驳回须填写原因。")
+			"通过前须确认已核实单位资料、行政归属及联系人授权，驳回须填写原因。")
 		return
 	}
 	actor, _ := Current(r.Context())

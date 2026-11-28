@@ -40,7 +40,7 @@ func (s *Service) Protect(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, pattern := mux.Handler(r)
 		switch pattern {
-		case loginPattern, registrationSubmitPattern, registrationStatusPattern:
+		case loginPattern, registrationSubmitPattern, registrationStatusPattern, registrationAreasPattern:
 			mux.ServeHTTP(w, r)
 			return
 		}
