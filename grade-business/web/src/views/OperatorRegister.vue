@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref, shallowRef } from 'vue'
+import { onMounted, reactive, ref, shallowRef } from 'vue'
 import { ShieldCheck } from '@lucide/vue'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
 import { api, errorText } from '../lib/api'
 import { formatTime } from '../lib/domain'
 import { applicantRegistrationPath, registrationStatuses } from '../lib/operatorRegistration'
-import type { RegistrationReceipt, RegistrationResult } from '../lib/operatorRegistration'
+import type { RegistrationArea, RegistrationReceipt, RegistrationResult } from '../lib/operatorRegistration'
 
-const form = reactive({ unitName: '', creditCode: '', contactName: '', phone: '', username: '', password: '' })
+const form = reactive({
+  unitName: '', creditCode: '', contactName: '', phone: '', username: '', areaCode: '', password: '',
+})
+const areas = shallowRef<RegistrationArea[]>([])
+const areaLoadFailed = ref(false)
 const confirmation = ref('')
 const mode = ref<'apply' | 'status'>('apply')
 const lookupCode = ref('')
@@ -15,6 +19,24 @@ const result = shallowRef<RegistrationResult>()
 const received = ref(false)
 const pending = ref(false)
 const failure = ref('')
+
+onMounted(loadAreas)
+
+/**
+ * 用途 加载与智慧大屏共用的衢州辖区选项。
+ * 参数 无。
+ * 返回值 加载并更新下拉状态的异步任务。
+ */
+async function loadAreas() {
+  areaLoadFailed.value = false
+  try {
+    const result = await api<{ items: RegistrationArea[] }>(applicantRegistrationPath + '/areas')
+    areas.value = result.items ?? []
+    areaLoadFailed.value = areas.value.length === 0
+  } catch {
+    areaLoadFailed.value = true
+  }
+}
 
 /**
  * 用途 切换到注册或进度查询表单。
@@ -34,6 +56,10 @@ function selectMode(next: 'apply' | 'status') {
 async function submit() {
   if (pending.value) return
   failure.value = ''
+  if (!areas.value.some(area => area.code === form.areaCode)) {
+    failure.value = '请选择行政归属。'
+    return
+  }
   if (form.password !== confirmation.value) {
     failure.value = '两次输入的密码不一致。'
     return
@@ -111,7 +137,18 @@ async function lookup() {
               required minlength="3" maxlength="64" aria-describedby="registration-username-hint">
             <small id="registration-username-hint" class="muted">3–64 字符，支持字母、数字、点、下划线和短横线。</small>
           </label>
-          <span class="registration-password-hint muted">审核通过后，使用这里设置的账号和密码登录。</span>
+          <div>
+            <label class="field"><span>行政归属</span>
+              <select v-model="form.areaCode" name="areaCode" :disabled="!areas.length" required>
+                <option value="" disabled>{{ areas.length ? '请选择行政归属' : '等待读取辖区' }}</option>
+                <option v-for="area in areas" :key="area.code" :value="area.code">{{ area.label }}</option>
+              </select>
+            </label>
+            <div v-if="areaLoadFailed" class="registration-area-error">
+              <small role="alert">行政归属选项读取失败。</small>
+              <button type="button" class="button neutral" @click="loadAreas">重试</button>
+            </div>
+          </div>
           <label class="field"><span>密码（至少 12 位）</span>
             <input v-model="form.password" name="password" type="password" autocomplete="new-password"
               required minlength="12" maxlength="256">
@@ -122,7 +159,12 @@ async function lookup() {
           </label>
         </div>
         <p v-if="failure" role="alert" class="form-message error-message">{{ failure }}</p>
-        <button type="submit" class="button primary" :disabled="pending">{{ pending ? '提交中…' : '提交注册申请' }}</button>
+        <div class="registration-submit">
+          <button type="submit" class="button primary" :disabled="pending || !areas.length">
+            {{ pending ? '提交中…' : '提交注册申请' }}
+          </button>
+          <span class="muted">审核通过后，使用这里设置的账号和密码登录。</span>
+        </div>
       </form>
 
       <form v-else class="registration-form" @submit.prevent="lookup">
@@ -173,7 +215,8 @@ async function lookup() {
 .registration-switch { display: flex; gap: 8px; margin-bottom: 20px; }
 .registration-form { display: grid; gap: 16px; }
 .registration-form > button { justify-self: start; }
-.registration-password-hint { align-self: center; }
+.registration-submit, .registration-area-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.registration-area-error { margin-top: 6px; }
 .registration-result { margin-top: 18px; padding: 16px; border-radius: 10px; background: var(--c-surface-2); overflow-wrap: anywhere; }
 .registration-result > * + * { margin-top: 8px; }
 </style>

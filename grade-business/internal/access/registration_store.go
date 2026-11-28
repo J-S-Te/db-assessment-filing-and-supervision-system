@@ -38,16 +38,20 @@ func (s *Service) submitRegistration(ctx context.Context, input registrationInpu
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	unit, area, err := registrationRouting(ctx, tx, input.CreditCode)
+	requestedArea := ""
+	if input.AreaCode != nil {
+		requestedArea = *input.AreaCode
+	}
+	unit, area, err := registrationRouting(ctx, tx, input.CreditCode, requestedArea)
 	if err != nil {
 		return result, err
 	}
 	err = tx.QueryRow(ctx, `INSERT INTO operator_registrations
-		(unit_name,credit_code,contact_name,phone,username,area_code,
+		(unit_name,credit_code,contact_name,phone,username,area_code,requested_area_code,
 		 original_unit_id,lookup_hash,password_salt,password_hash)
-		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,$8,$9,$10)
+		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid,$9,$10,$11)
 		RETURNING id::text,status,created_at`, input.UnitName, input.CreditCode,
-		input.ContactName, input.Phone, input.Username, area, unit, lookup[:], salt, hash).
+		input.ContactName, input.Phone, input.Username, area, requestedArea, unit, lookup[:], salt, hash).
 		Scan(&result.ID, &result.Status, &result.CreatedAt)
 	if err != nil {
 		return result, err
@@ -60,22 +64,32 @@ func (s *Service) submitRegistration(ctx context.Context, input registrationInpu
 }
 
 // registrationRouting 为待审申请分派可信辖区，分派结果只对审核端可见。
-// 参数 ctx、tx 为申请事务，code 为通过格式校验的信用代码。
+// 参数 ctx、tx 为申请事务，code、requestedArea 为信用代码及申请选择的辖区。
 // 返回值 当时的单位标识、有效辖区（无法确定时为空）和读取错误。
-func registrationRouting(ctx context.Context, tx pgx.Tx, code string) (string, string, error) {
+func registrationRouting(ctx context.Context, tx pgx.Tx, code, requestedArea string) (string, string, error) {
 	var id, district string
 	err := tx.QueryRow(ctx, `SELECT id::text,district FROM directory_parties
 		WHERE kind='unit' AND lower(code)=lower($1)`, code).Scan(&id, &district)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", geoarea.RegulatorAreaCode(code[2:8]), nil
+		return "", unlistedRegistrationArea(code, requestedArea), nil
 	}
 	return id, geoarea.RegulatorAreaCode(district), err
 }
 
+// unlistedRegistrationArea 为未建档单位选择注册审批辖区，并兼容旧申请的归属推断。
+// 参数 code、requestedArea 为信用代码和申请人选择的辖区。
+// 返回值 受支持的辖区代码，无法确认时为空。
+func unlistedRegistrationArea(code, requestedArea string) string {
+	if requestedArea != "" {
+		return requestedArea
+	}
+	return geoarea.RegulatorAreaCode(code[2:8])
+}
+
 // registrationSubject 以信用代码确定可绑定的有效主档及可信辖区，并锁定命中的名录。
-// 参数 ctx、tx 为审批事务，name 和 code 为申请时的单位身份。
+// 参数 ctx、tx 为审批事务，name、code、requestedArea 为申请时的单位身份及所选辖区。
 // 返回值 现有单位标识或空值、标准辖区码，以及名录冲突或数据库错误。
-func registrationSubject(ctx context.Context, tx pgx.Tx, name, code string) (string, string, error) {
+func registrationSubject(ctx context.Context, tx pgx.Tx, name, code, requestedArea string) (string, string, error) {
 	var id, currentName, district string
 	var usable, linked bool
 	err := tx.QueryRow(ctx, `SELECT p.id::text,p.name,p.district,p.status='active' AND p.merged_into_id IS NULL,
@@ -83,8 +97,8 @@ func registrationSubject(ctx context.Context, tx pgx.Tx, name, code string) (str
 		FROM directory_parties p WHERE p.kind='unit' AND lower(p.code)=lower($1) FOR UPDATE OF p`, code).
 		Scan(&id, &currentName, &district, &usable, &linked)
 	if errors.Is(err, pgx.ErrNoRows) {
-		area := code[2:8]
-		if districtNames[area] == "" {
+		area := unlistedRegistrationArea(code, requestedArea)
+		if area == "" {
 			return "", "", errRegistrationArea
 		}
 		return "", area, nil
@@ -191,7 +205,7 @@ func (s *Service) reviewRegistration(ctx context.Context, actor Principal, id st
 }
 
 type pendingRegistration struct {
-	id, unitName, code, area, originalUnitID string
+	id, unitName, code, area, requestedArea, originalUnitID string
 }
 
 // lockRegistration 锁定本辖区的一条申请并检查是否仍可办理。
@@ -200,10 +214,10 @@ type pendingRegistration struct {
 func lockRegistration(ctx context.Context, tx pgx.Tx, id string) (pendingRegistration, error) {
 	pending := pendingRegistration{id: id}
 	var status string
-	err := tx.QueryRow(ctx, `SELECT unit_name,credit_code,area_code,
+	err := tx.QueryRow(ctx, `SELECT unit_name,credit_code,area_code,requested_area_code,
 		COALESCE(original_unit_id::text,''),status FROM operator_registrations
 		WHERE id=$1 AND ($2::text[] IS NULL OR area_code=ANY($2)) FOR UPDATE`, id, Districts(ctx)).
-		Scan(&pending.unitName, &pending.code, &pending.area, &pending.originalUnitID, &status)
+		Scan(&pending.unitName, &pending.code, &pending.area, &pending.requestedArea, &pending.originalUnitID, &status)
 	if err == nil && status != "pending" {
 		err = errRegistrationReviewed
 	}
@@ -218,7 +232,7 @@ func activateRegistration(ctx context.Context, tx pgx.Tx, pending pendingRegistr
 		"operator-registration:"+pending.code); err != nil {
 		return "", "", err
 	}
-	subjectID, area, err := registrationSubject(ctx, tx, pending.unitName, pending.code)
+	subjectID, area, err := registrationSubject(ctx, tx, pending.unitName, pending.code, pending.requestedArea)
 	if err != nil {
 		return "", "", err
 	}

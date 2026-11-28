@@ -89,7 +89,13 @@ async function saveReview() {
           <tbody>
             <tr v-for="row in page.items" :key="row.id">
               <td><strong>{{ row.unitName }}</strong><br><span class="muted">{{ row.creditCode }}</span></td>
-              <td>{{ row.district }}</td>
+              <td>
+                {{ row.district }}
+                <small v-if="row.requestedDistrict && row.requestedDistrict !== row.district"
+                  class="muted requested-district">
+                  申请填写 {{ row.requestedDistrict }}
+                </small>
+              </td>
               <td>{{ row.contactName }} · {{ row.phone }}<br><span class="muted">{{ row.username }}</span></td>
               <td>
                 <span class="status-badge" :class="'status-' + (row.status === 'pending' ? 'pending_initial' : row.status)">
@@ -132,7 +138,7 @@ async function saveReview() {
         <p v-if="item">{{ item.unitName }}（{{ item.creditCode }}）</p>
         <label v-if="decision === 'approve'" class="registration-verification">
           <input v-model="verified" type="checkbox" required :disabled="saving">
-          <span>已核实单位资料及联系人身份和授权。确认通过后将立即开通该单位账号。</span>
+          <span>已核实单位资料、行政归属及联系人授权。确认通过后将立即开通该单位账号。</span>
         </label>
         <label class="field"><span>{{ decision === 'approve' ? '审核意见（选填）' : '驳回原因（仅审核端可见）' }}</span>
           <textarea v-model.trim="reason" rows="3" maxlength="500" :required="decision === 'reject'" :disabled="saving" />
@@ -149,6 +155,7 @@ async function saveReview() {
 
 <style scoped>
 .registration-actions { display: flex; gap: 12px; }
+.requested-district { display: block; }
 .registration-verification { display: flex; gap: 8px; align-items: start; margin: 14px 0; }
 .registration-verification input { margin-top: 4px; }
 .decision-dialog .field { margin: 14px 0; }
