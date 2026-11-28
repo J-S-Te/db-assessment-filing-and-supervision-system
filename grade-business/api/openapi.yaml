@@ -13596,7 +13596,7 @@ components:
       type: object
       additionalProperties: false
       required: [name, code]
-      description: 单位使用十八位信用代码，监管登记测评机构时提供资质及有效期。
+      description: 单位使用十八位信用代码。监管登记测评机构时提供资质证书编号及有效期，资质等级可留空。
       properties:
         name: {type: string, maxLength: 200}
         code: {type: string, maxLength: 80}

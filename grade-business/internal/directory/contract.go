@@ -195,7 +195,7 @@ func validEntry(kind string, item entry) bool {
 	case unit:
 		return unitCodeAllowed(item.Code)
 	case institution:
-		return item.Qualification != "" && item.ValidUntil != ""
+		return item.ValidUntil != ""
 	case person:
 		return validID(item.InstitutionID)
 	default:

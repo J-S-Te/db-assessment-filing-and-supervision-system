@@ -172,9 +172,7 @@ function entryBody(kind: DirectoryCollection) {
     ...(!selected.value?.codeManaged ? { code: common.code.toUpperCase() } : {}),
     ...(!props.institutional ? { district: fields.district.trim() } : {}),
   }
-  if (kind === 'institutions') return {
-    ...common, qualification: fields.qualification.trim(), validUntil: fields.validUntil,
-  }
+  if (kind === 'institutions') return { ...common, validUntil: fields.validUntil }
   return { ...common, qualification: fields.qualification.trim(), certificateNo: fields.certificateNo.trim(),
     validUntil: fields.validUntil, ...(!props.institutional ? { institutionId: fields.institutionId } : {}) }
 }
@@ -426,9 +424,9 @@ onScopeDispose(() => {
             </label>
           </template>
           <template v-else>
-            <label class="field"><span>{{ collection === 'institutions' ? '资质等级' : '测评资质' }}</span>
-              <input v-if="collection === 'institutions'" v-model="fields.qualification" maxlength="100" required>
-              <select v-else v-model="fields.qualification">
+            <label v-if="collection === 'people'" class="field">
+              <span>测评资质</span>
+              <select v-model="fields.qualification">
                 <option value="">请选择测评资质</option>
                 <option v-if="legacyAssessorQualification" :value="legacyAssessorQualification">
                   {{ legacyAssessorQualification }}（历史值）
