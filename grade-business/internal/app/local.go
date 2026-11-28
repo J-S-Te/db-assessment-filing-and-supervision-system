@@ -83,10 +83,14 @@ func Frontend(assets fs.FS) (http.Handler, error) {
 				return
 			}
 			if strings.HasPrefix(r.URL.Path, "/assets/") {
-				if info, err := fs.Stat(assets, strings.TrimPrefix(r.URL.Path, "/")); err == nil && !info.IsDir() {
-					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-					files.ServeHTTP(w, r)
-					return
+				name := strings.TrimPrefix(r.URL.Path, "/")
+				// 预压缩文件只通过原资源地址协商，缓存和文件类型仍沿用原资源。
+				if !strings.HasSuffix(name, ".gz") {
+					if info, err := fs.Stat(assets, name); err == nil && !info.IsDir() {
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+						serveFrontendAsset(w, r, assets, files, name)
+						return
+					}
 				}
 			}
 		}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
 import SignInClock from '../components/SignInClock.vue'
 import SignInScene from '../components/SignInScene.vue'
@@ -85,17 +85,14 @@ onUnmounted(() => window.clearTimeout(noticeTimer))
 
 /**
  * 用途 展示服务端通过账号口令验证的反馈，再进入账号有权访问的页面。
- * 参数 actor 为登录接口确认的账号会话。
+ * 参数 actor 为登录接口确认的账号会话，signInRoute 为提交时的登录路由。
  * 返回值 完成反馈和页面导航的异步任务。
  */
-async function enterAfterLogin(actor: Session) {
-  const signInRoute = router.currentRoute.value
+async function enterAfterLogin(actor: Session, signInRoute: RouteLocationNormalizedLoaded) {
+  if (router.currentRoute.value !== signInRoute) return
   session.value = actor
   password.value = ''
   loginAccepted.value = true
-  // 短暂保留认证成功提示，再进入会话允许的页面。
-  await new Promise<void>(resolve => window.setTimeout(resolve, 500))
-  if (router.currentRoute.value !== signInRoute) return
 
   const destination = signInRoute.query.redirect
   const resume = typeof destination === 'string' && /^\/(?![\/\\])/.test(destination) &&
@@ -126,6 +123,7 @@ async function submit() {
     failure.value = '两次输入的新密码不一致。'
     return
   }
+  const signInRoute = router.currentRoute.value
   pending.value = true
   try {
     if (changing.value) {
@@ -139,7 +137,7 @@ async function submit() {
       username: username.value, password: password.value,
     } })
     saveUsername(remember.value ? username.value : '')
-    await enterAfterLogin(actor)
+    await enterAfterLogin(actor, signInRoute)
   } catch (error) {
     failure.value = errorText(error)
   } finally {
