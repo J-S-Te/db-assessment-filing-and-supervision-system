@@ -11,7 +11,7 @@ import (
 // 返回值 无。
 func TestImplementationRejectsUnknownDirectoryReporter(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "BA-DIRECTORY-REPORTER", approved)
 	raw, err := json.Marshal(testInput(filing, routine))
 	if err != nil {
@@ -35,7 +35,7 @@ func TestImplementationRejectsUnknownDirectoryReporter(t *testing.T) {
 // 返回值 无。
 func TestImplementationRetainsDirectoryAttribution(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "BA-DIRECTORY-RETAIN", approved)
 	_, err := pool.Exec(t.Context(), `INSERT INTO directory_parties
 		(kind,scope_name,name,code,qualification,valid_until)

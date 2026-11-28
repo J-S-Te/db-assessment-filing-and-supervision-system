@@ -54,7 +54,7 @@ func TestQuzhouRegulatorScope(t *testing.T) {
 	assertQuzhouRegulatorScope(t, hit, own, other)
 }
 
-// TestQuzhouDistrictAssignment 验证衢州名录的辖区调整由系统管理员执行。
+// TestQuzhouDistrictAssignment 验证机构可登记单位，监管区划及已核定单位信用代码由系统管理员调整。
 // 参数 t 提供隔离数据库和测试上下文。
 // 返回值 无，权限或版本行为不符时记录失败。
 func TestQuzhouDistrictAssignment(t *testing.T) {
@@ -80,13 +80,57 @@ func TestQuzhouDistrictAssignment(t *testing.T) {
 	admin := accessLogin(t, hit, "quzhou-sys")
 	created := hit(institution, "POST", "/api/v1/institution/directory/units",
 		map[string]any{"name": "衢州名录权限测试", "code": "913308020000000001", "district": "330802"}, 201)
-	var item struct{ ID string }
+	var item struct {
+		ID, District string
+		Usable       bool
+		CodeManaged  bool
+	}
 	if err := json.Unmarshal(created.Body.Bytes(), &item); err != nil || item.ID == "" {
 		t.Fatalf("无法读取测试单位: %v", err)
 	}
+	if item.District != "" {
+		t.Errorf("机构新建时的单位辖区应等待核定，实际为 %q", item.District)
+	}
+	if !item.Usable {
+		t.Error("待核定辖区的机构新建单位应能用于首次报送")
+	}
+	if item.CodeManaged {
+		t.Error("机构新建的未核定单位应允许维护信用代码")
+	}
+	institutionPath := "/api/v1/institution/directory/units/" + item.ID
+	adminPath := "/api/v1/directory/units/" + item.ID
 	patch := map[string]any{"expectedVersion": 1, "district": "衢江区"}
-	hit(institution, "PATCH", "/api/v1/institution/directory/units/"+item.ID, patch, 403)
-	hit(admin, "PATCH", "/api/v1/directory/units/"+item.ID, patch, 200)
+	hit(institution, "PATCH", institutionPath, patch, 403)
+	hit(admin, "PATCH", adminPath, map[string]any{"expectedVersion": 1, "district": "台州"}, 200)
+	alias := hit(institution, "PATCH", institutionPath,
+		map[string]any{"expectedVersion": 2, "district": " 331000 "}, 200)
+	var kept struct {
+		District    string
+		Version     int
+		CodeManaged bool
+	}
+	if err := json.Unmarshal(alias.Body.Bytes(), &kept); err != nil || kept.District != "台州市" ||
+		kept.Version != 2 {
+		t.Fatalf("等价区划应保留已核定值和版本: %+v，%v", kept, err)
+	}
+	for _, result := range []string{
+		alias.Body.String(),
+		hit(institution, "GET", institutionPath, nil, 200).Body.String(),
+		hit(institution, "GET", "/api/v1/institution/directory/units", nil, 200).Body.String(),
+	} {
+		if !strings.Contains(result, `"codeManaged":true`) {
+			t.Error("机构读取已核定单位时缺少信用代码维护权限标记")
+		}
+	}
+	if result := hit(admin, "GET", adminPath, nil, 200); strings.Contains(result.Body.String(), `"codeManaged":true`) {
+		t.Error("管理员仍可维护已核定单位的信用代码")
+	}
+	for _, district := range []string{"椒江区", "衢江区", "", "待核对"} {
+		hit(institution, "PATCH", institutionPath, map[string]any{"expectedVersion": 2, "district": district}, 403)
+	}
+	hit(institution, "PATCH", institutionPath,
+		map[string]any{"expectedVersion": 2, "code": "913308020000000002"}, 403)
+	hit(admin, "PATCH", adminPath, map[string]any{"expectedVersion": 2, "district": "衢江区"}, 200)
 }
 
 // seedQuzhouDashboardRisks 建立两个区县的在册隐患和预警。

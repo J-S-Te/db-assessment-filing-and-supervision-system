@@ -19,7 +19,7 @@ const replacementInstitution = "拟换入测评机构"
 // 返回值 无。
 func TestOperatorChangeImplementationScope(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	own := implementationTestFiling(t, pool, "本单位复测-有效", approved)
 	foreign := implementationTestFiling(t, pool, "本单位复测-他方", approved)
 	cancelled := implementationTestFiling(t, pool, "本单位复测-注销", approved)
@@ -43,7 +43,7 @@ func TestOperatorChangeImplementationScope(t *testing.T) {
 // 返回值 无。
 func TestOperatorChangeImplementationExactFilingOption(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	older := implementationTestFiling(t, pool, "较早备案-预填条件", approved)
 	for index := range 20 {
 		implementationTestFiling(t, pool, fmt.Sprintf("近期备案-%02d", index), approved)
@@ -93,7 +93,7 @@ func assertOperatorExcludedExactFilings(t *testing.T, mux *http.ServeMux, endpoi
 // 返回值 无。
 func TestOperatorChangeImplementationReview(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "换机构复测-流转", approved)
 	item := testInput(filing, change)
 	item.AssessmentOrg = replacementInstitution
@@ -121,7 +121,7 @@ func TestOperatorChangeImplementationReview(t *testing.T) {
 // 返回值 无。
 func TestOperatorChangeImplementationQuotaAndWithdrawal(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "换机构复测-配额", approved)
 	item := testInput(filing, change)
 	item.AssessmentOrg = replacementInstitution
@@ -149,7 +149,7 @@ func TestOperatorChangeImplementationQuotaAndWithdrawal(t *testing.T) {
 // 返回值 无。
 func TestOperatorChangeImplementationRechecksFiling(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "换机构复测-当前归属", approved)
 	item := testInput(filing, change)
 	item.AssessmentOrg = replacementInstitution
@@ -171,7 +171,7 @@ func TestOperatorChangeImplementationRechecksFiling(t *testing.T) {
 // 返回值 无。
 func TestOperatorReviewNoticeRollback(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "换机构复测-通知原子性", approved)
 	item := testInput(filing, change)
 	item.AssessmentOrg = replacementInstitution

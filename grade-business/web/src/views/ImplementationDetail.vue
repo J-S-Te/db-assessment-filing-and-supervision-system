@@ -42,9 +42,11 @@ const stage = computed(() => record.value?.status ?? 'draft')
 const opinionLabels: Partial<Record<ImplementationAction, string>> = {
   approve: '审核意见（选填）',
   return_for_correction: '退回补正意见',
+  restart_initial: '重新初审原因',
   archive: '归档备注（选填）',
 }
 const opinionLabel = computed(() => opinionLabels[command.value])
+const opinionRequired = computed(() => ['return_for_correction', 'restart_initial'].includes(command.value))
 
 /**
  * 用途 获取实施报备的表单和可执行动作。
@@ -142,8 +144,8 @@ async function act() {
   const action = command.value
   if (!snapshot || changing.value || stale.value || !snapshot.allowedActions.includes(action)) return
   const note = opinionLabel.value ? comment.value.trim() : ''
-  if (action === 'return_for_correction' && !note) {
-    actionError.value = '请输入退回补正意见。'
+  if (opinionRequired.value && !note) {
+    actionError.value = '请输入' + opinionLabel.value + '。'
     return
   }
   changing.value = true
@@ -213,6 +215,8 @@ onBeforeUnmount(() => {
             <button v-if="record.allowedActions.includes('withdraw')" type="button" class="button neutral" @click="confirm('withdraw')">撤销报备</button>
             <button v-if="record.allowedActions.includes('return_for_correction')" type="button" class="button neutral"
               @click="confirm('return_for_correction')">退回补正</button>
+            <button v-if="record.allowedActions.includes('restart_initial')" type="button" class="button neutral"
+              @click="confirm('restart_initial')">重新进入初审</button>
             <button v-if="record.allowedActions.includes('submit')" type="button" class="button primary" @click="confirm('submit')">
               <Send :size="16" aria-hidden="true" />{{ stage === 'returned' ? '重新提交' : '提交报备' }}
             </button>
@@ -227,6 +231,7 @@ onBeforeUnmount(() => {
         </header>
 
         <p v-if="actionNotice" class="form-message success-message detail-notice" role="status">{{ actionNotice }}</p>
+        <p v-if="record.reviewBlockReason" class="detail-notice muted" role="status">{{ record.reviewBlockReason }}</p>
         <p v-if="record.resubmitAvailableAt" class="detail-notice muted" role="status">
           本备案的撤销冷却期截至 {{ formatImplementationRuleTime(record.resubmitAvailableAt) }}。
         </p>
@@ -299,7 +304,7 @@ onBeforeUnmount(() => {
         <p v-else-if="command === 'archive'">归档后可在「已归档」视图查询本次实施报备及其审核记录。</p>
         <label v-if="opinionLabel" class="field">
           <span>{{ opinionLabel }}</span>
-          <textarea v-model="comment" rows="4" maxlength="1000" :required="command === 'return_for_correction'" :disabled="changing" />
+          <textarea v-model="comment" rows="4" maxlength="1000" :required="opinionRequired" :disabled="changing" />
         </label>
         <p v-if="actionError" class="form-message error-message" role="alert">{{ actionError }}</p>
         <div class="form-actions">

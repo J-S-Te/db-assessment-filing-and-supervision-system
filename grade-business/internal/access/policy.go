@@ -93,25 +93,54 @@ func allowed(actor Principal, pattern string) bool {
 // 参数 method、path 为实际匹配的接口方法和路径。
 // 返回值 确认具备辖区校验或属于共享知识数据时为真。
 func regulatorAllowed(method, path string) bool {
-	if method == "PUT" {
-		return path == "/api/v1/filings/{id}/prechecks/review/{ruleId}"
-	}
-	if method == "POST" {
-		return path == "/api/v1/filings/{id}/review-actions" ||
-			path == "/api/v1/reports/{id}/review-actions" || path == "/api/v1/filings/{id}/prechecks"
-	}
-	if method != "GET" {
-		return false
-	}
-	switch path {
-	case "/api/v1/filings", "/api/v1/filings/{id}", "/api/v1/filings/{id}/review-history",
-		"/api/v1/filings/{id}/prechecks/{jobId}", "/api/v1/filings/{id}/prechecks/review",
-		"/api/v1/reports", "/api/v1/reports/{id}", "/api/v1/reports/{id}/review-history",
-		"/api/v1/filings/{id}/attachments", "/api/v1/filings/{id}/attachments/{attachmentId}",
-		"/api/v1/filings/{id}/attachments/{attachmentId}/text",
-		"/api/v1/reports/{id}/attachments", "/api/v1/reports/{id}/attachments/{attachmentId}",
-		"/api/v1/knowledge", "/api/v1/knowledge/{id}",
-		"/api/v1/knowledge/{id}/versions", "/api/v1/knowledge/{id}/versions/{version}":
+	switch method + " " + strings.TrimPrefix(path, "/api/v1") {
+	case "PUT /filings/{id}/prechecks/review/{ruleId}",
+		"POST /filings/{id}/review-actions",
+		"POST /filings/{id}/prechecks",
+		"POST /filings/{id}/withdrawal/decision",
+		"POST /reports/{id}/review-actions",
+		"POST /filing-applications/{id}/review-actions",
+		"POST /filing-applications/{id}/withdrawal/decision",
+		"POST /implementations/{id}/actions",
+		"POST /remediations/{id}/review-actions",
+		"POST /remediations/reminders",
+		"POST /hazards",
+		"POST /hazards/{target}/{operation}",
+		"POST /alerts/{id}/actions",
+		"POST /supervisions",
+		"POST /supervisions/batches",
+		"POST /supervisions/batches/preview",
+		"POST /supervisions/{id}/actions",
+		"POST /supervisions/{id}/attachments",
+		"POST /supervisions/{id}/site-inspection/actions",
+		"POST /supervisions/{id}/site-inspection/attachments":
+		return true
+	case "GET /filings", "GET /filings/{id}", "GET /filings/{id}/review-history",
+		"GET /filings/{id}/prechecks/{jobId}", "GET /filings/{id}/prechecks/review",
+		"GET /filings/{id}/withdrawal",
+		"GET /reports", "GET /reports/{id}", "GET /reports/{id}/review-history",
+		"GET /filings/{id}/attachments", "GET /filings/{id}/attachments/{attachmentId}",
+		"GET /filings/{id}/attachments/{attachmentId}/text",
+		"GET /reports/{id}/attachments", "GET /reports/{id}/attachments/{attachmentId}",
+		"GET /filing-applications", "GET /filing-applications/{id}",
+		"GET /filing-applications/{id}/review-history", "GET /filing-applications/{id}/withdrawal",
+		"GET /filing-applications/{id}/attachments", "GET /filing-applications/{id}/attachments/{attachmentId}",
+		"GET /implementations", "GET /implementations/{id}", "GET /implementations/{id}/history",
+		"GET /implementations/{id}/precheck",
+		"GET /remediations", "GET /remediations/statistics", "GET /remediations/export",
+		"GET /remediations/{id}", "GET /remediations/{id}/review-history",
+		"GET /remediations/{id}/attachments", "GET /remediations/{id}/attachments/{attachmentId}",
+		"GET /hazards", "GET /hazards/filing-options", "GET /hazards/export",
+		"GET /hazards/{id}", "GET /hazards/{id}/history",
+		"GET /hazards/{id}/attachments", "GET /hazards/{id}/attachments/{attachmentId}",
+		"GET /alerts", "GET /alerts/summary", "GET /alerts/supervision-leads", "GET /alerts/{id}",
+		"GET /supervisions/batches/template-options",
+		"GET /supervisions", "GET /supervisions/filing-options", "GET /supervisions/{id}",
+		"GET /supervisions/{id}/history", "GET /supervisions/{id}/attachments/{attachmentId}",
+		"GET /supervisions/{id}/site-inspection", "GET /supervisions/{id}/site-inspection/attachments/{attachmentId}",
+		"GET /review-feedback/{resource}/{id}",
+		"GET /knowledge", "GET /knowledge/{id}",
+		"GET /knowledge/{id}/versions", "GET /knowledge/{id}/versions/{version}":
 		return true
 	}
 	return false
@@ -176,8 +205,9 @@ func view(actor Principal) sessionView {
 			"admin.grade.case.edit", "admin.grade.filing.audit", "admin.grade.report.audit", "admin.sys.user.edit", registrationPermission}
 	case Regulator:
 		data.DataScope, data.Home = "AREA", "/filings"
-		data.Menu = []string{"grade", "agent", "ai-review", "system"}
-		data.Pages = []string{"/filings", "/reports", "/knowledge", "/flow", "/operator-registrations"}
+		data.Menu = []string{"grade", "archive", "monitor", "agent", "ai-review", "system"}
+		data.Pages = []string{"/filings", "/filing-applications", "/implementations", "/reports",
+			"/remediations", "/hazards", "/alerts", "/supervisions", "/knowledge", "/flow", "/operator-registrations"}
 		if data.Dashboard = quzhouDashboard(actor.AreaCode); data.Dashboard != nil {
 			data.Menu = append(data.Menu, "screen")
 			data.Pages = append(data.Pages, "/dashboard")

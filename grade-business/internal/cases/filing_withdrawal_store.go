@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"grade-business/internal/access"
 )
 
 // readWithdrawal 在一致快照中读取当前回执和最近的撤回处理记录。
@@ -102,7 +104,7 @@ func createWithdrawal(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
 	if err != nil {
 		return withdrawalRecord{}, err
 	}
-	if err := updateWithdrawalTarget(ctx, tx, scope, target, target.status, ""); err != nil {
+	if err := updateWithdrawalTarget(ctx, tx, scope, target, target.status); err != nil {
 		return withdrawalRecord{}, err
 	}
 	return item, notifyWithdrawal(ctx, tx, scope, target, item)
@@ -155,13 +157,19 @@ func (s *Service) applyWithdrawalDecision(ctx context.Context, tx pgx.Tx, scope 
 		!eligibleWithdrawalStage(target) {
 		return ErrConflict
 	}
+	actor, _ := access.Current(ctx)
+	decider := s.operator
+	if actor.ID != "" {
+		decider = actor.Name
+	}
 	confirmed, err := scanWithdrawal(tx.QueryRow(ctx, `UPDATE filing_withdrawal_requests
-		SET status=$2,case_version=case_version+1,comment=$3,decided_by=$4,decided_at=clock_timestamp()
-		WHERE id=$1 RETURNING `+withdrawalFields, item.ID, state, input.Comment, s.operator))
+		SET status=$2,case_version=case_version+1,comment=$3,decided_by=$4,decided_at=clock_timestamp(),
+		    decided_by_id=NULLIF($5,'')::uuid,decided_by_role=NULLIF($6,'')
+		WHERE id=$1 RETURNING `+withdrawalFields, item.ID, state, input.Comment, decider, actor.ID, actor.Role))
 	if err != nil {
 		return err
 	}
-	if err := updateWithdrawalTarget(ctx, tx, scope, target, next, s.operator); err != nil {
+	if err := updateWithdrawalTarget(ctx, tx, scope, target, next); err != nil {
 		return err
 	}
 	*item = confirmed
@@ -169,10 +177,10 @@ func (s *Service) applyWithdrawalDecision(ctx context.Context, tx pgx.Tx, scope 
 }
 
 // updateWithdrawalTarget 保留既有审核阶段或标记已撤回并记录真实业务决定。
-// 参数 ctx、tx 为事务，scope、target 指定原单，next 为下一状态，actor 为确认人。
+// 参数 ctx、tx 为事务，scope、target 指定原单，next 为下一状态。
 // 返回值 已写入对象与必要审核事件时为 nil，或数据库错误。
 func updateWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
-	target withdrawalTarget, next, actor string,
+	target withdrawalTarget, next string,
 ) error {
 	query := `UPDATE business_cases SET status=$2,version=version+1 WHERE id=$1`
 	if scope.resource == withdrawalApplications {
@@ -181,26 +189,30 @@ func updateWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScop
 	if _, err := tx.Exec(ctx, query, scope.id, next); err != nil || next != applicationWithdrawn {
 		return err
 	}
-	return saveWithdrawalReviewEvent(ctx, tx, scope, target.status, actor)
+	return saveWithdrawalReviewEvent(ctx, tx, scope, target.status)
 }
 
 // saveWithdrawalReviewEvent 固化撤回决定到原业务的正式审核轨迹。
-// 参数 ctx、tx 为事务，scope 指定新状态单据，previous、actor 记录原阶段和确认人。
+// 参数 ctx、tx 为事务，scope 指定已保存撤回决定的单据，previous 为变更前阶段。
 // 返回值 写入轨迹的错误。
 func saveWithdrawalReviewEvent(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
-	previous, actor string,
+	previous string,
 ) error {
-	query := `INSERT INTO case_review_events(case_id,action,from_status,to_status,operator,comment,version,directory_snapshot)
-		SELECT c.id,'withdraw',$2,'withdrawn',$3,r.comment,c.version,c.directory_snapshot
+	query := `INSERT INTO case_review_events(case_id,action,from_status,to_status,operator,comment,version,
+		directory_snapshot,operator_id,operator_role)
+		SELECT c.id,'withdraw',$2,'withdrawn',r.decided_by,r.comment,c.version,c.directory_snapshot,
+		       r.decided_by_id,r.decided_by_role
 		FROM business_cases c JOIN filing_withdrawal_requests r ON r.resource_id=c.id
 		  AND r.resource='filings' AND r.case_version=c.version AND r.status='approved' WHERE c.id=$1`
 	if scope.resource == withdrawalApplications {
 		query = `INSERT INTO filing_application_review_events
-			(application_id,action,from_status,to_status,operator,comment,version,implementation_id)
-			SELECT a.id,'withdraw',$2,'withdrawn',$3,r.comment,a.version,a.implementation_id
+			(application_id,action,from_status,to_status,operator,comment,version,implementation_id,
+			 operator_id,operator_role)
+			SELECT a.id,'withdraw',$2,'withdrawn',r.decided_by,r.comment,a.version,a.implementation_id,
+			       r.decided_by_id,r.decided_by_role
 			FROM filing_applications a JOIN filing_withdrawal_requests r ON r.resource_id=a.id
 			  AND r.resource='filing-applications' AND r.case_version=a.version AND r.status='approved' WHERE a.id=$1`
 	}
-	_, err := tx.Exec(ctx, query, scope.id, previous, actor)
+	_, err := tx.Exec(ctx, query, scope.id, previous)
 	return err
 }

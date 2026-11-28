@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"grade-business/internal/cases"
-
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
+	"grade-business/internal/cases"
 )
 
 const hazardAttachmentScope = hazardInstitutionScope + ` AND ($2='' OR (h.status<>'pending_dispatch'
@@ -33,8 +33,9 @@ func (s *Service) attachments(ctx context.Context, id string) ([]cases.Attachmen
 	}
 	rows, err := s.db.Query(ctx, `SELECT a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at`+hazardJoin+`
 		JOIN hazard_attachments a ON a.hazard_id=h.id
-		WHERE h.id=$1 AND `+hazardAttachmentScope+` ORDER BY a.item_version DESC`,
-		id, operatorOrganization(ctx), hazardInstitution(ctx))
+		WHERE h.id=$1 AND `+hazardAttachmentScope+
+		" AND "+access.FilingDistrictScope("c.filing_id", "$4", false)+" ORDER BY a.item_version DESC",
+		id, operatorOrganization(ctx), hazardInstitution(ctx), access.Districts(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +48,9 @@ func (s *Service) attachments(ctx context.Context, id string) ([]cases.Attachmen
 func (s *Service) evidenceUploadVersion(ctx context.Context, id string, expected int64) (int64, error) {
 	var version int64
 	var status string
-	err := s.db.QueryRow(ctx, `SELECT h.version,h.status`+hazardJoin+` WHERE h.id=$1 AND `+hazardScope,
-		id, operatorOrganization(ctx), hazardInstitution(ctx)).Scan(&version, &status)
+	err := s.db.QueryRow(ctx, `SELECT h.version,h.status`+hazardJoin+` WHERE h.id=$1 AND `+hazardScope+
+		" AND "+access.FilingDistrictScope("c.filing_id", "$4", false),
+		id, operatorOrganization(ctx), hazardInstitution(ctx), access.Districts(ctx)).Scan(&version, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, errNotFound
 	}
@@ -127,8 +129,9 @@ func (s *Service) downloadEvidence(w http.ResponseWriter, r *http.Request, id, a
 	var key string
 	err := s.db.QueryRow(r.Context(), `SELECT a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at,a.file_key`+
 		hazardJoin+` JOIN hazard_attachments a ON a.hazard_id=h.id
-		WHERE h.id=$1 AND `+hazardAttachmentScope+` AND a.id=$4`, id, operatorOrganization(r.Context()),
-		hazardInstitution(r.Context()), attachmentID).
+		WHERE h.id=$1 AND `+hazardAttachmentScope+` AND a.id=$4 AND `+
+		access.FilingDistrictScope("c.filing_id", "$5", false), id, operatorOrganization(r.Context()),
+		hazardInstitution(r.Context()), attachmentID, access.Districts(r.Context())).
 		Scan(&item.ID, &item.Kind, &item.FileName, &item.Size, &item.UploadedAt, &key)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errNotFound

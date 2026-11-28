@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"grade-business/internal/access"
 	"grade-business/internal/reviewinbox"
 
 	"github.com/jackc/pgx/v5"
@@ -80,10 +81,13 @@ func lockHazard(ctx context.Context, tx pgx.Tx, id string) (lockedHazard, error)
 		return lockedHazard{}, errNotFound
 	}
 	var item lockedHazard
+	districts := access.Districts(ctx)
 	err := tx.QueryRow(ctx, `SELECT status,version,ledger,
-		COALESCE(registration_filing_id::text,'') FROM hazard_items WHERE id=$1 FOR UPDATE`, id).
+		COALESCE(registration_filing_id::text,'') FROM hazard_items h WHERE h.id=$1 AND `+
+		access.FilingDistrictScope("(SELECT c.filing_id FROM hazard_context c WHERE c.id=h.id)", "$2", false)+
+		" FOR UPDATE OF h", id, districts).
 		Scan(&item.Status, &item.Version, &item.Ledger, &item.RegistrationFilingID)
-	if err == nil && (operatorOrganization(ctx) != "" || hazardInstitution(ctx) != "") {
+	if err == nil && (districts != nil || operatorOrganization(ctx) != "" || hazardInstitution(ctx) != "") {
 		err = lockHazardScope(ctx, tx, id)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -98,8 +102,9 @@ func lockHazard(ctx context.Context, tx pgx.Tx, id string) (lockedHazard, error)
 func lockHazardScope(ctx context.Context, tx pgx.Tx, id string) error {
 	var matched string
 	return tx.QueryRow(ctx, `SELECT h.id::text`+hazardLockedJoin+`
-		WHERE h.id=$1 AND `+lockedHazardScope+` FOR SHARE OF anchor,filing`,
-		id, operatorOrganization(ctx), hazardInstitution(ctx)).Scan(&matched)
+		WHERE h.id=$1 AND `+lockedHazardScope+" AND "+
+		access.FilingDistrictScope("filing.id", "$4", true)+" FOR SHARE OF anchor,filing",
+		id, operatorOrganization(ctx), hazardInstitution(ctx), access.Districts(ctx)).Scan(&matched)
 }
 
 // requireEvidence 核验整改人已提交本轮材料，退回或交接后必须登记新的证据。
@@ -145,8 +150,15 @@ func actionWithinScope(ctx context.Context, action string) bool {
 	if operatorOrganization(ctx) != "" {
 		return action == actionSubmit
 	}
-	return action == actionSubmit || action == actionReturn || action == actionClose ||
-		action == actionDispatch || action == actionSupervise
+	switch action {
+	case actionReturn, actionClose, actionDispatch, actionSupervise:
+		return true
+	case actionSubmit:
+		actor, _ := access.Current(ctx)
+		return actor.Role != access.Regulator
+	default:
+		return false
+	}
 }
 
 // act 校验最新台账版本并按当前状态完成整改办理。
@@ -211,7 +223,7 @@ func (s *Service) persistAction(ctx context.Context, tx pgx.Tx, id, from, next s
 	if err != nil {
 		return hazardMutation{}, err
 	}
-	operator := s.operator
+	operator, actor := hazardAuditActor(ctx, s.operator)
 	if organization := operatorOrganization(ctx); organization != "" {
 		operator = organization
 	}
@@ -219,12 +231,24 @@ func (s *Service) persistAction(ctx context.Context, tx pgx.Tx, id, from, next s
 		operator = scope
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO hazard_events
-		(hazard_id,action,from_status,to_status,operator,comment,version)
-		VALUES($1,$2,$3,$4,$5,$6,$7)`, id, input.Action, from, next, operator, input.Comment, result.Version)
+		(hazard_id,action,from_status,to_status,operator,comment,version,operator_id,operator_role)
+		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid,NULLIF($9,''))`,
+		id, input.Action, from, next, operator, input.Comment, result.Version, actor.ID, actor.Role)
 	if err != nil {
 		return result, err
 	}
 	return result, deliverAction(ctx, tx, result, input)
+}
+
+// hazardAuditActor 从会话读取真实经办人，并保留后台任务的原有显示名。
+// 参数 ctx 为写操作上下文，fallback 为原有经办标签。
+// 返回值 对外显示的经办名称及可持久化的真实账号身份。
+func hazardAuditActor(ctx context.Context, fallback string) (string, access.Principal) {
+	actor, _ := access.Current(ctx)
+	if actor.Role == access.Regulator || actor.Role == access.SystemAdmin {
+		return actor.Name, actor
+	}
+	return fallback, actor
 }
 
 // deliverAction 将复测待办、复测结论及监管决定送达对应的当前业务办理方。

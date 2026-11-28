@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 	"grade-business/internal/reviewinbox"
 )
@@ -92,7 +93,9 @@ func sendReminder(ctx context.Context, tx pgx.Tx, id string) (reminderResult, er
 	var deadline, day string
 	err := tx.QueryRow(ctx, `SELECT p.version,f.organization_name,r.number,f.system_name,
 		to_char(p.deadline,'YYYY-MM-DD'),to_char(`+today+`,'YYYY-MM-DD') `+joins+`
-		WHERE p.id=$1 AND (`+reminderEligible+`) FOR UPDATE OF p FOR SHARE OF r,f`, id).
+		WHERE p.id=$1 AND (`+reminderEligible+`)
+		AND `+access.FilingDistrictScope("f.id", "$2", true)+` FOR UPDATE OF p FOR SHARE OF r,f`,
+		id, access.Districts(ctx)).
 		Scan(&notice.Version, &notice.Recipient, &notice.Reference, &notice.Subject, &deadline, &day)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return item, nil

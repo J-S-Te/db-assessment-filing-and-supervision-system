@@ -37,17 +37,23 @@ const (
 )
 
 var (
-	errNotFound   = errors.New("实施报备不存在。")
-	errFiling     = errors.New("请选择已通过且有效的备案。")
-	errTarget     = errors.New("请选择与当前备案测评机构不同的拟换入机构。")
-	errStale      = errors.New("记录已更新，请刷新后重试。")
-	errConflict   = errors.New("当前状态不支持此操作。")
-	errQuota      = errors.New("同一备案在本年度最多可提交三次有效变更报备。")
-	errWithdrawal = errors.New("当前报备不符合发起人撤销条件。")
-	errPlanClosed = errors.New("已到测评开始日零点，无法修改计划或重新提交补正。")
-	errCooldown   = errors.New("该备案撤销后的 15 天冷却期尚未结束。")
-	errComment    = errors.New("退回补正必须填写意见。")
-	errInvalid    = errors.New("实施报备参数无效。")
+	errNotFound            = errors.New("实施报备不存在。")
+	errFiling              = errors.New("请选择已通过且有效的备案。")
+	errTarget              = errors.New("请选择与当前备案测评机构不同的拟换入机构。")
+	errStale               = errors.New("记录已更新，请刷新后重试。")
+	errConflict            = errors.New("当前状态不支持此操作。")
+	errQuota               = errors.New("同一备案在本年度最多可提交三次有效变更报备。")
+	errWithdrawal          = errors.New("当前报备不符合发起人撤销条件。")
+	errPlanClosed          = errors.New("已到测评开始日零点，无法修改计划或重新提交补正。")
+	errCooldown            = errors.New("该备案撤销后的 15 天冷却期尚未结束。")
+	errComment             = errors.New("退回补正必须填写意见。")
+	errInvalid             = errors.New("实施报备参数无效。")
+	errPermission          = errors.New("当前账号无权执行此报备操作。")
+	errSameReviewer        = errors.New("初审与终审必须由不同账号办理，请交由另一位审核人终审。")
+	errUnknownReviewer     = errors.New("本轮缺少可核实的初审账号，请重新发起初审。")
+	errUnverifiedReviewers = errors.New("本轮缺少可核实的异人初审、终审记录，请重新发起初审。")
+	errRestartUnavailable  = errors.New("仅本轮缺少可核实审核身份的待终审或待复核报备可重新发起初审。")
+	errRestartComment      = errors.New("重新发起初审必须填写原因。")
 )
 
 var listFilterKeys = []string{"q", "status", "type", "archive", "limit", "cursor"}
@@ -108,6 +114,7 @@ type detail struct {
 	PlanEditDeadline  *time.Time             `json:"planEditDeadline,omitempty"`
 	ResubmitAt        *time.Time             `json:"resubmitAvailableAt,omitempty"`
 	AllowedActions    []string               `json:"allowedActions"`
+	ReviewBlockReason string                 `json:"reviewBlockReason,omitempty"`
 	CanPrecheck       bool                   `json:"canPrecheck"`
 	ReporterID        *string                `json:"reporterId,omitempty"`
 	DirectorySnapshot *directoryref.Snapshot `json:"directorySnapshot,omitempty"`
@@ -115,8 +122,10 @@ type detail struct {
 
 type storedRecord struct {
 	detail
-	CreatedBy string
-	QuotaYear *int
+	CreatedBy       string
+	QuotaYear       *int
+	FirstReviewerID *string
+	FinalReviewerID *string
 }
 
 type mutation struct {
@@ -131,6 +140,8 @@ type event struct {
 	FromStatus        string                 `json:"fromStatus,omitempty"`
 	ToStatus          string                 `json:"toStatus"`
 	Operator          string                 `json:"operator"`
+	OperatorID        *string                `json:"operatorId,omitempty"`
+	OperatorRole      *string                `json:"operatorRole,omitempty"`
 	Comment           string                 `json:"comment,omitempty"`
 	OccurredAt        time.Time              `json:"occurredAt"`
 	DirectorySnapshot *directoryref.Snapshot `json:"directorySnapshot,omitempty"`

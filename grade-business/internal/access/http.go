@@ -77,11 +77,11 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, next http.Ha
 		return
 	}
 	if actor.MustChange {
+		s.record(ctx, actor, "denied", pattern)
 		if isAIReviewPattern(pattern) && !strings.HasPrefix(r.URL.Path, "/api/") {
 			http.Redirect(w, r, "/account/password", http.StatusSeeOther)
 			return
 		}
-		s.record(ctx, actor, "denied", pattern)
 		httpx.Error(w, 403, "password_change_required", "请先修改初始密码。")
 		return
 	}
@@ -103,13 +103,23 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
-	if !usernamePattern.MatchString(input.Username) || !validPassword(input.Password) {
-		httpx.Error(w, 401, "invalid_credentials", "账号、密码或账号状态无效。")
-		return
+	validUsername := usernamePattern.MatchString(input.Username)
+	rateKey := input.Username
+	if !validUsername {
+		rateKey = ""
 	}
-	if !s.limitLogin(s.authSource(r), input.Username) {
+	allowed, reportThrottle := s.limitLogin(s.authSource(r), rateKey)
+	if !allowed {
+		if reportThrottle {
+			s.record(r.Context(), Principal{}, "login_throttled", "login")
+		}
 		w.Header().Set("Retry-After", "300")
 		httpx.Error(w, 429, "login_throttled", "登录尝试过多，请五分钟后重试。")
+		return
+	}
+	if !validUsername || !validPassword(input.Password) {
+		s.record(r.Context(), Principal{}, "login_failed", "login")
+		httpx.Error(w, 401, "invalid_credentials", "账号、密码或账号状态无效。")
 		return
 	}
 	actor, fingerprint, err := s.authenticate(r.Context(), input.Username, input.Password)
@@ -164,7 +174,11 @@ func (s *Service) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor, _ := Current(r.Context())
-	if !s.limitLogin(s.authSource(r), actor.ID) {
+	allowed, reportThrottle := s.limitLogin(s.authSource(r), actor.ID)
+	if !allowed {
+		if reportThrottle {
+			s.record(r.Context(), actor, "password_change_throttled", "password")
+		}
 		httpx.Error(w, 429, "login_throttled", "口令校验次数过多，请五分钟后重试。")
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 // ErrDeadlineConflict 表示隐患已关闭、期限已变化或新的延期日期无效。
@@ -43,7 +44,10 @@ func ExtendDeadline(ctx context.Context, tx pgx.Tx, id, newDate, operator, reaso
 		return err
 	}
 	comment := fmt.Sprintf("整改期限由 %s 延至 %s。%s", previous, newDate, reason)
-	_, err = tx.Exec(ctx, `INSERT INTO hazard_events(hazard_id,action,from_status,to_status,operator,comment,version)
-		VALUES($1,'extend_deadline',$2,$2,$3,$4,$5)`, id, status, operator, comment, version)
+	actor, _ := access.Current(ctx)
+	_, err = tx.Exec(ctx, `INSERT INTO hazard_events
+		(hazard_id,action,from_status,to_status,operator,comment,version,operator_id,operator_role)
+		VALUES($1,'extend_deadline',$2,$2,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''))`,
+		id, status, operator, comment, version, actor.ID, actor.Role)
 	return err
 }

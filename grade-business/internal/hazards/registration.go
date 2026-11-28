@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 )
 
@@ -117,9 +118,11 @@ func (s *Service) registerHazard(ctx context.Context, input registrationInput) (
 		if err != nil {
 			return err
 		}
+		operator, actor := hazardAuditActor(ctx, s.operator)
 		_, err = tx.Exec(ctx, `INSERT INTO hazard_events
-			(hazard_id,action,from_status,to_status,operator,version)
-			VALUES($1,'register','','pending_dispatch',$2,1)`, result.ID, s.operator)
+			(hazard_id,action,from_status,to_status,operator,version,operator_id,operator_role)
+			VALUES($1,'register','','pending_dispatch',$2,1,NULLIF($3,'')::uuid,NULLIF($4,''))`,
+			result.ID, operator, actor.ID, actor.Role)
 		return err
 	})
 	return result, err
@@ -149,10 +152,16 @@ func createRegistration(ctx context.Context, tx pgx.Tx, input registrationInput)
 // 返回值 登记机构、业务日期，或备案状态冲突及数据库错误。
 func lockRegistrationFiling(ctx context.Context, tx pgx.Tx, filingID string) (string, string, error) {
 	var institution, today string
+	districts := access.Districts(ctx)
 	err := tx.QueryRow(ctx, `SELECT assessment_org,to_char(
 		(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,'YYYY-MM-DD')
-		FROM business_cases WHERE id=$1 AND `+registrationEligible+` FOR SHARE`, filingID).Scan(&institution, &today)
+		FROM business_cases f WHERE f.id=$1 AND `+registrationEligible+" AND "+
+		access.FilingDistrictScope("f.id", "$2", true)+" FOR SHARE OF f", filingID, districts).
+		Scan(&institution, &today)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if districts != nil {
+			return "", "", errNotFound
+		}
 		err = errRegistrationFiling
 	}
 	return institution, today, err
@@ -177,9 +186,10 @@ func (s *Service) handleFilingOptions(w http.ResponseWriter, r *http.Request) {
 // 返回值 最小备案选择项或数据库错误。
 func (s *Service) registrationOptions(ctx context.Context, keyword string) ([]registrationFilingOption, error) {
 	rows, err := s.db.Query(ctx, `SELECT id::text,number,system_name,organization_name,assessment_org
-		FROM business_cases WHERE `+registrationEligible+`
+		FROM business_cases f WHERE `+registrationEligible+`
 		AND ($1='' OR strpos(lower(concat_ws(' ',number,system_name,organization_name)),lower($1))>0)
-		ORDER BY created_at DESC,id LIMIT 30`, keyword)
+		AND `+access.FilingDistrictScope("f.id", "$2", false)+`
+		ORDER BY created_at DESC,id LIMIT 30`, keyword, access.Districts(ctx))
 	if err != nil {
 		return nil, err
 	}

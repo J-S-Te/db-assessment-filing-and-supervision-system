@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 const enqueueSupervisionLeads = `
@@ -68,9 +69,11 @@ func (s *Service) readSupervisionLeads(r *http.Request) (supervisionLeadPage, er
 		       l.sequence
 		FROM alert_supervision_leads l JOIN local_alerts a ON a.id=l.alert_id
 		JOIN hazard_items h ON h.id=a.hazard_id
-		WHERE ($1::bigint=0 OR l.sequence<$1)
+		WHERE ($1::bigint=0 OR l.sequence<$1) AND `+
+		access.FilingDistrictScope("(SELECT hc.filing_id FROM hazard_context hc WHERE hc.id=h.id)", "$3", false)+`
 	)
-	SELECT * FROM records WHERE (NOT $2 OR active) ORDER BY sequence DESC LIMIT 21`, before, active)
+	SELECT * FROM records WHERE (NOT $2 OR active) ORDER BY sequence DESC LIMIT 21`,
+		before, active, access.Districts(r.Context()))
 	if err != nil {
 		return supervisionLeadPage{}, err
 	}

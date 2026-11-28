@@ -15,7 +15,7 @@ import (
 // 返回值 无。
 func TestImplementationArchivePreservesApprovedReview(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-实施归档", approved)
 	record := approvedImplementation(t, mux, testInput(filing, change))
 	resource := path + "/" + record.ID
@@ -43,7 +43,7 @@ func TestImplementationArchivePreservesApprovedReview(t *testing.T) {
 // 返回值 无。
 func TestImplementationArchiveRejectsIneligibleAndRepeatedActions(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-归档边界", approved)
 	item := testInput(filing, routine)
 	pending := decodeResponse[mutation](t, callImplementation(mux, http.MethodPost, path, item), 201)
@@ -66,7 +66,7 @@ func TestImplementationArchiveRejectsIneligibleAndRepeatedActions(t *testing.T) 
 // 返回值 无。
 func TestImplementationArchiveListFilters(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-归档列表", approved)
 	archived := approvedImplementation(t, mux, testInput(filing, change))
 	archivedSecond := approvedImplementation(t, mux, testInput(filing, routine))
@@ -91,7 +91,7 @@ func TestImplementationArchiveListFilters(t *testing.T) {
 // 返回值 无。
 func TestImplementationArchiveRollsBackHistoryFailure(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-归档回滚", approved)
 	record := approvedImplementation(t, mux, testInput(filing, routine))
 	if _, err := pool.Exec(t.Context(), `ALTER TABLE implementation_events ADD CHECK (action <> 'archive')`); err != nil {

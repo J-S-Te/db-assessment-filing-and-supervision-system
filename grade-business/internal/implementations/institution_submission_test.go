@@ -17,7 +17,7 @@ const firstImplementationInstitution = "备案测评机构"
 // 返回值 无。
 func TestInstitutionFirstImplementationOptions(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	own := implementationTestFiling(t, pool, "首次报备-本机构备案", approved)
 	foreign := implementationTestFiling(t, pool, "首次报备-外机构备案", approved)
 	cancelled := implementationTestFiling(t, pool, "首次报备-历史备案", approved)
@@ -54,7 +54,7 @@ func TestInstitutionFirstImplementationOptions(t *testing.T) {
 // 返回值 无。
 func TestInstitutionFirstImplementationList(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "首次报备-列表分页", approved)
 	first := createInstitutionImplementation(t, mux, testInput(filing, change))
 	second := createInstitutionImplementation(t, mux, testInput(filing, change))
@@ -81,7 +81,7 @@ func TestInstitutionFirstImplementationList(t *testing.T) {
 // 返回值 无。
 func TestInstitutionFirstImplementationProgression(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "首次报备-流转", approved)
 	item := testInput(filing, change)
 	record := createInstitutionImplementation(t, mux, item)
@@ -109,7 +109,7 @@ func TestInstitutionFirstImplementationProgression(t *testing.T) {
 // 返回值 无。
 func TestInstitutionImplementationRechecksFiling(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "首次报备-备案改派", approved)
 	newFiling := implementationTestFiling(t, pool, "首次报备-有效替换备案", approved)
 	item := testInput(filing, routine)
@@ -142,7 +142,7 @@ func TestInstitutionImplementationRechecksFiling(t *testing.T) {
 // 返回值 无。
 func TestInstitutionFirstImplementationSharesAnnualQuota(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "首次报备-共享配额", approved)
 	item := testInput(filing, change)
 	regulatory := decodeResponse[mutation](t, callImplementation(mux, http.MethodPost, path, item), 201)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"grade-business/internal/access"
 )
 
 type syncResult struct {
@@ -37,8 +38,8 @@ inserted AS (
 	RETURNING id,hazard_id,kind,version,triggered_at
 ),
 recorded AS (
-	INSERT INTO local_alert_events(alert_id,version,action,to_status,operator,occurred_at)
-	SELECT id,version,'create','pending',$1,triggered_at FROM inserted
+	INSERT INTO local_alert_events(alert_id,version,action,to_status,operator,occurred_at,operator_id,operator_role)
+	SELECT id,version,'create','pending',$1,triggered_at,NULLIF($2,'')::uuid,NULLIF($3,'') FROM inserted
 ), notified AS (
 	INSERT INTO review_notices(audience,resource,resource_id,event_version,state,recipient,reference,subject,comment)
 	SELECT recipient.audience,'alerts',i.id,i.version,'pending',recipient.name,c.filing_number,c.system_name,''
@@ -55,8 +56,9 @@ SELECT count(*) FROM inserted
 // 返回值 实际新增条数及读取或写入错误。
 func (s *Service) sync(ctx context.Context) (syncResult, error) {
 	var result syncResult
+	operator, actor := alertAuditActor(ctx, s.operator)
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, syncLocalAlerts, s.operator).Scan(&result.Created); err != nil {
+		if err := tx.QueryRow(ctx, syncLocalAlerts, operator, actor.ID, actor.Role).Scan(&result.Created); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, enqueueSupervisionLeads)
@@ -97,11 +99,12 @@ func (s *Service) execute(ctx context.Context, id pgtype.UUID, input actionInput
 // 返回值 更新后的业务对象或领域错误。
 func (s *Service) executeLocked(ctx context.Context, tx pgx.Tx, source lockedAlertSource,
 	item actionResult, pending *pendingDisposition, input actionInput) (actionResult, error) {
+	operator, _ := alertAuditActor(ctx, s.operator)
 	if input.Action == actionApprove || input.Action == actionReject {
 		if pending == nil || pending.AlertID != item.ID {
 			return actionResult{}, errConflict
 		}
-		return reviewDisposition(ctx, tx, source, item, *pending, s.operator, input)
+		return reviewDisposition(ctx, tx, source, item, *pending, operator, input)
 	}
 	if pending != nil {
 		return actionResult{}, errConflict
@@ -117,7 +120,18 @@ func (s *Service) executeLocked(ctx context.Context, tx pgx.Tx, source lockedAle
 	if target == "" {
 		return actionResult{}, errConflict
 	}
-	return saveAlertDecision(ctx, tx, item, target, s.operator, input)
+	return saveAlertDecision(ctx, tx, item, target, operator, input)
+}
+
+// alertAuditActor 从会话绑定真实监管及管理员经办人，同时支持后台任务显示标签。
+// 参数 ctx 为处理上下文，fallback 为原有系统标签。
+// 返回值 公开历史中的经办名称及实际账号身份。
+func alertAuditActor(ctx context.Context, fallback string) (string, access.Principal) {
+	actor, _ := access.Current(ctx)
+	if actor.Role == access.Regulator || actor.Role == access.SystemAdmin {
+		return actor.Name, actor
+	}
+	return fallback, actor
 }
 
 // executeInstitutionAlert 推进机构领取及提交反馈，保持原隐患记录。
@@ -162,8 +176,10 @@ func saveAlertDecision(ctx context.Context, tx pgx.Tx, item actionResult,
 	if err != nil {
 		return actionResult{}, err
 	}
+	actor, _ := access.Current(ctx)
 	_, err = tx.Exec(ctx, `INSERT INTO local_alert_events
-		(alert_id,version,action,from_status,to_status,operator,comment) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		item.ID, result.Version, input.Action, item.Status, result.Status, operator, input.Comment)
+		(alert_id,version,action,from_status,to_status,operator,comment,operator_id,operator_role)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid,NULLIF($9,''))`,
+		item.ID, result.Version, input.Action, item.Status, result.Status, operator, input.Comment, actor.ID, actor.Role)
 	return result, err
 }

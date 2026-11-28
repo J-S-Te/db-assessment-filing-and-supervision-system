@@ -20,7 +20,7 @@ var errAuditExportLimit = errors.New("audit export row limit exceeded")
 var auditResourceNames = map[string]string{
 	"filings": "备案", "filing-applications": "备案变更与注销", "implementations": "实施报备",
 	"reports": "测评报告", "remediations": "整改规划", "hazards": "隐患台账", "alerts": "站内预警",
-	"publications": "信息发布", "workday-calendar": "工作日历",
+	"publications": "信息发布", "workday-calendar": "工作日历", "access": "账号与权限",
 }
 
 // handleExport 按监管端已应用的筛选条件下载操作日志。

@@ -168,7 +168,9 @@ function closeEditor() {
 function entryBody(kind: DirectoryCollection) {
   const common = { name: fields.name.trim(), code: fields.code.trim() }
   if (kind === 'units') return {
-    ...common, code: common.code.toUpperCase(), classification: fields.classification.trim(), district: fields.district.trim(),
+    name: common.name, classification: fields.classification.trim(),
+    ...(!selected.value?.codeManaged ? { code: common.code.toUpperCase() } : {}),
+    ...(!props.institutional ? { district: fields.district.trim() } : {}),
   }
   if (kind === 'institutions') return {
     ...common, qualification: fields.qualification.trim(), validUntil: fields.validUntil,
@@ -412,11 +414,16 @@ onScopeDispose(() => {
           </label>
           <label class="field"><span>{{ collection === 'units' ? '统一社会信用代码' : collection === 'people' ? '工号' : '资质证书编号' }}</span>
             <input v-model="fields.code" :maxlength="collection === 'units' ? 18 : 80"
-              :pattern="collection === 'units' ? '[0-9A-Za-z]{18}' : undefined" required>
+              :pattern="collection === 'units' ? '[0-9A-Za-z]{18}' : undefined"
+              :readonly="selected?.codeManaged" required>
+            <small v-if="selected?.codeManaged" class="muted">已核定单位的信用代码由系统管理员维护</small>
           </label>
           <template v-if="collection === 'units'">
             <label class="field"><span>单位类型</span><input v-model="fields.classification" maxlength="80"></label>
-            <label class="field"><span>所属区县</span><input v-model="fields.district" maxlength="80"></label>
+            <label class="field"><span>所属区县</span>
+              <input v-model="fields.district" maxlength="80" :readonly="institutional"
+                :placeholder="institutional ? '由系统管理员核定' : undefined">
+            </label>
           </template>
           <template v-else>
             <label class="field"><span>{{ collection === 'institutions' ? '资质等级' : '测评资质' }}</span>

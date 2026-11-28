@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"grade-business/internal/access"
 	"grade-business/internal/cases"
 	"grade-business/internal/httpx"
 )
@@ -67,6 +68,11 @@ func (s *Service) handleWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target, operation := r.PathValue("target"), r.PathValue("operation")
+	if actor, _ := access.Current(r.Context()); actor.Role == access.Regulator &&
+		(target == "sync" || operation == "attachments") {
+		httpx.Error(w, http.StatusForbidden, "permission_denied", "当前账号无权执行此操作。")
+		return
+	}
 	if target == "sync" {
 		s.handleSync(w, r, operation)
 		return

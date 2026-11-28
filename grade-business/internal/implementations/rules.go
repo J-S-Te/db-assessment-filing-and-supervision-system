@@ -139,6 +139,13 @@ func nextStatus(record storedRecord, action, comment, operator string, now time.
 			}
 			return returned, nil
 		}
+	case "restart_initial":
+		if record.Status == final || record.Status == supervision {
+			if strings.TrimSpace(comment) == "" {
+				return "", errRestartComment
+			}
+			return initial, nil
+		}
 	case "withdraw":
 		if !canWithdraw(record, operator, now) {
 			return "", errWithdrawal

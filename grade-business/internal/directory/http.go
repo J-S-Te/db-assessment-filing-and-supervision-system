@@ -58,6 +58,9 @@ func (e endpoint) listHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, err := e.service.list(r.Context(), input)
+	for index := range page.Items {
+		page.Items[index] = e.presentEntry(kind, page.Items[index])
+	}
 	respond(w, http.StatusOK, page, err)
 }
 
@@ -136,7 +139,7 @@ func (e endpoint) detailHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := readEntry(r.Context(), e.service.pool, kind, scope, r.PathValue("id"))
-	respond(w, http.StatusOK, item, err)
+	respond(w, http.StatusOK, e.presentEntry(kind, item), err)
 }
 
 // patchHTTP 为可编辑的条目应用经版本保护的变更。
@@ -153,7 +156,7 @@ func (e endpoint) patchHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := e.service.patch(r.Context(), kind, scope, r.PathValue("id"), input)
-	respond(w, http.StatusOK, item, err)
+	respond(w, http.StatusOK, e.presentEntry(kind, item), err)
 }
 
 // historyHTTP 输出受当前范围保护的历史变更及分页游标。
@@ -190,7 +193,15 @@ func (e endpoint) linkHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := e.service.link(r.Context(), scope, id)
-	respond(w, http.StatusOK, result, err)
+	respond(w, http.StatusOK, e.presentEntry(unit, result), err)
+}
+
+// presentEntry 为机构端单位档案标记信用代码维护权限。
+// 参数 kind 为档案类别，item 为当前请求可见的档案。
+// 返回值 含界面展示权限的档案。
+func (e endpoint) presentEntry(kind string, item entry) entry {
+	item.CodeManaged = e.scoped && kind == unit && unitCreditCodeManaged(item)
+	return item
 }
 
 // request 解析路由名录类型、标识以及是否需要机构归属。
@@ -237,7 +248,9 @@ func respond(w http.ResponseWriter, status int, result any, err error) {
 	case errors.Is(err, pgx.ErrNoRows):
 		httpx.Error(w, http.StatusNotFound, "not_found", "未找到当前范围内的目录记录。")
 	case errors.Is(err, errDistrictManaged):
-		httpx.Error(w, http.StatusForbidden, "directory_district_managed", "衢州单位的监管区划由系统管理员调整。")
+		httpx.Error(w, http.StatusForbidden, "directory_district_managed", "单位的监管区划由系统管理员核定。")
+	case errors.Is(err, errUnitCodeManaged):
+		httpx.Error(w, http.StatusForbidden, "directory_credit_code_managed", "已核定单位的统一社会信用代码由系统管理员调整。")
 	case errors.Is(err, errForbidden):
 		httpx.Error(w, http.StatusForbidden, "directory_read_only", "此记录由监管端或已共享单位统一维护。")
 	case errors.Is(err, errVersion):

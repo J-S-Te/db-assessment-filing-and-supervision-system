@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
+
+	"grade-business/internal/access"
 )
 
 type materialPrecheck struct {
@@ -122,9 +124,10 @@ func readPrecheckFiling(ctx context.Context, reader rowReader, id, institution s
 	var result precheckFiling
 	err := reader.QueryRow(ctx, `SELECT id::text,number,system_name,organization_name,assessment_org,
 	  version,material_revision,(status='approved' AND cancelled_at IS NULL)
-	  FROM business_cases WHERE id=$1 AND kind='filing' AND discarded_at IS NULL
+	  FROM business_cases f WHERE id=$1 AND kind='filing' AND discarded_at IS NULL
 	  AND ($2::text='' OR assessment_org COLLATE "C"=$2)
-	  AND ($3::text='' OR organization_name COLLATE "C"=$3)`, id, institution, operatorOrganization(ctx)).
+	  AND ($3::text='' OR organization_name COLLATE "C"=$3)
+	  AND `+access.FilingDistrictScope("f.id", "$4", false), id, institution, operatorOrganization(ctx), access.Districts(ctx)).
 		Scan(&result.ID, &result.Number, &result.SystemName, &result.OrganizationName,
 			&result.AssessmentOrg, &result.Version, &result.MaterialRevision, &result.Active)
 	return result, err

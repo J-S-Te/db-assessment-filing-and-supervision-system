@@ -24,7 +24,8 @@ var (
 	// ErrFilingInactive 表示备案已注销，无法发起需要有效备案的业务。
 	ErrFilingInactive = errors.New("filing is inactive")
 	// ErrActiveApplication 表示同一备案已有未办结的变更或注销申请。
-	ErrActiveApplication = errors.New("filing already has an active application")
+	ErrActiveApplication      = errors.New("filing already has an active application")
+	errApplicationOwnerChange = errors.New("filing owner change requires administrative review")
 )
 
 type filingValues struct {
@@ -161,8 +162,9 @@ func lockApplicationFiling(ctx context.Context, tx pgx.Tx, id, institution strin
 		system_name,organization_name,assessment_org,level
 		FROM business_cases WHERE kind='filing' AND id=$1 AND discarded_at IS NULL
 		AND ($2='' OR assessment_org=$2)
-		AND ($3='' OR organization_name=$3) FOR UPDATE`,
-		id, institution, applicationOrganization(ctx)).Scan(
+		AND ($3='' OR organization_name=$3)
+		AND `+filingUnitDistrictScope("business_cases.directory_unit_id", "$4", true)+` FOR UPDATE`,
+		id, institution, applicationOrganization(ctx), access.Districts(ctx)).Scan(
 		&source.number, &source.version, &status, &cancelled,
 		&fields.SystemName, &fields.OrganizationName, &fields.AssessmentOrg, &fields.Level)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -338,6 +340,9 @@ func (s *Service) changeApplicationStatus(ctx context.Context, id string, input 
 	if err != nil {
 		return mutation{}, err
 	}
+	if input.Decision == approve && regulatorOwnerChange(ctx, app.before, app.after) {
+		return mutation{}, errApplicationOwnerChange
+	}
 	if err := requireSeparateReviewer(ctx, tx, id, app.status, true); err != nil {
 		return mutation{}, err
 	}
@@ -366,6 +371,14 @@ func (s *Service) changeApplicationStatus(ctx context.Context, id string, input 
 		return mutation{}, err
 	}
 	return result, tx.Commit(ctx)
+}
+
+// regulatorOwnerChange 判断辖区审核是否涉及改写备案的所属法律单位名称。
+// 参数 ctx 携带真实会话，before、after 为申请生效前后的备案快照。
+// 返回值 当前辖区监管员不得批准拟变更的所属单位名称时为真。
+func regulatorOwnerChange(ctx context.Context, before, after filingValues) bool {
+	actor, authenticated := access.Current(ctx)
+	return authenticated && actor.Role == access.Regulator && before.OrganizationName != after.OrganizationName
 }
 
 // lockApplicationStatus 按审核席位或发起人选择申请锁定检查，并校验阶段权限。

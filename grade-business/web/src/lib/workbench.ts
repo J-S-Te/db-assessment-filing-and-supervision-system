@@ -1,5 +1,6 @@
 import { readonly, shallowRef, ref } from 'vue'
 import { api, errorText, isAbort, params } from './api'
+import { canVisit, session } from './session'
 import type { RemediationWorkbench } from './hazards'
 import type { WorkbenchCounts, WorkbenchTask } from './workbenchItems'
 
@@ -39,6 +40,7 @@ export const workbench = {
  * 返回值 查询任务，失败时保留上次快照并显示读取错误。
  */
 export async function refreshWorkbench() {
+  if (!session.value || !canVisit(session.value, '/')) return
   request?.abort()
   const next = new AbortController()
   request = next

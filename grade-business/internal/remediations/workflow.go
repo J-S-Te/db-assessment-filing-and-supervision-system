@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"grade-business/internal/access"
 	"grade-business/internal/hazards"
 	"grade-business/internal/reviewinbox"
 
@@ -165,10 +166,15 @@ func (s *Service) saveEvent(ctx context.Context, tx pgx.Tx, out mutation, curren
 	if organization := operatorOrganization(ctx); organization != "" {
 		operator = organization
 	}
+	actor, authenticated := access.Current(ctx)
+	if authenticated {
+		operator = actor.Name
+	}
 	_, err := tx.Exec(ctx, `INSERT INTO remediation_review_events
-		(plan_id,action,from_status,to_status,operator,comment,reason,deadline,submission,version)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9,$10)`,
+		(plan_id,action,from_status,to_status,operator,comment,reason,deadline,submission,version,
+		 operator_id,operator_role)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9,$10,NULLIF($11,'')::uuid,NULLIF($12,''))`,
 		out.ID, input.Decision, current.Status, out.Status, operator, input.Comment,
-		input.Reason, input.Deadline, submission, out.Version)
+		input.Reason, input.Deadline, submission, out.Version, actor.ID, actor.Role)
 	return err
 }

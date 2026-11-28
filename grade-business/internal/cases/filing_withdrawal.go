@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 	"grade-business/internal/reviewinbox"
 )
 
@@ -65,9 +66,10 @@ func lockWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope)
 	if scope.resource == withdrawalApplications {
 		var id string
 		err := tx.QueryRow(ctx, `SELECT f.id::text FROM filing_applications a
-			JOIN business_cases f ON f.id=a.filing_id
+			JOIN business_cases f ON f.id=a.filing_id AND f.kind='filing'
 			WHERE a.id=$1 AND ($2='' OR a.before_values->>'organizationName'=$2)
-			FOR UPDATE OF f`, scope.id, scope.organization).Scan(&id)
+			AND `+filingUnitDistrictScope("f.directory_unit_id", "$3", true)+` FOR UPDATE OF f`,
+			scope.id, scope.organization, access.Districts(ctx)).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = ErrNotFound
 		}
@@ -89,7 +91,8 @@ func readWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
 		c.operator_origin AND c.cancelled_at IS NULL FROM business_cases c
 		WHERE c.id=$1 AND c.kind='filing' AND c.discarded_at IS NULL
 		  AND ($2='' OR (c.organization_name=$2 AND` + operatorFilingBinding("$4") + `))
-		  AND ($3='' OR c.assessment_org=$3)`
+		  AND ($3='' OR c.assessment_org=$3)
+		  AND ` + filingUnitDistrictScope("c.directory_unit_id", "$5", lock)
 	args := []any{scope.id, scope.organization, scope.institution}
 	if scope.resource == withdrawalApplications {
 		query = `SELECT a.status,a.version,a.before_values->>'organizationName',
@@ -98,10 +101,12 @@ func readWithdrawalTarget(ctx context.Context, tx pgx.Tx, scope withdrawalScope,
 			AND f.cancelled_at IS NULL AND a.before_values->>'organizationName'=f.organization_name
 			FROM filing_applications a JOIN business_cases f ON f.id=a.filing_id
 			WHERE a.id=$1 AND ($2='' OR a.before_values->>'organizationName'=$2)
-			  AND ($3='' OR a.before_values->>'assessmentOrg'=$3)`
+			  AND ($3='' OR a.before_values->>'assessmentOrg'=$3)
+			  AND ` + filingUnitDistrictScope("f.directory_unit_id", "$4", lock)
 	} else {
 		args = append(args, operatorUnitID(ctx))
 	}
+	args = append(args, access.Districts(ctx))
 	if lock && scope.resource == withdrawalFilings {
 		query += " FOR UPDATE OF c"
 	}

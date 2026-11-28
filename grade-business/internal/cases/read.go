@@ -40,10 +40,7 @@ const recordFilters = `
 // 参数 parameter 为查询中绑定标准区县列表的 SQL 参数位置。
 // 返回值 匹配可信单位标识及当前区县的 SQL 条件。
 func caseDistrictScope(parameter string) string {
-	return ` AND (` + parameter + `::text[] IS NULL OR EXISTS (
-	    SELECT 1 FROM directory_parties u
-	    WHERE u.id=COALESCE(f.directory_unit_id,c.directory_unit_id)
-	      AND u.kind='unit' AND btrim(u.district)=ANY(` + parameter + `::text[])))`
+	return " AND " + access.FilingDistrictScope("COALESCE(f.id,c.id)", parameter, false)
 }
 
 // operatorFilingBinding 在运营者入口核对可信单位外键，并兼容已审或自主提交的历史记录。

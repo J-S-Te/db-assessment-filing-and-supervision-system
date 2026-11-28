@@ -3,10 +3,12 @@ package hazards
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"grade-business/internal/access"
 )
 
 const hazardColumns = `h.id::text,COALESCE(h.plan_id::text,''),COALESCE(c.report_id::text,''),c.filing_id::text,
@@ -83,10 +85,11 @@ func queryHazards(ctx context.Context, db *pgxpool.Pool, filter hazardFilter, li
 		filingID = &filter.filingID
 	}
 	return db.Query(ctx, hazardListSQL, filter.status, filter.severity, planID, filter.query,
-		filter.due, at, id, limit, operatorOrganization(ctx), filingID, hazardInstitution(ctx), filter.ledger)
+		filter.due, at, id, limit, operatorOrganization(ctx), filingID, hazardInstitution(ctx),
+		filter.ledger, access.Districts(ctx))
 }
 
-const hazardListSQL = `WITH business_day AS (
+var hazardListSQL = `WITH business_day AS (
 	SELECT timezone('Asia/Shanghai',CURRENT_TIMESTAMP)::date AS today
 ) SELECT ` + hazardColumns + hazardJoin + ` CROSS JOIN business_day d
 WHERE ($1='' OR h.status=$1) AND ($2='' OR h.severity=$2)
@@ -101,6 +104,7 @@ WHERE ($1='' OR h.status=$1) AND ($2='' OR h.severity=$2)
   AND ($10::uuid IS NULL OR c.filing_id=$10)
   AND ($11='' OR (h.status<>'pending_dispatch' AND c.can_retest AND c.assessment_org=$11))
   AND ($12='' OR h.ledger=$12)
+` + " AND " + access.FilingDistrictScope("c.filing_id", "$13", false) + `
 ORDER BY h.created_at DESC,h.id DESC LIMIT $8`
 
 // collectHazards 组装一页台账并在有后续记录时返回分页游标。
@@ -137,8 +141,9 @@ func (s *Service) detail(ctx context.Context, id string) (hazardDetail, error) {
 	row := s.db.QueryRow(ctx, "SELECT "+hazardColumns+`,h.measure,h.version,h.closed_at,
 		($2<>'' AND EXISTS(SELECT 1 FROM hazard_events e WHERE e.hazard_id=h.id
 			AND COALESCE(e.merge_history_scope,c.organization_name)=$2 AND `+hazardReceiptEvent+`)),
-		($3<>'' AND `+retestReportQuery+`)`+hazardJoin+" WHERE h.id=$1 AND "+hazardScope,
-		id, organization, institution)
+		($3<>'' AND `+retestReportQuery+`)`+hazardJoin+" WHERE h.id=$1 AND "+hazardScope+
+		" AND "+access.FilingDistrictScope("c.filing_id", "$4", false),
+		id, organization, institution, access.Districts(ctx))
 	err := row.Scan(append(scanSummary(&item.hazardSummary), &item.Measure, &item.Version, &item.ClosedAt,
 		&hasReceipt, &hasReport)...)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -147,6 +152,11 @@ func (s *Service) detail(ctx context.Context, id string) (hazardDetail, error) {
 	item.AllowedActions = allowedActions(item.Status)
 	if organization == "" && institution == "" && item.Ledger == ledgerMajorRisk && canSupervise(item.Status) {
 		item.AllowedActions = append(item.AllowedActions, actionSupervise)
+	}
+	if actor, _ := access.Current(ctx); actor.Role == access.Regulator {
+		item.AllowedActions = slices.DeleteFunc(item.AllowedActions, func(action string) bool {
+			return !actionWithinScope(ctx, action)
+		})
 	}
 	if institution == "" && item.Source == "" {
 		item.AssessmentOrg = ""
@@ -177,9 +187,10 @@ func (s *Service) ensureHazardAttachmentScope(ctx context.Context, id string) er
 	}
 	var exists bool
 	err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1`+hazardJoin+`
-		WHERE h.id=$1 AND ((`+hazardScope+`) OR ($2<>'' AND h.status<>'pending_dispatch' AND EXISTS (
+		WHERE h.id=$1 AND `+access.FilingDistrictScope("c.filing_id", "$4", false)+`
+		AND ((`+hazardScope+`) OR ($2<>'' AND h.status<>'pending_dispatch' AND EXISTS (
 			SELECT 1 FROM hazard_attachments a WHERE a.hazard_id=h.id AND a.merge_history_scope COLLATE "C"=$2
-		))))`, id, operatorOrganization(ctx), hazardInstitution(ctx)).Scan(&exists)
+		))))`, id, operatorOrganization(ctx), hazardInstitution(ctx), access.Districts(ctx)).Scan(&exists)
 	if err == nil && !exists {
 		return errNotFound
 	}
@@ -199,8 +210,10 @@ func (s *Service) history(ctx context.Context, id string) ([]hazardEvent, error)
 		'comment',e.comment,'occurredAt',e.occurred_at) ORDER BY e.version DESC),'[]'::jsonb)
 		FROM hazard_events e WHERE e.hazard_id=h.id
 		  AND ($2='' OR COALESCE(e.merge_history_scope,c.organization_name)=$2))`+hazardJoin+`
-		WHERE h.id=$1 AND ((`+hazardScope+`) OR ($2<>'' AND EXISTS (
-		  SELECT 1 FROM hazard_events e WHERE e.hazard_id=h.id AND e.merge_history_scope=$2)))`, id, operatorOrganization(ctx), hazardInstitution(ctx)).Scan(&items)
+		WHERE h.id=$1 AND `+access.FilingDistrictScope("c.filing_id", "$4", false)+`
+		AND ((`+hazardScope+`) OR ($2<>'' AND EXISTS (
+		  SELECT 1 FROM hazard_events e WHERE e.hazard_id=h.id AND e.merge_history_scope=$2)))`,
+		id, operatorOrganization(ctx), hazardInstitution(ctx), access.Districts(ctx)).Scan(&items)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errNotFound
 	}

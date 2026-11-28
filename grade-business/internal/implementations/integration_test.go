@@ -3,27 +3,34 @@ package implementations
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"grade-business/internal/access"
 	"grade-business/migrations"
 )
+
+const fixtureReviewHeader = "X-Implementation-Fixture-Reviewer"
 
 // TestConcurrentSubmissionsRespectChangeQuota 验证同备案的并发提交和撤销均遵守年度额度。
 // 参数 t 为数据库集成测试上下文。
 // 返回值 无。
 func TestConcurrentSubmissionsRespectChangeQuota(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-限额", approved)
 	item := testInput(filing, change)
 	drafts := make([]mutation, 4)
@@ -78,7 +85,7 @@ func TestConcurrentSubmissionsRespectChangeQuota(t *testing.T) {
 // 返回值 无。
 func TestImplementationReviewAndHistory(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-评审", approved)
 	draftFiling := implementationTestFiling(t, pool, "测试备案-未通过", draft)
 	assertChoices(t, mux, filing)
@@ -162,26 +169,78 @@ func isolatedImplementationPool(t *testing.T) *pgxpool.Pool {
 }
 
 // implementationTestMux 创建绑定测试库和固定业务时钟的路由。
-// 参数 pool 为当前测试隔离连接池。
+// 参数 t 为测试生命周期，pool 为当前测试隔离连接池。
 // 返回值 注册了真实 HTTP 处理逻辑的路由器。
-func implementationTestMux(pool *pgxpool.Pool) *http.ServeMux {
+func implementationTestMux(t *testing.T, pool *pgxpool.Pool) *http.ServeMux {
 	service := New(pool, "测试办理人")
 	service.now = func() time.Time { return time.Date(2027, 1, 1, 0, 0, 0, 0, shanghai) }
-	mux := http.NewServeMux()
-	service.Register(mux)
-	return mux
+	return implementationFixtureRoutes(t, pool, service)
 }
 
 // operatorImplementationTestMux 创建同时挂载运营者业务的隔离测试路由。
-// 参数 pool 为当前测试模式的连接池。
+// 参数 t 为测试生命周期，pool 为当前测试模式的连接池。
 // 返回值 监管、机构及运营者共享的业务路由。
-func operatorImplementationTestMux(pool *pgxpool.Pool) *http.ServeMux {
+func operatorImplementationTestMux(t *testing.T, pool *pgxpool.Pool) *http.ServeMux {
 	service := New(pool, "测试办理人")
 	service.now = func() time.Time { return time.Date(2027, 1, 1, 0, 0, 0, 0, shanghai) }
-	mux := http.NewServeMux()
-	service.Register(mux)
+	mux := implementationFixtureRoutes(t, pool, service)
 	service.RegisterOperatorRoutes(mux)
 	return mux
+}
+
+// implementationFixtureRoutes 挂载业务夹具，并让审核用例经真实会话权限网关办理。
+// 参数 t、pool 为测试生命周期和隔离数据库，service 为已固定时钟的报备服务。
+// 返回值 保留旧业务夹具入口并接受测试审核会话的路由。
+func implementationFixtureRoutes(t *testing.T, pool *pgxpool.Pool, service *Service) *http.ServeMux {
+	t.Helper()
+	inner := http.NewServeMux()
+	service.Register(inner)
+	protected := access.New(pool).Protect(inner)
+	initialReviewer := sync.OnceValue(func() *http.Cookie {
+		return implementationFixtureSession(t, pool, "fixture-initial-reviewer")
+	})
+	finalReviewer := sync.OnceValue(func() *http.Cookie {
+		return implementationFixtureSession(t, pool, "fixture-final-reviewer")
+	})
+	mux := http.NewServeMux()
+	for _, prefix := range []string{path, institutionalPath} {
+		mux.Handle(prefix, inner)
+		mux.Handle(prefix+"/", inner)
+	}
+	mux.HandleFunc("POST "+path+"/{id}/actions", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get(fixtureReviewHeader) {
+		case "initial":
+			r.AddCookie(initialReviewer())
+		case "final":
+			r.AddCookie(finalReviewer())
+		default:
+			inner.ServeHTTP(w, r)
+			return
+		}
+		protected.ServeHTTP(w, r)
+	})
+	return mux
+}
+
+// implementationFixtureSession 在隔离库中建立供会话网关验证的一次性审核身份。
+// 参数 t、pool 为测试环境，username 区分两位审核人。
+// 返回值 与库中会话摘要对应的测试 Cookie。
+func implementationFixtureSession(t *testing.T, pool *pgxpool.Pool, username string) *http.Cookie {
+	t.Helper()
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(raw[:])
+	if _, err := pool.Exec(t.Context(), `WITH account AS (
+	  INSERT INTO access_accounts (username,display_name,role_code,person_key,password_salt,password_hash,must_change_password)
+	  VALUES ($1,'测试审核人','ROLE_SYS_ADMIN',$1,decode(repeat('00',16),'hex'),decode(repeat('00',32),'hex'),false)
+	  RETURNING id
+	) INSERT INTO access_sessions (account_id,token_hash,expires_at)
+	  SELECT id,$2,clock_timestamp()+interval '1 hour' FROM account`, username, hash[:]); err != nil {
+		t.Fatal(err)
+	}
+	return &http.Cookie{Name: "grade_business_session", Value: base64.RawURLEncoding.EncodeToString(raw[:])}
 }
 
 // implementationTestFiling 创建给定状态的关联备案测试件。
@@ -211,9 +270,9 @@ func testInput(filing, reportType string) input {
 }
 
 // callImplementation 用真实 HTTP 路由发送业务请求。
-// 参数 mux 为路由，method 和 endpoint 为请求目标，body 为可选 JSON 数据。
+// 参数 mux 为路由，method 和 endpoint 为请求目标，body 为可选 JSON 数据，reviewer 为测试审核身份。
 // 返回值 HTTP 响应记录。
-func callImplementation(mux *http.ServeMux, method, endpoint string, body any) *httptest.ResponseRecorder {
+func callImplementation(mux *http.ServeMux, method, endpoint string, body any, reviewer ...string) *httptest.ResponseRecorder {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		panic(err)
@@ -221,6 +280,9 @@ func callImplementation(mux *http.ServeMux, method, endpoint string, body any) *
 	request := httptest.NewRequest(method, endpoint, bytes.NewReader(payload))
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
+	}
+	if len(reviewer) != 0 {
+		request.Header.Set(fixtureReviewHeader, reviewer[0])
 	}
 	output := httptest.NewRecorder()
 	mux.ServeHTTP(output, request)
@@ -247,8 +309,16 @@ func decodeResponse[T any](t *testing.T, response *httptest.ResponseRecorder, st
 // 返回值 已持久化的报备版本。
 func performAction(t *testing.T, mux *http.ServeMux, record mutation, action, note string) mutation {
 	t.Helper()
+	var reviewers []string
+	if action == "approve" {
+		reviewer := "initial"
+		if record.Status == final {
+			reviewer = "final"
+		}
+		reviewers = append(reviewers, reviewer)
+	}
 	response := callImplementation(mux, http.MethodPost, path+"/"+record.ID+"/actions",
-		command{Action: action, ExpectedVersion: record.Version, Comment: note})
+		command{Action: action, ExpectedVersion: record.Version, Comment: note}, reviewers...)
 	result := decodeResponse[mutation](t, response, 200)
 	if result.ID != record.ID || result.Version != record.Version+1 {
 		t.Fatalf("record progression %+v to %+v", record, result)

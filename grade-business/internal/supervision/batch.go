@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 const maxBatchSize = 100
@@ -54,9 +55,10 @@ type batchPreview struct {
 }
 
 type batchPlan struct {
-	input   batchCriteria
-	items   []batchCandidate
-	sources [2]string
+	input       batchCriteria
+	items       []batchCandidate
+	sources     [2]string
+	regulatorID string
 }
 
 type batchDelivery struct {
@@ -132,6 +134,9 @@ func validBatchToken(token string) bool {
 // 返回值 不会扩大接收范围的计划或业务及查询错误。
 func buildBatchPlan(ctx context.Context, tx pgx.Tx, input batchCriteria, lock bool) (batchPlan, error) {
 	plan := batchPlan{input: input}
+	if actor, _ := access.Current(ctx); actor.Role == access.Regulator {
+		plan.regulatorID = actor.ID
+	}
 	var future bool
 	err := tx.QueryRow(ctx, `SELECT $1::date>(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date`,
 		input.DueOn).Scan(&future)
@@ -178,6 +183,7 @@ const batchCandidatesSQL = `
 	WHERE ` + eligibleFiling + `
 	  AND ($1='' OR d.district COLLATE "C"=$1)
 	  AND (cardinality($2::text[])=0 OR f.level=ANY($2::text[]))
+	  AND ($5::text[] IS NULL OR (f.directory_unit_id=d.id AND btrim(d.district)=ANY($5::text[])))
 	ORDER BY f.id LIMIT $4`
 
 // selectBatchCandidates 查询活跃名录、保护等级及本年度已有任务。
@@ -188,7 +194,8 @@ func selectBatchCandidates(ctx context.Context, tx pgx.Tx, input batchCriteria, 
 	if lock {
 		query += " FOR SHARE OF f,d"
 	}
-	rows, err := tx.Query(ctx, query, input.District, input.Levels, input.DueOn, maxBatchSize+1)
+	rows, err := tx.Query(ctx, query, input.District, input.Levels, input.DueOn, maxBatchSize+1,
+		access.Districts(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -199,15 +206,16 @@ func selectBatchCandidates(ctx context.Context, tx pgx.Tx, input batchCriteria, 
 	return items, err
 }
 
-// digest 同时绑定预览的业务条件、文件和收件快照以防止确认时范围漂移。
+// digest 绑定预览的业务条件、文件、收件快照及监管账号。
 // 参数 无，当前计划已经完成目录和模板核验。
 // 返回值 可供客户端确认的摘要或编码错误。
 func (plan batchPlan) digest() (string, error) {
 	return supervisionHash(struct {
-		Criteria batchCriteria
-		Items    []batchCandidate
-		Sources  [2]string
-	}{plan.input, plan.items, plan.sources})
+		Criteria    batchCriteria
+		Items       []batchCandidate
+		Sources     [2]string
+		RegulatorID string `json:",omitempty"`
+	}{plan.input, plan.items, plan.sources, plan.regulatorID})
 }
 
 // previewBatch 返回不产生通知的只读预览，范围中有可发记录时给出确认摘要。
@@ -245,7 +253,8 @@ func (s *Service) batchTemplateOptions(ctx context.Context) (page[batchTemplateO
 		  WHERE task_id=t.id AND kind='inspection_template' ORDER BY task_version DESC LIMIT 1) i ON true
 		JOIN LATERAL (SELECT file_name FROM supervision_attachments
 		  WHERE task_id=t.id AND kind='summary_template' ORDER BY task_version DESC LIMIT 1) r ON true
-		WHERE t.status<>'cancelled' ORDER BY t.sequence DESC LIMIT 20`)
+		WHERE t.status<>'cancelled' AND `+access.FilingDistrictScope("t.filing_id", "$1", false)+`
+		ORDER BY t.sequence DESC LIMIT 20`, access.Districts(ctx))
 	if err != nil {
 		return page[batchTemplateOption]{}, err
 	}

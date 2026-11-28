@@ -30,7 +30,7 @@ type checkedImplementation struct {
 // 返回值 无。
 func TestImplementationMaterialPrecheck(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "PRECHECK-MATERIAL", approved)
 	other := implementationTestFiling(t, pool, "PRECHECK-OTHER", approved)
 	form := testInput(filing, routine)
@@ -140,7 +140,7 @@ func implementationPrecheckSourceMaterials(t *testing.T, mux *http.ServeMux, fil
 // 返回值 共用同一测试库的实施报备、备案上传和下载路由。
 func implementationPrecheckMaterialMux(t *testing.T, pool *pgxpool.Pool) *http.ServeMux {
 	t.Helper()
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	filings, err := cases.New(pool, t.TempDir(), "测试办理人")
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ func uploadImplementationPrecheckMaterial(t *testing.T, mux *http.ServeMux, targ
 // 返回值 无。
 func TestImplementationPrecheckScopes(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := operatorImplementationTestMux(pool)
+	mux := operatorImplementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "PRECHECK-SCOPE", approved)
 	evidence := addImplementationPrecheckMaterial(t, pool, filing, "filing_form", "备案表.pdf")
 	form := testInput(filing, routine)
@@ -251,7 +251,7 @@ func TestImplementationPrecheckScopes(t *testing.T) {
 // 返回值 无。
 func TestImplementationPrecheckInputAndFindings(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "PRECHECK-VALIDATION", approved)
 	record := decodeResponse[mutation](t, callImplementation(mux, "POST", path, testInput(filing, routine)), 201)
 	target := path + "/" + record.ID + "/precheck"
@@ -282,7 +282,7 @@ func TestImplementationPrecheckInputAndFindings(t *testing.T) {
 // 返回值 无。
 func TestImplementationPrecheckQuota(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "PRECHECK-QUOTA", approved)
 	form := testInput(filing, change)
 	first := decodeResponse[mutation](t, callImplementation(mux, "POST", path, form), 201)

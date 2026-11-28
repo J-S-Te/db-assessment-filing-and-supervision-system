@@ -27,7 +27,8 @@ const (
 var (
 	errInvalid         = errors.New("invalid directory request")
 	errForbidden       = errors.New("directory entry cannot be maintained in this scope")
-	errDistrictManaged = errors.New("quzhou district assignment is managed by the system administrator")
+	errDistrictManaged = errors.New("unit district assignment is managed by the system administrator")
+	errUnitCodeManaged = errors.New("verified unit credit code is managed by the system administrator")
 	errVersion         = errors.New("directory version changed")
 	errDuplicate       = errors.New("duplicate directory entry")
 	errUnavailable     = errors.New("directory institution or unit unavailable")
@@ -39,6 +40,7 @@ type entry struct {
 	Name            string     `json:"name"`
 	ScopeName       string     `json:"scopeName,omitempty"`
 	Code            string     `json:"code,omitempty"`
+	CodeManaged     bool       `json:"codeManaged,omitempty"`
 	Classification  string     `json:"classification,omitempty"`
 	District        string     `json:"district,omitempty"`
 	Qualification   string     `json:"qualification,omitempty"`

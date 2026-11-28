@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/reviewinbox"
 )
 
@@ -176,19 +177,31 @@ func (s *Service) saveAction(ctx context.Context, tx pgx.Tx, record taskRecord,
 	if err := storeActionState(ctx, tx, next, input); err != nil {
 		return err
 	}
-	actor := s.actor
-	if owner != "" {
-		actor = owner
-	}
+	name, actor := supervisionAuditActor(ctx, s.actor, owner)
 	_, err := tx.Exec(ctx, `INSERT INTO supervision_events(task_id,version,action,from_status,to_status,
-		actor,comment,correction_kind,inspection_file_id,summary_file_id,rectification)
-		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''),NULLIF($9,'')::uuid,NULLIF($10,'')::uuid,$11)`,
-		next.ID, next.Version, input.Action, record.Status, next.Status, actor, input.Comment,
-		input.CorrectionKind, next.inspectionID, next.summaryID, next.counts)
+		actor,comment,correction_kind,inspection_file_id,summary_file_id,rectification,actor_id,actor_role)
+		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''),NULLIF($9,'')::uuid,NULLIF($10,'')::uuid,$11,
+		       NULLIF($12,'')::uuid,NULLIF($13,''))`,
+		next.ID, next.Version, input.Action, record.Status, next.Status, name, input.Comment,
+		input.CorrectionKind, next.inspectionID, next.summaryID, next.counts, actor.ID, actor.Role)
 	if err != nil {
 		return err
 	}
 	return sendActionNotice(ctx, tx, record, input, next.mutation)
+}
+
+// supervisionAuditActor 结合已验证席位和业务收件方确定历史显示名与经办账号。
+// 参数 ctx 为写入上下文，fallback 为后台经办标签，owner 为运营单位可选名称。
+// 返回值 公开经办名称及持久化实际人时使用的身份。
+func supervisionAuditActor(ctx context.Context, fallback, owner string) (string, access.Principal) {
+	actor, _ := access.Current(ctx)
+	if owner != "" {
+		return owner, actor
+	}
+	if actor.Role == access.Regulator || actor.Role == access.SystemAdmin {
+		return actor.Name, actor
+	}
+	return fallback, actor
 }
 
 // storeActionState 维护下发时间、提交版本及当轮补正规则。

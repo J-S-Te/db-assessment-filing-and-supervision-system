@@ -6,11 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"grade-business/internal/directory"
+	"grade-business/internal/geoarea"
 )
 
 type registrationReceipt struct {
@@ -67,25 +67,9 @@ func registrationRouting(ctx context.Context, tx pgx.Tx, code string) (string, s
 	err := tx.QueryRow(ctx, `SELECT id::text,district FROM directory_parties
 		WHERE kind='unit' AND lower(code)=lower($1)`, code).Scan(&id, &district)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", registrationDistrict(code[2:8]), nil
+		return "", geoarea.RegulatorAreaCode(code[2:8]), nil
 	}
-	return id, registrationDistrict(district), err
-}
-
-// registrationDistrict 将受支持的辖区名称或编码转换为标准审核范围。
-// 参数 district 为名录辖区或信用代码中的登记区划。
-// 返回值 可分派的标准编码，无法确认时为空。
-func registrationDistrict(district string) string {
-	district = strings.TrimSpace(district)
-	if district == "台州" {
-		return "331000"
-	}
-	for area, label := range districtNames {
-		if district == area || district == label {
-			return area
-		}
-	}
-	return ""
+	return id, geoarea.RegulatorAreaCode(district), err
 }
 
 // registrationSubject 以信用代码确定可绑定的有效主档及可信辖区，并锁定命中的名录。
@@ -114,7 +98,7 @@ func registrationSubject(ctx context.Context, tx pgx.Tx, name, code string) (str
 	if !usable || currentName != name {
 		return "", "", errRegistrationUnit
 	}
-	if area := registrationDistrict(district); area != "" {
+	if area := geoarea.RegulatorAreaCode(district); area != "" {
 		return id, area, nil
 	}
 	return "", "", errRegistrationArea

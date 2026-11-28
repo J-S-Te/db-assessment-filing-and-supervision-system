@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { ArrowLeft, ClipboardCheck, Download, FileText, ListChecks, Upload } from '@lucide/vue'
 import { useRoute } from 'vue-router'
@@ -230,7 +231,7 @@ async function upload() {
  */
 async function syncLedger() {
   const current = record.value
-  if (busy.value || current?.status !== 'approved') return
+  if (!hasPermission('admin.grade.case.edit') || busy.value || current?.status !== 'approved') return
   busy.value = true
   actionError.value = ''
   actionNotice.value = ''
@@ -284,7 +285,8 @@ onScopeDispose(() => readRequest?.abort())
           <div class="page-actions">
             <BusinessReceiptDialog resource="remediations" :record-id="record.id" />
             <template v-if="record.status === 'approved'">
-              <button class="button neutral" type="button" :disabled="busy" @click="syncLedger">同步隐患台账</button>
+              <button v-if="hasPermission('admin.grade.case.edit')" class="button neutral" type="button"
+                :disabled="busy" @click="syncLedger">同步隐患台账</button>
               <RouterLink class="button primary" :to="{ path: '/hazards', query: { planId: record.id } }">查看隐患台账</RouterLink>
             </template>
             <RouterLink v-if="editable" class="button neutral" :to="path + '/edit'">编辑规划</RouterLink>

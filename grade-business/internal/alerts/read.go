@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"grade-business/internal/access"
 )
 
 type summaryReader interface {
@@ -53,9 +54,10 @@ func (s *Service) list(ctx context.Context, filters listFilter) (alertPage, erro
 		    OR ($7='institution' AND hc.can_retest AND hc.assessment_org COLLATE "C"=$10))
 		  AND ($8::text='' OR a.kind=$8)
 		  AND ($9::text='' OR EXISTS (SELECT 1 FROM local_alert_dispositions d WHERE d.alert_id=a.id AND d.status='pending'))
+		  AND `+access.FilingDistrictScope("f.id", "$11", false)+`
 		ORDER BY a.triggered_at DESC,a.id DESC LIMIT $6`,
 		filters.status, filters.severity, filters.query, at, filters.cursor.id, filters.limit+1,
-		scope.audience, filters.kind, filters.review, scope.recipient)
+		scope.audience, filters.kind, filters.review, scope.recipient, access.Districts(ctx))
 	if err != nil {
 		return alertPage{}, err
 	}
@@ -98,7 +100,9 @@ func (s *Service) detail(ctx context.Context, id pgtype.UUID) (alertDetail, erro
 		to_char(`+alertBusinessDateSQL+`,'YYYY-MM-DD')
 		FROM local_alerts a`+alertSourceJoins+` WHERE a.id=$1
 		  AND ($2::text='' OR ($2='operator' AND hc.organization_name COLLATE "C"=$3)
-		    OR ($2='institution' AND hc.can_retest AND hc.assessment_org COLLATE "C"=$3))`, id, scope.audience, scope.recipient)
+		    OR ($2='institution' AND hc.can_retest AND hc.assessment_org COLLATE "C"=$3))
+		  AND `+access.FilingDistrictScope("f.id", "$4", false),
+		id, scope.audience, scope.recipient, access.Districts(ctx))
 	err := row.Scan(append(scanTargets(&item.alertItem), &item.Version, &item.HazardStatus, &item.Description,
 		&item.History, &item.Disposition, &pendingAlert, &converted, &today)...)
 	if err != nil {
@@ -150,6 +154,19 @@ func detailActions(item alertDetail, pendingAlert string, converted bool, audien
 // 返回值 全部及各状态数量，或数据库查询错误。
 func ReadSummary(ctx context.Context, db summaryReader) (Summary, error) {
 	var result Summary
+	if districts := access.Districts(ctx); districts != nil {
+		err := db.QueryRow(ctx, `WITH scoped_alerts AS (
+			SELECT a.id,a.status FROM local_alerts a`+alertSourceJoins+`
+			WHERE `+access.FilingDistrictScope("f.id", "$1", false)+`
+		)
+		SELECT count(*),count(*) FILTER (WHERE status='pending'),
+			count(*) FILTER (WHERE status='processing'),count(*) FILTER (WHERE status='closed'),
+			(SELECT count(*) FROM local_alert_dispositions d JOIN scoped_alerts a ON a.id=d.alert_id
+			 WHERE d.status='pending')
+		FROM scoped_alerts`, districts).
+			Scan(&result.Total, &result.Pending, &result.Processing, &result.Closed, &result.PendingDispositions)
+		return result, err
+	}
 	err := db.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE status='pending'),
 		count(*) FILTER (WHERE status='processing'),count(*) FILTER (WHERE status='closed'),
 		(SELECT count(*) FROM local_alert_dispositions WHERE status='pending')

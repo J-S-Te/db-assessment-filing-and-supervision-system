@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 const joins = `FROM remediation_plans p JOIN business_cases r ON r.id=p.report_id AND r.kind='report'
@@ -60,11 +61,16 @@ func (s *Service) get(ctx context.Context, id string) (detail, error) {
 	targets := append(scanFields(&item.summary), &item.Version, &item.Risks, &hasMaterials)
 	err := s.db.QueryRow(ctx, "SELECT "+projection+`,p.version,p.risks,
 		EXISTS(SELECT 1 FROM remediation_attachments WHERE plan_id=p.id) `+joins+`
-		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2)`, id, operatorOrganization(ctx)).Scan(targets...)
+		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2)
+		AND `+access.FilingDistrictScope("f.id", "$3", false),
+		id, operatorOrganization(ctx), access.Districts(ctx)).Scan(targets...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return detail{}, errNotFound
 	}
 	item.AllowedActions = allowedActions(item.Status, hasMaterials)
+	if access.Districts(ctx) != nil && item.Status != pendingReview {
+		item.AllowedActions = []string{}
+	}
 	if operatorOrganization(ctx) != "" && item.Status == pendingReview {
 		item.AllowedActions = []string{"withdraw"}
 	}
@@ -78,8 +84,10 @@ func (s *Service) list(ctx context.Context, input listInput) (page, error) {
 	rows, err := s.db.Query(ctx, "SELECT "+projection+",p.created_at "+filteredPlans+`
 		AND ($4='' OR (p.created_at,p.id) < (NULLIF($4,'')::timestamptz,NULLIF($5,'')::uuid))
 		AND ($7='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$7)
+		AND `+access.FilingDistrictScope("f.id", "$8", false)+`
 		ORDER BY p.created_at DESC,p.id DESC LIMIT $6`,
-		input.Query, input.Status, input.Due, input.Key.At, input.Key.ID, input.Limit+1, operatorOrganization(ctx))
+		input.Query, input.Status, input.Due, input.Key.At, input.Key.ID, input.Limit+1,
+		operatorOrganization(ctx), access.Districts(ctx))
 	if err != nil {
 		return page{}, err
 	}
@@ -134,15 +142,20 @@ func (s *Service) eligible(ctx context.Context, input listInput) (collection[eli
 // 返回值 整改规划统计，无首次审核样本时通过率为 null。
 func (s *Service) stats(ctx context.Context) (statistics, error) {
 	var out statistics
-	err := s.db.QueryRow(ctx, `SELECT
-		(SELECT count(*) FROM remediation_plans WHERE status='pending_review'),
-		(SELECT count(*) FROM remediation_plans WHERE status='returned'),
-		(SELECT count(*) FROM remediation_plans WHERE status NOT IN ('draft','withdrawn')
+	err := s.db.QueryRow(ctx, `WITH scoped AS (
+		SELECT p.id,p.status,p.deadline `+joins+`
+		WHERE `+access.FilingDistrictScope("f.id", "$1", false)+`
+	) SELECT
+		count(*) FILTER (WHERE status='pending_review'),
+		count(*) FILTER (WHERE status='returned'),
+		count(*) FILTER (WHERE status NOT IN ('draft','withdrawn')
 			AND deadline BETWEEN `+today+" AND "+today+` + 10),
 		(SELECT round(100.0 * count(*) FILTER (WHERE action='approve') /
-			NULLIF(count(*),0))::bigint FROM remediation_review_events
+			NULLIF(count(*),0))::bigint FROM remediation_review_events e
+			JOIN scoped p ON p.id=e.plan_id
 			WHERE submission=1 AND action IN ('approve','return_for_correction')
-			AND occurred_at >= ((`+today+` - 89)::timestamp AT TIME ZONE 'Asia/Shanghai'))`).
+			AND occurred_at >= ((`+today+` - 89)::timestamp AT TIME ZONE 'Asia/Shanghai'))
+		FROM scoped`, access.Districts(ctx)).
 		Scan(&out.Pending, &out.Returned, &out.DueWithin10Days, &out.FirstPassRate)
 	return out, err
 }
@@ -157,7 +170,9 @@ func (s *Service) history(ctx context.Context, id string) (collection[reviewEven
 	rows, err := s.db.Query(ctx, `SELECT e.action,e.from_status,e.to_status,e.operator,e.comment,e.reason,
 		to_char(e.deadline,'YYYY-MM-DD'),e.submission,e.occurred_at `+joins+`
 		JOIN remediation_review_events e ON e.plan_id=p.id
-		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2) ORDER BY e.id DESC`, id, operatorOrganization(ctx))
+		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2)
+		AND `+access.FilingDistrictScope("f.id", "$3", false)+` ORDER BY e.id DESC`,
+		id, operatorOrganization(ctx), access.Districts(ctx))
 	if err != nil {
 		return collection[reviewEvent]{}, err
 	}
@@ -172,7 +187,9 @@ func (s *Service) history(ctx context.Context, id string) (collection[reviewEven
 func (s *Service) ensurePlan(ctx context.Context, id string) error {
 	var present bool
 	err := s.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 "+joins+`
-		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2))`, id, operatorOrganization(ctx)).Scan(&present)
+		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2)
+		AND `+access.FilingDistrictScope("f.id", "$3", false)+`)`,
+		id, operatorOrganization(ctx), access.Districts(ctx)).Scan(&present)
 	if err == nil && !present {
 		return errNotFound
 	}
