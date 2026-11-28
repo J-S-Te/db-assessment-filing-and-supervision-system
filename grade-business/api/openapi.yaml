@@ -2821,6 +2821,11 @@ paths:
         format: uuid
     post:
       operationId: startPrecheck
+      parameters:
+      - name: force
+        in: query
+        description: 显式重审忽略旧批次检查点，同一任务可续跑。排队任务可提升，普通任务执行中返回冲突。
+        schema: {type: boolean, default: false}
       responses:
         '202':
           description: 业务操作结果

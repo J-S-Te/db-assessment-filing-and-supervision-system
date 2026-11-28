@@ -2,16 +2,18 @@ package precheck
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"grade-business/internal/filingaudit"
 )
 
 // assessContents 使用独立批次模型并区分进度写入失败与模型回退。
-// 参数 ctx、docs、materials、unit、progress 为任务、已解析材料、材料快照、名录及进度写入函数。
+// 参数 ctx、docs、materials、unit 为任务、已解析材料、材料快照及名录，
+// run、progress 为可选执行记录及进度回调。
 // 返回值 内容结论、模型错误、进度写入错误。
 func (s *Service) assessContents(ctx context.Context, docs []filingaudit.Document,
-	materials []Material, unit filingaudit.Unit, progress filingaudit.BatchProgress,
+	materials []Material, unit filingaudit.Unit, run *aiExecution, progress filingaudit.BatchProgress,
 ) ([]filingaudit.Result, error, error) {
 	model, ok := s.assessor.(batchAssessor)
 	if !ok {
@@ -28,11 +30,27 @@ func (s *Service) assessContents(ctx context.Context, docs []filingaudit.Documen
 	modelContext, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
 	var progressErr error
-	result, err := model.AssessBatch(modelContext, docs, unit,
-		func(stage string, reviews []filingaudit.MaterialReview, total int) error {
-			progressErr = progress(stage, reviews, total)
-			return progressErr
-		})
+	recordProgress := func(stage string, reviews []filingaudit.MaterialReview, total int) error {
+		progressErr = progress(stage, reviews, total)
+		return progressErr
+	}
+	if resumable, ok := model.(checkpointedAssessor); ok && run != nil {
+		var result filingaudit.BatchResult
+		err := run.BeforeRequest(modelContext)
+		if err == nil {
+			modelContext = filingaudit.WithUsageObserver(modelContext, run.recordUsage)
+			result, err = resumable.AssessWithCheckpoints(modelContext, docs, unit, recordProgress, run)
+		}
+		if run.err != nil {
+			if errors.Is(run.err, context.DeadlineExceeded) &&
+				errors.Is(modelContext.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+				return nil, run.err, nil
+			}
+			return nil, nil, run.err
+		}
+		return result.Checks, err, progressErr
+	}
+	result, err := model.AssessBatch(modelContext, docs, unit, recordProgress)
 	return result.Checks, err, progressErr
 }
 

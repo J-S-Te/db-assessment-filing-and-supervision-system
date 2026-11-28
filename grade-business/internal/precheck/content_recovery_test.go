@@ -22,11 +22,11 @@ func TestContentProcessingRecoversPerJob(t *testing.T) {
 		return nil, filingaudit.Unit{}, nil
 	})
 	progress := func(string, []filingaudit.MaterialReview, int) error { return nil }
-	failed, err := service.checkContents(t.Context(), "fixture", 1, nil, progress)
+	failed, err := service.checkContents(t.Context(), "fixture", 1, nil, nil, progress)
 	if err != nil || failed.failure == "" || failed.checks == nil {
 		t.Fatalf("异常任务没有返回可保存的失败状态：%+v, %v", failed, err)
 	}
-	next, err := service.checkContents(t.Context(), "next-fixture", 1, nil, progress)
+	next, err := service.checkContents(t.Context(), "next-fixture", 1, nil, nil, progress)
 	if err != nil || next.failure != "" || next.source != "local_rules" {
 		t.Fatalf("下一项任务未正常完成：%+v, %v", next, err)
 	}
