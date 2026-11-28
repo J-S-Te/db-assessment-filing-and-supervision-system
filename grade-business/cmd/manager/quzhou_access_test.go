@@ -174,8 +174,8 @@ func quzhouRegulatorRoutes(t *testing.T, db *pgxpool.Pool) requestAccess {
 // 返回值 无，内容或 HTTP 权限不符时记录失败。
 func assertQuzhouRegulatorScope(t *testing.T, hit requestAccess, own, other string) {
 	t.Helper()
-	county := accessLogin(t, hit, "reg-330802")
-	city := accessLogin(t, hit, "reg-330800")
+	county := accessLogin(t, hit, "reg-330802", "330802")
+	city := accessLogin(t, hit, "reg-330800", "330800")
 	session := hit(county, "GET", "/api/v1/auth/session", nil, 200).Body.String()
 	if !strings.Contains(session, `"/dashboard"`) || !strings.Contains(session, `"柯城区"`) {
 		t.Fatalf("监管员会话缺少驾驶舱或辖区: %s", session)

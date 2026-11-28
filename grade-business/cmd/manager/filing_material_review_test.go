@@ -49,8 +49,8 @@ func TestFilingMaterialReviewScope(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	county := accessLogin(t, hit, "audit-330802")
-	city := accessLogin(t, hit, "audit-330800")
+	county := accessLogin(t, hit, "audit-330802", "330802")
+	city := accessLogin(t, hit, "audit-330800", "330800")
 	assertFilingMaterialReview(t, hit, county, city, own, other)
 	assertFilingContentPrecheck(t, hit, county, own, other)
 	if _, err := db.Exec(t.Context(), "UPDATE business_cases SET material_revision=material_revision+1 WHERE id=$1", own); err != nil {

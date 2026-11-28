@@ -232,6 +232,35 @@ func TestDirectoryPersonnelHistoryAndReviewGuard(t *testing.T) {
 	assertDirectoryTransfer(t, mux, staff, old, next)
 }
 
+// TestInstitutionRegistersAssessorWithoutCode 验证机构登记、编辑测评师时可省略工号。
+// 参数 t 为隔离 PostgreSQL 与实际名录路由的测试上下文。
+// 返回值 无。
+func TestInstitutionRegistersAssessorWithoutCode(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, directoryTestPool(t))
+	org := registerTestInstitution(t, mux, "免工号登记测试机构", "ORG-NO-STAFF-CODE")
+	people := scopedDirectory("people", "", org.ScopeName)
+	input := map[string]any{"name": "新测评师", "certificateNo": "cert-1128"}
+	first := testJSON[entry](t, testRequest(t, mux, "POST", people, input, 201))
+	second := testJSON[entry](t, testRequest(t, mux, "POST", people,
+		map[string]any{"name": "待补证书测评师"}, 201))
+	if first.Code == "" || second.Code == "" || first.Code == second.Code ||
+		first.CertificateNo != "CERT-1128" || second.CertificateNo != "" {
+		t.Fatalf("内部编号或证书编号不正确：%+v，%+v", first, second)
+	}
+
+	personPath := scopedDirectory("people", first.ID, org.ScopeName)
+	updated := testJSON[entry](t, testRequest(t, mux, "PATCH", personPath, map[string]any{
+		"expectedVersion": first.Version, "certificateNo": "cert-1129",
+	}, 200))
+	if updated.Code != first.Code || updated.CertificateNo != "CERT-1129" {
+		t.Fatalf("修改证书编号后内部工号未保留：%+v", updated)
+	}
+	testRequest(t, mux, "POST", "/api/v1/directory/people", map[string]any{
+		"name": "管理端无工号记录", "institutionId": org.ID,
+	}, 400)
+}
+
 // assertDirectoryReviewGuard 验证一条未结业务就能阻止名录停用或人员调离。
 // 参数 t、mux 为测试上下文及路由，staff、old、next 为人员和原、新归属。
 // 返回值 无。

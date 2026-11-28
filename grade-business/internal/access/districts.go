@@ -3,9 +3,11 @@ package access
 import (
 	"context"
 	"maps"
+	"net/http"
 	"slices"
 
 	"grade-business/internal/geoarea"
+	"grade-business/internal/httpx"
 )
 
 const quzhouCityCode = geoarea.QuzhouCityCode
@@ -16,6 +18,28 @@ var districtNames = geoarea.RegulatorAreas()
 var cityDistricts = map[string][]string{
 	quzhouCityCode: slices.Sorted(maps.Keys(quzhouNames)),
 	"331000":       {"331000", "331002", "331003", "331004", "331022", "331023", "331024", "331081", "331082", "331083"},
+}
+
+// loginAreas 按驾驶舱地图的市域范围提供市本级和区县选项。
+// 参数 w 为匿名查询响应，忽略请求对象。
+// 返回值 无。
+func loginAreas(w http.ResponseWriter, _ *http.Request) {
+	type option struct {
+		Code  string `json:"code"`
+		Label string `json:"label"`
+	}
+	codes := districtCodes(quzhouCityCode)
+	items := make([]option, 0, len(codes))
+	for _, code := range codes {
+		label := districtNames[code]
+		if code == quzhouCityCode {
+			label += "本级"
+		}
+		items = append(items, option{Code: code, Label: label})
+	}
+	httpx.JSON(w, 200, struct {
+		Items []option `json:"items"`
+	}{Items: items})
 }
 
 type dashboardArea struct {

@@ -113,7 +113,7 @@ func regulatorFilingSession(t *testing.T, service *Service, mux *http.ServeMux) 
 func caseFixtureLogin(t *testing.T, handler http.Handler, username, password string) *http.Cookie {
 	t.Helper()
 	resp := requestJSON(handler, "POST", "/api/v1/auth/login",
-		map[string]string{"username": username, "password": password})
+		map[string]string{"username": username, "password": password, "areaCode": "331002"})
 	cookies := resp.Result().Cookies()
 	if resp.Code != 200 || len(cookies) != 1 {
 		t.Fatalf("监管测试账号登录失败: %d %s", resp.Code, resp.Body.String())

@@ -1,6 +1,11 @@
 export const applicantRegistrationPath = '/auth/operator-registrations'
 export const reviewRegistrationPath = '/operator-registrations'
 
+export interface RegistrationArea {
+  code: string
+  label: string
+}
+
 export const registrationStatuses = {
   pending: '待审核',
   approved: '已通过',
@@ -28,6 +33,7 @@ export interface RegistrationItem extends RegistrationResult {
   username: string
   areaCode: string
   district: string
+  requestedDistrict?: string
   pendingCount?: number
   reviewer?: string
   reviewerRole?: 'ROLE_SYS_ADMIN' | 'ROLE_REGULATOR'

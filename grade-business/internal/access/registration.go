@@ -19,6 +19,7 @@ import (
 const registrationRoot = "/api/v1/operator-registrations"
 const registrationSubmitPattern = "POST " + authRoot + "/operator-registrations"
 const registrationStatusPattern = registrationSubmitPattern + "/status"
+const registrationAreasPattern = "GET " + authRoot + "/operator-registrations/areas"
 const registrationListPattern = "GET " + registrationRoot
 const registrationReviewPattern = "POST " + registrationRoot + "/{id}/review-actions"
 const registrationPermission = "admin.sys.user.audit"
@@ -37,12 +38,13 @@ var (
 )
 
 type registrationInput struct {
-	UnitName    string `json:"unitName"`
-	CreditCode  string `json:"creditCode"`
-	ContactName string `json:"contactName"`
-	Phone       string `json:"phone"`
-	Username    string `json:"username"`
-	Password    string `json:"password"`
+	UnitName    string  `json:"unitName"`
+	CreditCode  string  `json:"creditCode"`
+	ContactName string  `json:"contactName"`
+	Phone       string  `json:"phone"`
+	Username    string  `json:"username"`
+	Password    string  `json:"password"`
+	AreaCode    *string `json:"areaCode"`
 }
 
 type registrationResult struct {
@@ -53,18 +55,19 @@ type registrationResult struct {
 }
 
 type registrationItem struct {
-	ID           string `json:"id"`
-	UnitName     string `json:"unitName"`
-	CreditCode   string `json:"creditCode"`
-	ContactName  string `json:"contactName"`
-	Phone        string `json:"phone"`
-	Username     string `json:"username"`
-	AreaCode     string `json:"areaCode"`
-	District     string `json:"district"`
-	Reviewer     string `json:"reviewer,omitempty"`
-	ReviewRole   Role   `json:"reviewerRole,omitempty"`
-	SubjectID    string `json:"subjectId,omitempty"`
-	PendingCount int64  `json:"pendingCount,omitempty"`
+	ID                string `json:"id"`
+	UnitName          string `json:"unitName"`
+	CreditCode        string `json:"creditCode"`
+	ContactName       string `json:"contactName"`
+	Phone             string `json:"phone"`
+	Username          string `json:"username"`
+	AreaCode          string `json:"areaCode"`
+	District          string `json:"district"`
+	RequestedDistrict string `json:"requestedDistrict,omitempty"`
+	Reviewer          string `json:"reviewer,omitempty"`
+	ReviewRole        Role   `json:"reviewerRole,omitempty"`
+	SubjectID         string `json:"subjectId,omitempty"`
+	PendingCount      int64  `json:"pendingCount,omitempty"`
 	registrationResult
 	sequence int64
 }
@@ -87,7 +90,17 @@ func normalizeRegistration(input *registrationInput) bool {
 	return registrationText(input.UnitName, 200, false) && registrationText(input.ContactName, 100, false) &&
 		validCreditCode(input.CreditCode) && registrationPhone.MatchString(input.Phone) &&
 		usernamePattern.MatchString(input.Username) && strongPassword(input.Password) &&
-		!strings.ContainsRune(input.Password, 0)
+		!strings.ContainsRune(input.Password, 0) && (input.AreaCode == nil || quzhouNames[*input.AreaCode] != "")
+}
+
+// registrationDistrictLabel 按注册和审批界面的口径显示行政归属。
+// 参数 area 为审核或申请人选择的区划代码。
+// 返回值 显示名称，未知代码返回空字符串。
+func registrationDistrictLabel(area string) string {
+	if area == quzhouCityCode {
+		return "市本级"
+	}
+	return districtNames[area]
 }
 
 // registrationText 检查申请和审核文字可安全存储及展示。
@@ -160,10 +173,12 @@ func registrationStoreError(err error) error {
 // 参数 item 为扫描目标，row 为查询行。
 // 返回值 查询或扫描错误。
 func registrationFields(item *registrationItem, row pgx.Row) error {
+	var requestedArea string
 	err := row.Scan(&item.ID, &item.sequence, &item.UnitName, &item.CreditCode, &item.ContactName,
-		&item.Phone, &item.Username, &item.AreaCode, &item.Status, &item.CreatedAt, &item.ReviewedAt,
+		&item.Phone, &item.Username, &item.AreaCode, &requestedArea, &item.Status, &item.CreatedAt, &item.ReviewedAt,
 		&item.Reason, &item.Reviewer, &item.ReviewRole, &item.SubjectID, &item.PendingCount)
-	item.District = districtNames[item.AreaCode]
+	item.District = registrationDistrictLabel(item.AreaCode)
+	item.RequestedDistrict = registrationDistrictLabel(requestedArea)
 	if item.District == "" {
 		item.District = "辖区待核实"
 	}
@@ -171,5 +186,5 @@ func registrationFields(item *registrationItem, row pgx.Row) error {
 }
 
 const registrationColumns = `id::text,sequence,unit_name,credit_code,contact_name,phone,username,
-	area_code,status,created_at,reviewed_at,reason,COALESCE(reviewer_name,''),
+	area_code,requested_area_code,status,created_at,reviewed_at,reason,COALESCE(reviewer_name,''),
 	COALESCE(reviewer_role,''),COALESCE(subject_id::text,'')`

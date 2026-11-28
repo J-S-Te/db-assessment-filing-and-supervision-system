@@ -12,6 +12,7 @@ import (
 
 const authRoot = "/api/v1/auth"
 const loginPattern = "POST " + authRoot + "/login"
+const loginAreasPattern = "GET " + authRoot + "/login-areas"
 const logoutPattern = "POST " + authRoot + "/logout"
 const sessionPattern = "GET " + authRoot + "/session"
 const passwordPattern = "POST " + authRoot + "/password"
@@ -19,6 +20,7 @@ const passwordPattern = "POST " + authRoot + "/password"
 type loginInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	AreaCode string `json:"areaCode"`
 }
 
 type passwordInput struct {
@@ -31,6 +33,7 @@ type passwordInput struct {
 // 返回值 先验证会话与权限，再派发到原路由的处理器。
 func (s *Service) Protect(mux *http.ServeMux) http.Handler {
 	mux.HandleFunc(loginPattern, s.login)
+	mux.HandleFunc(loginAreasPattern, loginAreas)
 	mux.HandleFunc(sessionPattern, s.current)
 	mux.HandleFunc(aiReviewContextPattern, s.current)
 	mux.HandleFunc(logoutPattern, s.logout)
@@ -40,7 +43,7 @@ func (s *Service) Protect(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, pattern := mux.Handler(r)
 		switch pattern {
-		case loginPattern, registrationSubmitPattern, registrationStatusPattern:
+		case loginPattern, loginAreasPattern, registrationSubmitPattern, registrationStatusPattern, registrationAreasPattern:
 			mux.ServeHTTP(w, r)
 			return
 		}
@@ -94,7 +97,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, next http.Ha
 }
 
 // login 验证账号和口令，为通过认证的用户建立会话。
-// 参数 w、r 为请求及响应，输入为账号和密码。
+// 参数 w、r 为响应及请求，输入包括账号、密码和监管员选择的登录辖区。
 // 返回值 无。
 func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 	var input loginInput
@@ -119,16 +122,16 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validUsername || !validPassword(input.Password) {
 		s.record(r.Context(), Principal{}, "login_failed", "login")
-		httpx.Error(w, 401, "invalid_credentials", "账号、密码或账号状态无效。")
+		rejectLogin(w)
 		return
 	}
-	actor, fingerprint, err := s.authenticate(r.Context(), input.Username, input.Password)
+	actor, fingerprint, err := s.authenticate(r.Context(), input)
 	if err == nil {
 		err = s.issue(r.Context(), w, r, actor, fingerprint)
 	}
 	if errors.Is(err, errCredential) {
 		s.record(r.Context(), Principal{}, "login_failed", "login")
-		httpx.Error(w, 401, "invalid_credentials", "账号、密码或账号状态无效。")
+		rejectLogin(w)
 		return
 	}
 	if err != nil {
@@ -137,6 +140,13 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 	}
 	s.record(r.Context(), actor, "login", "login")
 	httpx.JSON(w, 200, view(actor))
+}
+
+// rejectLogin 以统一提示拒绝密码、账号状态或辖区不匹配的请求。
+// 参数 w 为当前登录响应。
+// 返回值 无。
+func rejectLogin(w http.ResponseWriter) {
+	httpx.Error(w, 401, "invalid_credentials", "账号、密码或登录辖区不匹配，或账号不可用。")
 }
 
 // current 返回当前会话的角色、数据范围、菜单和权限。

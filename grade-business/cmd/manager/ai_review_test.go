@@ -63,7 +63,7 @@ func TestAIReviewOnIsolatedDB(t *testing.T) {
 	hit(first, "GET", "/review/", nil, 303)
 	hit(first, "GET", "/api/v1/ai-review/context", nil, 403)
 	admin := accessLogin(t, hit, "ai-admin")
-	area := accessLogin(t, hit, "ai-area")
+	area := accessLogin(t, hit, "ai-area", "331002")
 	institution := accessLogin(t, hit, "ai-org")
 	operator := accessLogin(t, hit, "ai-unit")
 	for _, cookie := range []*http.Cookie{admin, area} {
