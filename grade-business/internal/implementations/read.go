@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"grade-business/internal/access"
 )
 
 type rowReader interface {
@@ -25,22 +27,25 @@ const summarySQL = `id::text, filing_number, system_name, organization_name, ass
 // institution 为可选机构范围，lock 表示是否需要写入行锁。
 // 返回值 数据库记录或不存在错误。
 func getRecord(ctx context.Context, reader rowReader, id, institution string, lock bool) (storedRecord, error) {
+	firstReviewer := implementationReviewerSQL("i.status IN ('pending_final','pending_supervision')", initial, final)
+	finalReviewer := implementationReviewerSQL("i.status='pending_supervision'", final, supervision)
 	query := `SELECT ` + summarySQL + `, filing_id::text, reporter, contact, plan, version,
-	  accepted_at, created_by, quota_year,directory_person_id::text,directory_snapshot
+	  accepted_at, created_by, quota_year,directory_person_id::text,directory_snapshot,` + firstReviewer + `,` + finalReviewer + `
 	  FROM implementation_reports i
 	  WHERE id=$1 AND ($2::text='' OR assessment_org COLLATE "C" = $2)
 	  AND ($3::text='' OR COALESCE(i.frozen_organization_name, (SELECT f.organization_name
-	    FROM business_cases f WHERE f.id=i.filing_id AND f.kind='filing')) COLLATE "C" = $3)`
+	    FROM business_cases f WHERE f.id=i.filing_id AND f.kind='filing')) COLLATE "C" = $3)
+	  AND ` + access.FilingDistrictScope("i.filing_id", "$4", lock)
 	if lock {
-		query += " FOR UPDATE"
+		query += " FOR UPDATE OF i"
 	}
 	var item storedRecord
-	err := reader.QueryRow(ctx, query, id, institution, operatorOrganization(ctx)).Scan(&item.ID, &item.FilingNumber,
+	err := reader.QueryRow(ctx, query, id, institution, operatorOrganization(ctx), access.Districts(ctx)).Scan(&item.ID, &item.FilingNumber,
 		&item.SystemName, &item.OrganizationName, &item.AssessmentOrg, &item.Type, &item.Status,
 		&item.SubmittedAt, &item.PlannedStart, &item.PlannedEnd, &item.ArchivedAt,
 		&item.FilingID, &item.Reporter, &item.Contact,
 		&item.Plan, &item.Version, &item.AcceptedAt, &item.CreatedBy, &item.QuotaYear,
-		&item.ReporterID, &item.DirectorySnapshot)
+		&item.ReporterID, &item.DirectorySnapshot, &item.FirstReviewerID, &item.FinalReviewerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return storedRecord{}, errNotFound
 	}
@@ -57,7 +62,8 @@ func (s *Service) readPage(ctx context.Context, institution string, options list
 	 AND ($4::timestamptz IS NULL OR (created_at,id)<($4,$5::uuid))
 	 AND ($7::text='' OR assessment_org COLLATE "C" = $7)
 	 AND ($8::text='' OR COALESCE(i.frozen_organization_name, (SELECT f.organization_name
-	   FROM business_cases f WHERE f.id=i.filing_id AND f.kind='filing')) COLLATE "C" = $8)`
+	   FROM business_cases f WHERE f.id=i.filing_id AND f.kind='filing')) COLLATE "C" = $8)
+	 AND ` + access.FilingDistrictScope("i.filing_id", "$9", false)
 	switch options.archive {
 	case archived:
 		query += ` AND archived_at IS NOT NULL`
@@ -66,7 +72,7 @@ func (s *Service) readPage(ctx context.Context, institution string, options list
 	}
 	query += ` ORDER BY created_at DESC,id DESC LIMIT $6`
 	rows, err := s.pool.Query(ctx, query, options.q, options.status, options.kind,
-		options.after, options.afterID, options.limit+1, institution, operatorOrganization(ctx))
+		options.after, options.afterID, options.limit+1, institution, operatorOrganization(ctx), access.Districts(ctx))
 	if err != nil {
 		return page{}, err
 	}
@@ -111,7 +117,8 @@ func (s *Service) filingChoices(ctx context.Context, institution, q, filingID st
 	 AND ($2::text='' OR assessment_org COLLATE "C" = $2 OR `+retestHandoffSQL("$2")+`)
 	 AND ($3::text='' OR organization_name COLLATE "C" = $3)
 	 AND ($4::text='' OR id=NULLIF($4,'')::uuid)
-	 ORDER BY created_at DESC,id DESC LIMIT 20`, q, institution, operatorOrganization(ctx), filingID)
+	 AND `+access.FilingDistrictScope("f.id", "$5", false)+`
+	 ORDER BY created_at DESC,id DESC LIMIT 20`, q, institution, operatorOrganization(ctx), filingID, access.Districts(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +174,9 @@ func (s *Service) readQuota(ctx context.Context, filingID, institution string) (
 	 FROM business_cases f
 	 WHERE id=$1 AND kind='filing' AND status='approved' AND cancelled_at IS NULL AND discarded_at IS NULL
 	 AND ($3::text='' OR assessment_org COLLATE "C" = $3 OR `+retestHandoffSQL("$3")+`)
-	 AND ($4::text='' OR organization_name COLLATE "C" = $4)`,
-		filingID, result.Year, institution, operatorOrganization(ctx)).Scan(&result.Used, &withdrawnAt)
+	 AND ($4::text='' OR organization_name COLLATE "C" = $4)
+	 AND `+access.FilingDistrictScope("f.id", "$5", false),
+		filingID, result.Year, institution, operatorOrganization(ctx), access.Districts(ctx)).Scan(&result.Used, &withdrawnAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return quota{}, errFiling
 	}
@@ -180,7 +188,7 @@ func (s *Service) readQuota(ctx context.Context, filingID, institution string) (
 // 参数 ctx 控制查询，id 为报备标识，before 和 limit 控制分页。
 // 返回值 事件分页或数据库错误。
 func (s *Service) readHistory(ctx context.Context, id string, before int64, limit int) (eventPage, error) {
-	if operatorOrganization(ctx) == "" {
+	if operatorOrganization(ctx) == "" && access.Districts(ctx) == nil {
 		return readImplementationHistory(ctx, s.pool, id, before, limit)
 	}
 	var result eventPage
@@ -200,8 +208,9 @@ func readImplementationHistory(ctx context.Context, reader historyReader, id str
 	var exists bool
 	err := reader.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM implementation_reports i WHERE i.id=$1
 	  AND ($2::text='' OR COALESCE(i.frozen_organization_name, (SELECT f.organization_name
-	    FROM business_cases f WHERE f.id=i.filing_id AND f.kind='filing')) COLLATE "C" = $2))`,
-		id, operatorOrganization(ctx)).Scan(&exists)
+	    FROM business_cases f WHERE f.id=i.filing_id AND f.kind='filing')) COLLATE "C" = $2)
+	  AND `+access.FilingDistrictScope("i.filing_id", "$3", false)+`)`,
+		id, operatorOrganization(ctx), access.Districts(ctx)).Scan(&exists)
 	if err != nil {
 		return eventPage{}, err
 	}
@@ -209,7 +218,8 @@ func readImplementationHistory(ctx context.Context, reader historyReader, id str
 		return eventPage{}, errNotFound
 	}
 	rows, err := reader.Query(ctx, `SELECT action,from_status,to_status,operator,comment,occurred_at,version,
-	     CASE WHEN NOT $4 THEN directory_snapshot END
+	     CASE WHEN NOT $4 THEN directory_snapshot END,
+	     CASE WHEN NOT $4 THEN operator_id::text END, CASE WHEN NOT $4 THEN operator_role END
 	 FROM implementation_events WHERE report_id=$1 AND ($2::bigint=0 OR version<$2)
 	 ORDER BY version DESC LIMIT $3`, id, before, limit+1, operatorOrganization(ctx) != "")
 	if err != nil {
@@ -225,7 +235,8 @@ func readImplementationHistory(ctx context.Context, reader historyReader, id str
 		}
 		var item event
 		if err := rows.Scan(&item.Action, &item.FromStatus, &item.ToStatus, &item.Operator,
-			&item.Comment, &item.OccurredAt, &lastVersion, &item.DirectorySnapshot); err != nil {
+			&item.Comment, &item.OccurredAt, &lastVersion, &item.DirectorySnapshot,
+			&item.OperatorID, &item.OperatorRole); err != nil {
 			return eventPage{}, err
 		}
 		result.Items = append(result.Items, item)

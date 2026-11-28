@@ -17,6 +17,7 @@ import { api, errorText, isAbort, params } from '../lib/api'
 import { formatTime, risks } from '../lib/domain'
 import { queryValue, usePagedList } from '../lib/paging'
 import { businessScopes, refreshBusinessOnFocus, type BusinessAudience } from '../lib/scopedBusiness'
+import { hasPermission, session } from '../lib/session'
 import { refreshWorkbench } from '../lib/workbench'
 
 const props = defineProps<{ audience?: BusinessAudience }>()
@@ -28,10 +29,12 @@ const settings = computed(() => props.audience ? businessScopes[props.audience] 
 const scope = computed(() => settings.value ? queryValue(route.query[settings.value.key]).trim() : '')
 const scopeDraft = ref('')
 const available = computed(() => !props.audience || Boolean(scope.value))
-const showMaterials = computed(() => queryValue(route.query.view) === 'materials')
-const showDeadlines = computed(() => queryValue(route.query.view) === 'deadlines')
+const showOtherSources = computed(() => session.value?.roleCode !== 'ROLE_REGULATOR')
+const canConfigureRules = computed(() => !props.audience && hasPermission('admin.monitor.rule.config'))
+const showMaterials = computed(() => showOtherSources.value && queryValue(route.query.view) === 'materials')
+const showDeadlines = computed(() => showOtherSources.value && queryValue(route.query.view) === 'deadlines')
 const showSupervision = computed(() => !props.audience && queryValue(route.query.view) === 'supervision')
-const showRules = computed(() => !props.audience && queryValue(route.query.view) === 'rules')
+const showRules = computed(() => canConfigureRules.value && queryValue(route.query.view) === 'rules')
 const showAlerts = computed(() => !showMaterials.value && !showDeadlines.value && !showSupervision.value && !showRules.value)
 const validityPath = computed(() => (props.audience ? '/' + props.audience : '') + '/material-expiries')
 const assessmentDuePath = computed(() => (props.audience ? '/' + props.audience : '') + '/assessment-dues')
@@ -176,7 +179,7 @@ function resetAlertFilters() {
  * 返回值 同步结果及刷新任务。
  */
 async function sync() {
-  if (props.audience || syncing.value) return
+  if (!canConfigureRules.value || syncing.value) return
   const request = new AbortController()
   syncRequest = request
   syncing.value = true
@@ -248,16 +251,16 @@ onScopeDispose(() => {
     <nav class="v2-tabs" aria-label="预警来源">
       <RouterLink class="v2-tab" :class="{ active: showAlerts }"
         :aria-current="showAlerts ? 'page' : undefined" :to="{ path, query: scopeQuery }">隐患预警</RouterLink>
-      <RouterLink class="v2-tab" :class="{ active: showMaterials }" :aria-current="showMaterials ? 'page' : undefined"
+      <RouterLink v-if="showOtherSources" class="v2-tab" :class="{ active: showMaterials }" :aria-current="showMaterials ? 'page' : undefined"
         :to="{ path, query: { ...scopeQuery, view: 'materials' } }">材料异常</RouterLink>
-      <RouterLink class="v2-tab" :to="{ path: validityPath, query: scopeQuery }">材料有效期</RouterLink>
-      <RouterLink class="v2-tab" :to="{ path: assessmentDuePath, query: scopeQuery }">测评到期</RouterLink>
-      <RouterLink class="v2-tab" :class="{ active: showDeadlines }" :aria-current="showDeadlines ? 'page' : undefined"
+      <RouterLink v-if="showOtherSources" class="v2-tab" :to="{ path: validityPath, query: scopeQuery }">材料有效期</RouterLink>
+      <RouterLink v-if="showOtherSources" class="v2-tab" :to="{ path: assessmentDuePath, query: scopeQuery }">测评到期</RouterLink>
+      <RouterLink v-if="showOtherSources" class="v2-tab" :class="{ active: showDeadlines }" :aria-current="showDeadlines ? 'page' : undefined"
         :to="{ path, query: { ...scopeQuery, view: 'deadlines' } }">业务时限</RouterLink>
       <RouterLink v-if="!audience" class="v2-tab" :class="{ active: showSupervision }"
         :aria-current="showSupervision ? 'page' : undefined"
         :to="{ path, query: { view: 'supervision' } }">监督检查线索</RouterLink>
-      <RouterLink v-if="!audience" class="v2-tab" :class="{ active: showRules }"
+      <RouterLink v-if="canConfigureRules" class="v2-tab" :class="{ active: showRules }"
         :aria-current="showRules ? 'page' : undefined"
         :to="{ path, query: { view: 'rules' } }">预警规则</RouterLink>
     </nav>
@@ -275,7 +278,7 @@ onScopeDispose(() => {
       </div>
       <form v-if="available" class="v2-list-toolbar" @submit.prevent="search">
         <div class="v2-toolbar-row">
-          <button v-if="!audience" class="button primary" type="button" :disabled="syncing" @click="sync">
+          <button v-if="canConfigureRules" class="button primary" type="button" :disabled="syncing" @click="sync">
             <RefreshCw :size="16" aria-hidden="true" />{{ syncing ? '同步中…' : '同步本地业务预警' }}
           </button>
           <button v-if="!audience" class="button" :class="pendingReview ? 'primary' : 'neutral'"

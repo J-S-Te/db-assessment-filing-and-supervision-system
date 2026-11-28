@@ -34,7 +34,7 @@ type implementationInboxMessage struct {
 // 返回值 无。
 func TestImplementationReviewNotices(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-审核回传", approved)
 	item := testInput(filing, routine)
 	item.AssessmentOrg = "实际实施机构"
@@ -68,7 +68,7 @@ func TestImplementationReviewNotices(t *testing.T) {
 // 返回值 无。
 func TestImplementationReviewNoticeFailureRollsBack(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-回传失败", approved)
 	item := testInput(filing, routine)
 	item.AssessmentOrg = "实际实施机构"
@@ -93,7 +93,7 @@ func TestImplementationReviewNoticeFailureRollsBack(t *testing.T) {
 // 返回值 无。
 func TestReturnedImplementationReassignment(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	reviewinbox.Register(mux, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-改派回传", approved)
 	item := testInput(filing, routine)

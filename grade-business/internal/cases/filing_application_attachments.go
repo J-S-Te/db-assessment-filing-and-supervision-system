@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 const applicationAttachmentScope = `a.id=$1 AND ($2='' OR a.before_values->>'assessmentOrg'=$2)
@@ -40,8 +41,8 @@ func (s *Service) applicationMaterialsHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := s.db.Query(ctx, `SELECT f.id::text,f.kind,f.file_name,f.size_bytes,f.uploaded_at
 		FROM filing_application_attachments f JOIN filing_applications a ON a.id=f.application_id
-		WHERE `+applicationAttachmentScope+` ORDER BY f.uploaded_at DESC,f.id DESC`,
-		id, institution, applicationOrganization(ctx))
+		WHERE `+applicationAttachmentScope+` AND `+access.FilingDistrictScope("a.filing_id", "$4", false)+`
+		ORDER BY f.uploaded_at DESC,f.id DESC`, id, institution, applicationOrganization(ctx), access.Districts(ctx))
 	if err != nil {
 		respondError(w, err)
 		return
@@ -63,7 +64,9 @@ func (s *Service) applicationDownloadHTTP(w http.ResponseWriter, r *http.Request
 	var key string
 	err := s.db.QueryRow(r.Context(), `SELECT f.id::text,f.kind,f.file_name,f.size_bytes,f.uploaded_at,f.file_key
 		FROM filing_application_attachments f JOIN filing_applications a ON a.id=f.application_id
-		WHERE `+applicationAttachmentScope+` AND f.id=$4`, id, institution, applicationOrganization(r.Context()), file).
+		WHERE `+applicationAttachmentScope+` AND f.id=$4
+		AND `+access.FilingDistrictScope("a.filing_id", "$5", false),
+		id, institution, applicationOrganization(r.Context()), file, access.Districts(r.Context())).
 		Scan(&item.ID, &item.Kind, &item.FileName, &item.Size, &item.UploadedAt, &key)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound

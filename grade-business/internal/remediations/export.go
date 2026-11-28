@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 )
 
@@ -51,7 +52,8 @@ func (s *Service) writeExport(ctx context.Context, dst io.Writer, input listInpu
 		return err
 	}
 	rows, err := s.db.Query(ctx, "SELECT "+projection+" "+filteredPlans+`
-		ORDER BY p.created_at DESC,p.id DESC`, input.Query, input.Status, input.Due)
+		AND `+access.FilingDistrictScope("f.id", "$4", false)+`
+		ORDER BY p.created_at DESC,p.id DESC`, input.Query, input.Status, input.Due, access.Districts(ctx))
 	if err != nil {
 		return err
 	}

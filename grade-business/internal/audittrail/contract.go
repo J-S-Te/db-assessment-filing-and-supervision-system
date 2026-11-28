@@ -54,7 +54,7 @@ var approvalStages = map[string]string{
 }
 var resourceActions = map[string]map[string]string{
 	"filing-applications": {"withdraw": "撤回申请"},
-	"implementations":     {"submit": "提交报备", "withdraw": "撤销报备"},
+	"implementations":     {"submit": "提交报备", "withdraw": "撤销报备", "restart_initial": "重新进入初审"},
 	"hazards": {
 		"register": "登记隐患", "dispatch": "派发整改", "supervise": "督办隐患",
 		"submit": "提交复核", "close": "复核销项",
@@ -62,6 +62,13 @@ var resourceActions = map[string]map[string]string{
 	"alerts":           {"create": "生成预警", "close": "关闭预警"},
 	"publications":     {"withdraw": "撤回发布"},
 	"workday-calendar": {"workday": "设置工作日", "restday": "设置休息日", "default": "恢复默认日历"},
+	"access": {
+		"login": "登录成功", "login_failed": "登录凭据拒绝", "login_throttled": "登录尝试限流",
+		"logout": "退出登录", "password_changed": "修改密码", "password_change_failed": "改密凭据拒绝",
+		"password_change_throttled": "改密尝试限流", "denied": "访问拒绝", "account_provisioned": "开通账号",
+		"operator_registration_submitted": "提交运营单位注册", "operator_registration_approved": "通过运营单位注册",
+		"operator_registration_rejected": "驳回运营单位注册",
+	},
 }
 
 // parseFilter 校验审计业务类型、关键词及可选分页条件。
@@ -100,7 +107,7 @@ func parseFilter(raw string, paged bool) (auditFilter, error) {
 func knownResource(resource string) bool {
 	switch resource {
 	case "", "filings", "filing-applications", "implementations", "reports", "remediations",
-		"hazards", "alerts", "publications", "workday-calendar":
+		"hazards", "alerts", "publications", "workday-calendar", "access":
 		return true
 	default:
 		return false
@@ -170,7 +177,7 @@ func actionLabel(resource, action, stage string) string {
 
 // businessLink 生成指向原业务对象的站内详情地址。
 // 参数 resource 为已投影类型，id 和 reference 为公开标识及日期等定位字段。
-// 返回值 可由监管界面打开的相对路由。
+// 返回值 可由监管界面打开的相对路由，安全事件无详情入口。
 func businessLink(resource, id, reference string) string {
 	switch resource {
 	case "alerts":
@@ -179,6 +186,8 @@ func businessLink(resource, id, reference string) string {
 		return "/monitor/publications?publication=" + url.QueryEscape(id)
 	case "workday-calendar":
 		return "/workday-calendar?day=" + url.QueryEscape(reference)
+	case "access":
+		return ""
 	default:
 		return "/" + resource + "/" + url.PathEscape(id)
 	}

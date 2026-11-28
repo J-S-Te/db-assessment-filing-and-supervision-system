@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/directoryref"
 	"grade-business/internal/reviewinbox"
 )
@@ -209,6 +210,9 @@ func (s *Service) execute(ctx context.Context, id, institution string, change co
 	if err != nil {
 		return mutation{}, err
 	}
+	if err := checkImplementationReview(ctx, record, change.Action); err != nil {
+		return mutation{}, err
+	}
 	now := s.now()
 	next, err := nextStatus(record, change.Action, change.Comment, operator, now)
 	if err != nil {
@@ -332,11 +336,17 @@ func updateStatus(ctx context.Context, tx pgx.Tx, record storedRecord, action, n
 // 返回值 已提交的写入结果，或回滚前的错误。
 func finish(ctx context.Context, tx pgx.Tx, result mutation,
 	previous storedRecord, change command, operator string, now time.Time) (mutation, error) {
+	actor, _ := access.Current(ctx)
+	if actor.ID != "" {
+		operator = actor.Name
+	}
 	_, err := tx.Exec(ctx, `INSERT INTO implementation_events
-	 (report_id,version,action,from_status,to_status,operator,comment,occurred_at,directory_snapshot)
-	 SELECT id,$2,$3,$4,$5,$6,$7,$8,directory_snapshot FROM implementation_reports WHERE id=$1`,
+	 (report_id,version,action,from_status,to_status,operator,comment,occurred_at,directory_snapshot,
+	  operator_id,operator_role)
+	 SELECT id,$2,$3,$4,$5,$6,$7,$8,directory_snapshot,NULLIF($9,'')::uuid,NULLIF($10,'')
+	 FROM implementation_reports WHERE id=$1`,
 		result.ID, result.Version, change.Action, previous.Status,
-		result.Status, operator, change.Comment, now)
+		result.Status, operator, change.Comment, now, actor.ID, actor.Role)
 	if err != nil {
 		return mutation{}, err
 	}
@@ -402,8 +412,9 @@ func lockScopedFiling(ctx context.Context, tx pgx.Tx, id, institution string, ac
 	 WHERE id=$1 AND kind='filing' AND ($2::text='' OR assessment_org COLLATE "C" = $2
 	   OR ($5::bool AND `+retestHandoffSQL("$2")+`))
 	 AND ($3::text='' OR organization_name COLLATE "C" = $3)
-	 AND (NOT $4::bool OR (status='approved' AND cancelled_at IS NULL AND discarded_at IS NULL)) FOR UPDATE`,
-		id, institution, operatorOrganization(ctx), active, handoff).
+	 AND (NOT $4::bool OR (status='approved' AND cancelled_at IS NULL AND discarded_at IS NULL))
+	 AND `+access.FilingDistrictScope("f.id", "$6", true)+` FOR UPDATE OF f`,
+		id, institution, operatorOrganization(ctx), active, handoff, access.Districts(ctx)).
 		Scan(&result.ID, &result.Number, &result.SystemName, &result.OrganizationName, &result.AssessmentOrg)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return choice{}, errFiling

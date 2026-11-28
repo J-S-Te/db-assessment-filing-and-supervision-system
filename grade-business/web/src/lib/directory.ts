@@ -12,6 +12,7 @@ export interface DirectoryOption {
 }
 
 export interface DirectoryEntry extends DirectoryOption {
+  codeManaged?: boolean
   classification?: string
   district?: string
   qualification?: string

@@ -14,13 +14,18 @@ import (
 func TestLoginLimitsAreSeparatedBySource(t *testing.T) {
 	service := New(nil)
 	for range 12 {
-		if !service.limitLogin("192.0.2.1:1000", "fixture") {
+		if allowed, _ := service.limitLogin("192.0.2.1:1000", "fixture"); !allowed {
 			t.Fatal("合法窗口额度未能使用")
 		}
 	}
-	if service.limitLogin("192.0.2.1:1001", "fixture") ||
-		!service.limitLogin("192.0.2.2:1000", "fixture") {
+	firstSource, firstReport := service.limitLogin("192.0.2.1:1001", "fixture")
+	retry, retryReport := service.limitLogin("192.0.2.1:1002", "fixture")
+	secondSource, _ := service.limitLogin("192.0.2.2:1000", "fixture")
+	if firstSource || retry || !secondSource {
 		t.Fatal("账号额度必须按来源隔离，同一来源不能靠端口换桶")
+	}
+	if !firstReport || retryReport {
+		t.Fatal("同一来源窗口仅首次限流应记录安全审计")
 	}
 }
 
@@ -32,10 +37,10 @@ func TestFullLimiterKeepsExistingSources(t *testing.T) {
 	for index := range 4096 {
 		service.limitLogin("source-"+strconv.Itoa(index), "fixture-"+strconv.Itoa(index))
 	}
-	if !service.limitLogin("source-0", "another-fixture") {
+	if allowed, _ := service.limitLogin("source-0", "another-fixture"); !allowed {
 		t.Fatal("已有来源被卡在表容量限制")
 	}
-	if service.limitLogin("new-source", "fixture") {
+	if allowed, _ := service.limitLogin("new-source", "fixture"); allowed {
 		t.Fatal("新增来源不应超出内存容量")
 	}
 }

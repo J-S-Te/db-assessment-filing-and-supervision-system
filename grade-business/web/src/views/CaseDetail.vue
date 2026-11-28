@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
             :href="'#' + section.id" @click.prevent="jumpToFilingSection(section.id)">{{ section.title }}</a>
         </nav>
         <p v-if="actionNotice" class="form-message success-message detail-notice" role="status">{{ actionNotice }}</p>
-        <FilingWithdrawalPanel v-if="hasPermission('admin.grade.case.edit') && kind === 'filings' && record.initialReviewAudience"
+        <FilingWithdrawalPanel v-if="hasPermission('admin.grade.filing.audit') && kind === 'filings' && record.initialReviewAudience"
           :path="path" :version="record.version" :disabled="changing" @changed="refresh" />
         <div v-if="returnReason" class="form-message warning-message detail-notice">
           <strong>最近退回意见</strong>

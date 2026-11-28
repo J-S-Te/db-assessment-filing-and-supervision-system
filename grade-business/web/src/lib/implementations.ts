@@ -26,6 +26,7 @@ export const implementationActions = {
   accept: '受理报备',
   approve: '审核通过',
   return_for_correction: '退回补正',
+  restart_initial: '重新进入初审',
   withdraw: '撤销报备',
   archive: '归档报备',
 } as const
@@ -71,6 +72,7 @@ export interface ImplementationDetail extends ImplementationSummary, Implementat
   acceptedAt?: string
   allowedActions: Array<ImplementationAction | 'edit'>
   canPrecheck: boolean
+  reviewBlockReason?: string
   directorySnapshot?: DirectorySnapshot
 }
 
@@ -115,6 +117,8 @@ export interface ImplementationEvent {
   fromStatus?: ImplementationStatus
   toStatus: ImplementationStatus
   operator: string
+  operatorId?: string
+  operatorRole?: string
   comment?: string
   occurredAt: string
   directorySnapshot?: DirectorySnapshot

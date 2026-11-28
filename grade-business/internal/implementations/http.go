@@ -176,7 +176,7 @@ func (s *Service) detailHTTP(w http.ResponseWriter, r *http.Request, institution
 		case institution != "":
 			result.AllowedActions = institutionActions(result, s.reportOperator(r.Context(), institution), now)
 		default:
-			result.AllowedActions = allowedActions(result, s.operator, now)
+			setReviewActions(r.Context(), &result, s.operator, now)
 		}
 		err = s.detailRuleTimes(r.Context(), &result, now)
 	}
@@ -327,6 +327,16 @@ func writeError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusBadRequest, "directory_person_invalid", err.Error())
 	case errors.Is(err, errStale):
 		httpx.Error(w, http.StatusConflict, "stale_version", errStale.Error())
+	case errors.Is(err, errPermission):
+		httpx.Error(w, http.StatusForbidden, "permission_denied", errPermission.Error())
+	case errors.Is(err, errSameReviewer):
+		httpx.Error(w, http.StatusConflict, "same_reviewer", errSameReviewer.Error())
+	case errors.Is(err, errUnknownReviewer):
+		httpx.Error(w, http.StatusConflict, "first_reviewer_unverified", errUnknownReviewer.Error())
+	case errors.Is(err, errUnverifiedReviewers):
+		httpx.Error(w, http.StatusConflict, "review_separation_unverified", errUnverifiedReviewers.Error())
+	case errors.Is(err, errRestartUnavailable):
+		httpx.Error(w, http.StatusConflict, "legacy_review_restart_unavailable", errRestartUnavailable.Error())
 	case errors.Is(err, errConflict):
 		httpx.Error(w, http.StatusConflict, "invalid_state", errConflict.Error())
 	case errors.Is(err, errQuota):
@@ -337,7 +347,7 @@ func writeError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusConflict, "plan_edit_deadline", errPlanClosed.Error())
 	case errors.Is(err, errCooldown):
 		httpx.Error(w, http.StatusConflict, "resubmission_cooldown", errCooldown.Error())
-	case errors.Is(err, errInvalid), errors.Is(err, errComment):
+	case errors.Is(err, errInvalid), errors.Is(err, errComment), errors.Is(err, errRestartComment):
 		httpx.Error(w, http.StatusBadRequest, "validation_error", err.Error())
 	default:
 		httpx.Error(w, http.StatusInternalServerError, "internal_error", "实施报备暂时无法处理，请稍后重试。")

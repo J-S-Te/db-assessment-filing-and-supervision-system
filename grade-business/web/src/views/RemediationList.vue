@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { ChevronLeft, ChevronRight, Plus } from '@lucide/vue'
 import { useRoute } from 'vue-router'
@@ -119,7 +120,7 @@ onScopeDispose(() => {
 
     <form class="v2-list-toolbar" @submit.prevent="search">
       <div class="v2-toolbar-row">
-        <RouterLink class="button primary" :to="remediationPath + '/new'">
+        <RouterLink v-if="hasPermission('admin.grade.case.edit')" class="button primary" :to="remediationPath + '/new'">
           <Plus :size="16" aria-hidden="true" />新建整改规划
         </RouterLink>
         <button class="button neutral" type="button" :disabled="!selected.length || loading || !!failure || sending"

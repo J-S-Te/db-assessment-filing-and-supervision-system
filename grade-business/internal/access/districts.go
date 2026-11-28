@@ -11,20 +11,7 @@ import (
 const quzhouCityCode = geoarea.QuzhouCityCode
 
 var quzhouNames = geoarea.QuzhouAreas()
-var districtNames = regulatorDistrictNames()
-
-// regulatorDistrictNames 构建可为监管员登记账号的区划名录。
-// 参数 无。
-// 返回值 区划代码和名称，包含仍有在用账号的台州区划。
-func regulatorDistrictNames() map[string]string {
-	names := maps.Clone(quzhouNames)
-	maps.Copy(names, map[string]string{
-		"331000": "台州市", "331002": "椒江区", "331003": "黄岩区", "331004": "路桥区",
-		"331022": "三门县", "331023": "天台县", "331024": "仙居县",
-		"331081": "温岭市", "331082": "临海市", "331083": "玉环市",
-	})
-	return names
-}
+var districtNames = geoarea.RegulatorAreas()
 
 var cityDistricts = map[string][]string{
 	quzhouCityCode: slices.Sorted(maps.Keys(quzhouNames)),

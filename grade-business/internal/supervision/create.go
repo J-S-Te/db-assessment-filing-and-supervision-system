@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"grade-business/internal/access"
 )
 
 // create 建立有效备案的监管草稿，以请求标识吸收重复提交。
@@ -40,8 +41,10 @@ func (s *Service) create(ctx context.Context, input createInput) (taskSummary, e
 			return err
 		}
 		result = created.taskSummary
-		_, err = tx.Exec(ctx, `INSERT INTO supervision_events(task_id,version,action,to_status,actor)
-			VALUES($1,1,'create','draft',$2)`, result.ID, s.actor)
+		name, actor := supervisionAuditActor(ctx, s.actor, "")
+		_, err = tx.Exec(ctx, `INSERT INTO supervision_events(task_id,version,action,to_status,actor,actor_id,actor_role)
+			VALUES($1,1,'create','draft',$2,NULLIF($3,'')::uuid,NULLIF($4,''))`,
+			result.ID, name, actor.ID, actor.Role)
 		return err
 	})
 	return result, err
@@ -52,7 +55,8 @@ func (s *Service) create(ctx context.Context, input createInput) (taskSummary, e
 // 返回值 原任务摘要或重复冲突、未匹配、数据库错误。
 func findDraftRequest(ctx context.Context, db reader, input createInput) (taskSummary, error) {
 	var existing taskRecord
-	err := db.QueryRow(ctx, `SELECT `+taskColumns+` FROM supervision_tasks t WHERE t.request_id=$1`, input.RequestID).
+	err := db.QueryRow(ctx, `SELECT `+taskColumns+` FROM supervision_tasks t WHERE t.request_id=$1 AND `+
+		access.FilingDistrictScope("t.filing_id", "$2", false), input.RequestID, access.Districts(ctx)).
 		Scan(taskTargets(&existing)...)
 	if err != nil {
 		return taskSummary{}, err
@@ -75,7 +79,9 @@ func checkDraftSources(ctx context.Context, tx pgx.Tx, input createInput) error 
 	var owner string
 	var future bool
 	err := tx.QueryRow(ctx, `SELECT f.organization_name,$2::date>(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date
-		FROM business_cases f WHERE f.id=$1 AND `+eligibleFiling+` FOR SHARE OF f`, input.FilingID, input.DueOn).
+		FROM business_cases f WHERE f.id=$1 AND `+eligibleFiling+" AND "+
+		access.FilingDistrictScope("f.id", "$3", true)+" FOR SHARE OF f",
+		input.FilingID, input.DueOn, access.Districts(ctx)).
 		Scan(&owner, &future)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errScope

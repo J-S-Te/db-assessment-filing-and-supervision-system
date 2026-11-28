@@ -8,6 +8,7 @@ import { formatTime } from '../lib/domain'
 import { queryValue, usePagedList } from '../lib/paging'
 
 const resources = {
+  access: '账号与权限',
   filings: '备案',
   'filing-applications': '备案变更与注销',
   implementations: '实施报备',
@@ -139,8 +140,9 @@ onScopeDispose(resetExport)
                 <td>{{ item.actionLabel }}</td>
                 <td class="audit-object">
                   <span class="level-tag">{{ resources[item.resource] }}</span>
-                  <RouterLink class="text-action" :to="item.href">{{ item.title }}</RouterLink>
-                  <small v-if="item.reference !== item.title" class="muted">{{ item.reference || item.resourceId }}</small>
+                  <RouterLink v-if="item.href" class="text-action" :to="item.href">{{ item.title }}</RouterLink>
+                  <span v-else>{{ item.title }}</span>
+                  <small v-if="(item.reference || item.resourceId) && item.reference !== item.title" class="muted">{{ item.reference || item.resourceId }}</small>
                 </td>
                 <td>{{ formatTime(item.occurredAt) }}</td>
               </tr>

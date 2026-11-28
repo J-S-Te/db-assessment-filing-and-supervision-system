@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 const taskColumns = `t.id::text,t.filing_id::text,t.filing_number,t.system_name,t.organization_name,
@@ -94,10 +95,19 @@ func scanScopedTask(row pgx.Row, owner string) (taskRecord, error) {
 // 返回值 已持久化的任务或查询失败。
 func loadTask(ctx context.Context, db reader, id, owner string, lock bool) (taskRecord, error) {
 	query := `SELECT ` + taskColumns + historyColumns + ` FROM supervision_tasks t WHERE t.id=$1 AND `
-	if lock {
-		return scanScopedTask(db.QueryRow(ctx, query+matchingScope+" FOR UPDATE OF t", id, owner), owner)
+	districts := access.Districts(ctx)
+	districtScope := " AND " + access.FilingDistrictScope("t.filing_id", "$3", false)
+	if !lock {
+		return scanScopedTask(db.QueryRow(ctx, query+readableScope+districtScope, id, owner, districts), owner)
 	}
-	return scanScopedTask(db.QueryRow(ctx, query+readableScope, id, owner), owner)
+	record, err := scanScopedTask(db.QueryRow(ctx, query+matchingScope+districtScope+" FOR UPDATE OF t",
+		id, owner, districts), owner)
+	if err == nil && districts != nil {
+		var visible bool
+		err = db.QueryRow(ctx, "SELECT true WHERE "+access.FilingDistrictScope("$1::uuid", "$2", true),
+			record.FilingID, districts).Scan(&visible)
+	}
+	return record, err
 }
 
 // list 查询受当前归属和状态筛选限制的监督检查任务。
@@ -106,7 +116,8 @@ func loadTask(ctx context.Context, db reader, id, owner string, lock bool) (task
 func (s *Service) list(ctx context.Context, owner, status string, before int64) (page[taskSummary], error) {
 	rows, err := s.db.Query(ctx, `SELECT `+taskColumns+historyColumns+` FROM supervision_tasks t
 		WHERE ($1::bigint=0 OR t.sequence<$1) AND `+readableScope+`
-		AND ($3='' OR `+scopedTaskStatus+`=$3) ORDER BY t.sequence DESC LIMIT $4`, before, owner, status, pageSize+1)
+		AND ($3='' OR `+scopedTaskStatus+`=$3) AND `+access.FilingDistrictScope("t.filing_id", "$5", false)+`
+		ORDER BY t.sequence DESC LIMIT $4`, before, owner, status, pageSize+1, access.Districts(ctx))
 	if err != nil {
 		return page[taskSummary]{}, err
 	}
@@ -134,6 +145,7 @@ func (s *Service) list(ctx context.Context, owner, status string, before int64) 
 func (s *Service) options(ctx context.Context, query, lead string) ([]filingOption, error) {
 	rows, err := s.db.Query(ctx, `SELECT f.id::text,f.number,f.system_name,f.organization_name
 		FROM business_cases f WHERE `+eligibleFiling+`
+		AND `+access.FilingDistrictScope("f.id", "$3", false)+`
 		AND ($1='' OR strpos(lower(concat_ws(' ',f.number,f.system_name,f.organization_name)),lower($1))>0)
 		AND (NULLIF($2,'') IS NULL OR EXISTS (
 			SELECT 1 FROM alert_supervision_leads l JOIN local_alerts a ON a.id=l.alert_id
@@ -141,7 +153,7 @@ func (s *Service) options(ctx context.Context, query, lead string) ([]filingOpti
 			JOIN hazard_context hc ON hc.id=h.id
 			WHERE l.alert_id=NULLIF($2,'')::uuid AND hc.filing_id=f.id
 			  AND l.organization_name COLLATE "C"=f.organization_name AND `+leadStillOpen+`))
-		ORDER BY f.created_at DESC,f.id DESC LIMIT 25`, query, lead)
+		ORDER BY f.created_at DESC,f.id DESC LIMIT 25`, query, lead, access.Districts(ctx))
 	if err != nil {
 		return nil, err
 	}

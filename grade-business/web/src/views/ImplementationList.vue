@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasPermission } from '../lib/session'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronRight, Plus, Search } from '@lucide/vue'
@@ -63,7 +64,7 @@ refreshBusinessOnFocus(() => { if (route.path === implementationPath) void refre
         <button class="button neutral" type="button" @click="reset">重置</button>
         </div>
         <div class="v2-toolbar-row">
-          <RouterLink :to="implementationPath + '/new'" class="button primary"><Plus :size="16" aria-hidden="true" />实施报备录入</RouterLink>
+          <RouterLink v-if="hasPermission('admin.grade.case.edit')" :to="implementationPath + '/new'" class="button primary"><Plus :size="16" aria-hidden="true" />实施报备录入</RouterLink>
           <span class="v2-toolbar-spacer"></span>
           <button class="button neutral small" type="button" :disabled="loading" @click="load">⟳ 刷新</button>
         </div>

@@ -84,9 +84,10 @@ func (s *Service) listApplications(ctx context.Context, input applicationQuery) 
 		  AND (NOT $10::bool OR (operator_origin AND status='pending_initial' AND NOT EXISTS(
 		      SELECT 1 FROM filing_withdrawal_requests w
 		      WHERE w.resource='filing-applications' AND w.resource_id=filing_applications.id AND w.status='pending')))
+		AND `+access.FilingDistrictScope("filing_applications.filing_id", "$11", false)+`
 		ORDER BY created_at DESC,id DESC LIMIT $7`,
 		input.kind, input.status, filingID, input.keyword, created, id, input.limit+1,
-		input.institution, input.organization, input.assignedReview)
+		input.institution, input.organization, input.assignedReview, access.Districts(ctx))
 	if err != nil {
 		return applicationPage{}, err
 	}
@@ -143,7 +144,9 @@ func (s *Service) applicationInScope(ctx context.Context, id, institution string
 		  WHERE w.resource='filing-applications' AND w.resource_id=filing_applications.id
 		    AND w.status='pending')) FROM filing_applications
 		WHERE id=$1 AND ($2='' OR before_values->>'assessmentOrg'=$2)
-		AND ($3='' OR before_values->>'organizationName'=$3)`, id, institution, organization)
+		AND ($3='' OR before_values->>'organizationName'=$3)
+		AND `+access.FilingDistrictScope("filing_applications.filing_id", "$4", false),
+		id, institution, organization, access.Districts(ctx))
 	err := row.Scan(append(scanApplicationFields(&detail.applicationRow), &detail.Reason,
 		&detail.Version, &detail.AppliedAt, &before, &after,
 		&operatorOrigin, &detail.ImplementationID, &hasReceipt, &currentOwner, &withdrawalPending)...)
@@ -155,8 +158,7 @@ func (s *Service) applicationInScope(ctx context.Context, id, institution string
 	}
 	detail.AllowedActions = allowedActions(detail.Status)
 	actor, authenticated := access.Current(ctx)
-	if operatorOrigin && (institution != "" || (detail.Status == pendingInitial &&
-		(!authenticated || actor.Role != access.SystemAdmin))) {
+	if operatorOrigin && (institution != "" || (detail.Status == pendingInitial && !authenticated)) {
 		detail.AllowedActions = initialReviewActions(detail.Status,
 			institution != "" && (!authenticated || actor.Role == access.OrgAdmin))
 	} else if institution != "" {
@@ -165,7 +167,10 @@ func (s *Service) applicationInScope(ctx context.Context, id, institution string
 	if editable(detail.Status) && (institution == "" || !operatorOrigin) {
 		detail.AllowedActions = append(detail.AllowedActions, withdrawApplication)
 	}
-	if withdrawalPending {
+	if regulatorOwnerChange(ctx, before, after) && (detail.Status == pendingInitial || detail.Status == pendingFinal) {
+		detail.AllowedActions = []string{returnForFix}
+	}
+	if (authenticated && actor.Role == access.Regulator && detail.Status != pendingInitial && detail.Status != pendingFinal) || withdrawalPending {
 		detail.AllowedActions = []string{}
 	}
 	detail.Changes = applicationDiffs(before, after)
@@ -207,6 +212,7 @@ func (s *Service) applicationHistory(ctx context.Context, id, institution string
 		FROM filing_applications a LEFT JOIN filing_application_review_events e ON a.id=e.application_id
 		WHERE a.id=$1 AND ($2='' OR a.before_values->>'organizationName'=$2)
 		  AND ($3='' OR a.before_values->>'assessmentOrg'=$3)
-		ORDER BY e.id DESC`, id, applicationOrganization(ctx), institution)
+		  AND `+access.FilingDistrictScope("a.filing_id", "$4", false)+`
+		ORDER BY e.id DESC`, id, applicationOrganization(ctx), institution, access.Districts(ctx))
 	return collectReviewHistory(rows, err)
 }

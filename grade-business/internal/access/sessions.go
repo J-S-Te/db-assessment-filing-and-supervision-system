@@ -24,7 +24,6 @@ const (
 	maxRateSources = 4096
 	rateDuration   = 5 * time.Minute
 	idleTimeout    = 30 * time.Minute
-	idleTouchStep  = 10 * time.Minute
 )
 
 type Service struct {
@@ -50,7 +49,8 @@ type loginWindow struct {
 
 type loginSourceWindow struct {
 	loginWindow
-	accounts map[string]int
+	accounts         map[string]int
+	reportedThrottle bool
 }
 
 const principalFields = `a.id::text,a.display_name,a.role_code,COALESCE(a.area_code,''),
@@ -144,7 +144,7 @@ func sessionToken(r *http.Request) ([32]byte, bool) {
 	return sha256.Sum256(raw), true
 }
 
-// session 返回仍有效的会话身份，核对名录资格、账号状态和空闲超时。
+// session 核对有效期、账号及名录资格，同时原子记录最近活跃时间。
 // 参数 r 为携带浏览器会话 Cookie 的请求。
 // 返回值 当前身份，或无会话、资格变更、数据库错误。
 func (s *Service) session(r *http.Request) (Principal, error) {
@@ -153,35 +153,20 @@ func (s *Service) session(r *http.Request) (Principal, error) {
 	if !ok {
 		return actor, pgx.ErrNoRows
 	}
-	err := s.db.QueryRow(r.Context(), "SELECT "+principalFields+
-		" FROM access_sessions t JOIN access_accounts a ON a.id=t.account_id"+principalJoin+
-		" WHERE t.token_hash=$1 AND t.expires_at>statement_timestamp()"+
-			" AND t.last_seen_at>statement_timestamp()-make_interval(secs => $2) AND "+loginEligible,
-		hash[:], int(s.options.IdleTimeout.Seconds())).Scan(fields(&actor)...)
-	if err == nil {
-		s.touchSession(r, hash, actor.ID)
-	}
+	err := s.db.QueryRow(r.Context(), `
+		UPDATE access_sessions t
+		SET last_seen_at=GREATEST(t.last_seen_at,statement_timestamp())
+		FROM access_accounts a`+principalJoin+`
+		WHERE t.account_id=a.id AND t.token_hash=$1 AND t.expires_at>statement_timestamp()
+		  AND t.last_seen_at>statement_timestamp()-make_interval(secs => $2) AND `+loginEligible+
+		` RETURNING `+principalFields, hash[:], s.options.IdleTimeout.Seconds()).Scan(fields(&actor)...)
 	return actor, err
-}
-
-// touchSession 顺带刷新活跃会话的最近使用时间，让空闲判定随真实请求推进。
-// 参数 r 为已通过会话校验的请求，hash 为会话令牌摘要，accountID 为会话所属账号。
-// 返回值 无，刷新失败仅记录日志，不影响本次业务请求。
-func (s *Service) touchSession(r *http.Request, hash [32]byte, accountID string) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
-	defer cancel()
-	if _, err := s.db.Exec(ctx, `
-		UPDATE access_sessions SET last_seen_at=statement_timestamp()
-		WHERE token_hash=$1 AND last_seen_at<statement_timestamp()-make_interval(secs => $2)`,
-		hash[:], int(idleTouchStep.Seconds())); err != nil {
-		slog.Error("会话活跃时间刷新失败", "operatorId", accountID)
-	}
 }
 
 // limitLogin 限制账号口令校验的频率及计数器存量。
 // 参数 remote 和 username 为连接来源与标准化用户名。
-// 返回值 当前尝试在来源及来源内账号的频率额度内时为真。
-func (s *Service) limitLogin(remote, username string) bool {
+// 返回值 本次尝试是否允许，以及是否为当前来源在窗口内首个值得记录的限流事件。
+func (s *Service) limitLogin(remote, username string) (allowed, reportThrottle bool) {
 	now, source := time.Now(), peerIP(remote)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -195,7 +180,7 @@ func (s *Service) limitLogin(remote, username string) bool {
 	}
 	window, exists := s.loginRates[source]
 	if !exists && len(s.loginRates) >= maxRateSources {
-		return false
+		return false, false
 	}
 	if !now.Before(window.until) {
 		window = loginSourceWindow{
@@ -203,12 +188,15 @@ func (s *Service) limitLogin(remote, username string) bool {
 		}
 	}
 	if window.count >= 60 || window.accounts[username] >= 12 {
-		return false
+		report := !window.reportedThrottle
+		window.reportedThrottle = true
+		s.loginRates[source] = window
+		return false, report
 	}
 	window.count++
 	window.accounts[username]++
 	s.loginRates[source] = window
-	return true
+	return true, false
 }
 
 // limitRegistration 限制匿名入口访问频率，避免影响正常登录的独立额度。

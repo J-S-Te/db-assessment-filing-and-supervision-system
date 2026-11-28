@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"grade-business/internal/access"
 	"grade-business/internal/cases"
 
 	"github.com/jackc/pgx/v5"
@@ -28,8 +29,9 @@ func (s *Service) attachments(ctx context.Context, id string) (collection[cases.
 	}
 	rows, err := s.db.Query(ctx, `SELECT a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at `+joins+`
 		JOIN remediation_attachments a ON a.plan_id=p.id
-		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2) ORDER BY a.uploaded_at DESC,a.id DESC`,
-		id, operatorOrganization(ctx))
+		WHERE p.id=$1 AND ($2='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$2)
+		AND `+access.FilingDistrictScope("f.id", "$3", false)+` ORDER BY a.uploaded_at DESC,a.id DESC`,
+		id, operatorOrganization(ctx), access.Districts(ctx))
 	if err != nil {
 		return collection[cases.Attachment]{}, err
 	}
@@ -112,8 +114,9 @@ func (s *Service) downloadMaterial(w http.ResponseWriter, r *http.Request, id, a
 	var key string
 	err := s.db.QueryRow(r.Context(), `SELECT a.id::text,a.kind,a.file_name,a.size_bytes,a.uploaded_at,a.file_key `+joins+`
 		JOIN remediation_attachments a ON a.plan_id=p.id
-		WHERE a.id=$1 AND p.id=$2 AND ($3='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$3)`, attachmentID, id,
-		operatorOrganization(r.Context())).
+		WHERE a.id=$1 AND p.id=$2 AND ($3='' OR COALESCE(p.frozen_organization_name,f.organization_name)=$3)
+		AND `+access.FilingDistrictScope("f.id", "$4", false), attachmentID, id,
+		operatorOrganization(r.Context()), access.Districts(r.Context())).
 		Scan(&item.ID, &item.Kind, &item.FileName, &item.Size, &item.UploadedAt, &key)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errNotFound

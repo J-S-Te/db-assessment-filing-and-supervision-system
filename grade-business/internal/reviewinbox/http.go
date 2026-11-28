@@ -1,6 +1,7 @@
 package reviewinbox
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -12,22 +13,34 @@ import (
 
 const inboxPrefix = "/api/v1/"
 
+// DistrictScope 根据当前监管会话生成回执查询的辖区条件。
+// 参数 ctx 为认证上下文，filing 为固定查询表达式，param 为辖区数组占位符。
+// 返回值 SQL 条件及授权区县，非监管席位使用 nil。
+type DistrictScope func(ctx context.Context, filing, param string) (string, []string)
+
 type inboxEndpoint struct {
 	pool          *pgxpool.Pool
 	audience, key string
+	districtScope DistrictScope
 }
 
 // Register 挂载机构及运营者收件箱，并提供监管端的按业务回执查询。
-// 参数 mux 为本地路由，pool 为业务库。
+// 参数 mux 为本地路由，pool 为业务库，scope 可提供监管回执的辖区条件。
 // 返回值 无。
-func Register(mux *http.ServeMux, pool *pgxpool.Pool) {
-	for _, endpoint := range []inboxEndpoint{{pool, "institution", "institution"}, {pool, "operator", "organization"}} {
+func Register(mux *http.ServeMux, pool *pgxpool.Pool, scope ...DistrictScope) {
+	for _, endpoint := range []inboxEndpoint{
+		{pool: pool, audience: "institution", key: "institution"},
+		{pool: pool, audience: "operator", key: "organization"},
+	} {
 		path := inboxPrefix + endpoint.audience + "/feedback"
 		mux.HandleFunc("GET "+path, endpoint.list)
 		mux.HandleFunc("POST "+path+"/{id}/acknowledge", endpoint.acknowledge)
 		mux.HandleFunc("GET "+path+"/unread-count", endpoint.unreadCount)
 	}
 	admin := inboxEndpoint{pool: pool}
+	if len(scope) > 0 {
+		admin.districtScope = scope[0]
+	}
 	mux.HandleFunc("GET /api/v1/review-feedback/{resource}/{id}", admin.deliveries)
 }
 
@@ -114,8 +127,22 @@ func (e inboxEndpoint) deliveries(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "invalid_input", "回执查询不接收额外参数。")
 		return
 	}
-	rows, err := e.pool.Query(r.Context(), `SELECT id::text,recipient,state,sent_at,acknowledged_at FROM review_notices
-		WHERE resource=$1 AND resource_id=$2 ORDER BY sequence DESC LIMIT 50`, resource, id)
+	query := `SELECT id::text,recipient,state,sent_at,acknowledged_at FROM review_notices
+		WHERE resource=$1 AND resource_id=$2`
+	args := []any{resource, id}
+	if e.districtScope != nil {
+		filing := receiptFiling(resource)
+		condition, districts := e.districtScope(r.Context(), filing, "$3")
+		if districts != nil {
+			if condition == "" {
+				httpx.Error(w, 404, "not_found", "未找到该业务回执。")
+				return
+			}
+			query += " AND " + condition
+			args = append(args, districts)
+		}
+	}
+	rows, err := e.pool.Query(r.Context(), query+` ORDER BY sequence DESC LIMIT 50`, args...)
 	if err != nil {
 		httpx.Error(w, 500, "internal_error", "暂时无法读取业务回执。")
 		return
@@ -128,6 +155,34 @@ func (e inboxEndpoint) deliveries(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, struct {
 		Items []delivery `json:"items"`
 	}{Items: items})
+}
+
+// receiptFiling 返回已接通监管辖区检查的回执所属备案。
+// 参数 resource 为受控业务类型，$2 绑定该业务的标识。
+// 返回值 固定 SQL 查询表达式，未完成范围接入的类型返回空值。
+func receiptFiling(resource string) string {
+	switch resource {
+	case "filings":
+		return "$2::uuid"
+	case "reports":
+		return "(SELECT filing_id FROM business_cases WHERE id=$2 AND kind='report')"
+	case "filing-applications":
+		return "(SELECT filing_id FROM filing_applications WHERE id=$2)"
+	case "implementations":
+		return "(SELECT filing_id FROM implementation_reports WHERE id=$2)"
+	case "remediations":
+		return `(SELECT r.filing_id FROM remediation_plans p
+			JOIN business_cases r ON r.id=p.report_id WHERE p.id=$2)`
+	case "hazards":
+		return "(SELECT filing_id FROM hazard_context WHERE id=$2)"
+	case "alerts":
+		return `(SELECT h.filing_id FROM local_alerts a
+			JOIN hazard_context h ON h.id=a.hazard_id WHERE a.id=$2)`
+	case "supervisions", "supervision-site":
+		return "(SELECT filing_id FROM supervision_tasks WHERE id=$2)"
+	default:
+		return ""
+	}
 }
 
 // knownResource 核对当前共享意见服务支持的业务模块。

@@ -150,13 +150,11 @@ func (s *Service) saveSiteAction(ctx context.Context, tx pgx.Tx, task taskRecord
 			visit_at=excluded.visit_at,location=excluded.location,inspectors=excluded.inspectors,
 			outcome=excluded.outcome,follow_up_due_on=excluded.follow_up_due_on`, task.ID, next.Status,
 		next.Version, next.VisitAt, next.Location, next.Inspectors, next.Outcome, next.FollowUpDueOn)
-	actor := s.actor
-	if owner != "" {
-		actor = owner
-	}
-	batch.Queue(`INSERT INTO supervision_site_events(task_id,version,action,status,actor,comment,input_hash,evidence_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid)`, task.ID, next.Version,
-		input.Action, next.Status, actor, input.Comment, hash, next.evidenceID)
+	name, actor := supervisionAuditActor(ctx, s.actor, owner)
+	batch.Queue(`INSERT INTO supervision_site_events(task_id,version,action,status,actor,comment,input_hash,
+		evidence_id,actor_id,actor_role)
+		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid,NULLIF($9,'')::uuid,NULLIF($10,''))`, task.ID,
+		next.Version, input.Action, next.Status, name, input.Comment, hash, next.evidenceID, actor.ID, actor.Role)
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 		return err
 	}

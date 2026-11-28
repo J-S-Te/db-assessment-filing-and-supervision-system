@@ -363,7 +363,7 @@ func routes(cfg settings, pool *pgxpool.Pool, records *cases.Service,
 	})
 	audittrail.New(pool).Register(mux)
 	tagcatalog.Register(mux, pool)
-	reviewinbox.Register(mux, pool)
+	reviewinbox.Register(mux, pool, receiptDistrictScope)
 	workflowreminders.Register(mux, pool)
 	app.RegisterWorkbenchOverview(mux, pool, cfg.reviewWindows)
 	app.RegisterWorkdayCalendar(mux, pool, cfg.operator)
@@ -371,6 +371,17 @@ func routes(cfg settings, pool *pgxpool.Pool, records *cases.Service,
 	app.RegisterAIReview(mux, os.DirFS(filepath.Join(cfg.assets, "review")))
 	mux.Handle("/", pages)
 	return app.LocalBoundary(cfg.address, cfg.lan, access.New(pool, cfg.accessOptions).Protect(mux))
+}
+
+// receiptDistrictScope 将审核回执绑定在当前监管员的可信辖区内。
+// 参数 ctx 为请求身份，filing 为受控备案查询，param 为授权区县数组参数。
+// 返回值 可用的 SQL 条件和授权辖区，非监管席位返回 nil 范围。
+func receiptDistrictScope(ctx context.Context, filing, param string) (string, []string) {
+	districts := access.Districts(ctx)
+	if districts == nil || filing == "" {
+		return "", districts
+	}
+	return access.FilingDistrictScope(filing, param, false), districts
 }
 
 // ready 提供仅含业务服务就绪状态的探针。

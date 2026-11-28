@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 )
 
@@ -46,14 +47,23 @@ func (s *Service) confirmBatch(ctx context.Context, input batchConfirm) (batchRe
 	return result, err
 }
 
-// loadBatchResult 返回同一预览的原发放结果，并核对原业务输入未被改变。
+// loadBatchResult 核对原输入、当前辖区及申请账号后返回原发放结果。
 // 参数 ctx、tx 控制事务，token、hash 分别为收件快照和请求信息的摘要。
 // 返回值 原回执、请求变化冲突或尚未处理的 ErrNoRows。
 func loadBatchResult(ctx context.Context, tx pgx.Tx, token, hash string) (batchResult, error) {
 	var result batchResult
 	var inputHash string
-	err := tx.QueryRow(ctx, `SELECT input_hash,result FROM supervision_dispatch_batches WHERE preview_token=$1`,
-		token).Scan(&inputHash, &result)
+	actor, _ := access.Current(ctx)
+	err := tx.QueryRow(ctx, `SELECT b.input_hash,b.result FROM supervision_dispatch_batches b
+		WHERE b.preview_token=$1 AND ($2::text[] IS NULL OR (
+			b.actor_id=NULLIF($3,'')::uuid AND EXISTS (
+				SELECT 1 FROM supervision_tasks t WHERE t.id=b.template_task_id AND `+
+		access.FilingDistrictScope("t.filing_id", "$2", false)+`
+			) AND NOT EXISTS (
+				SELECT 1 FROM jsonb_array_elements(b.result->'items') AS recipients(item)
+				WHERE NOT `+access.FilingDistrictScope("(item->>'filingId')::uuid", "$2", false)+`
+			)
+		))`, token, access.Districts(ctx), actor.ID).Scan(&inputHash, &result)
 	if err == nil && inputHash != hash {
 		return batchResult{}, errScope
 	}
@@ -66,10 +76,12 @@ func loadBatchResult(ctx context.Context, tx pgx.Tx, token, hash string) (batchR
 func (s *Service) saveBatch(ctx context.Context, tx pgx.Tx, plan batchPlan, token, hash string) (batchResult, error) {
 	input := plan.input
 	result := batchResult{Items: make([]batchDelivery, 0, len(plan.items))}
+	name, actor := supervisionAuditActor(ctx, s.actor, "")
 	err := tx.QueryRow(ctx, `INSERT INTO supervision_dispatch_batches(preview_token,input_hash,
-		template_task_id,template_version,district,levels,title,due_on,actor)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id::text`, token, hash, input.TemplateTaskID,
-		input.TemplateVersion, input.District, input.Levels, input.Title, input.DueOn, s.actor).Scan(&result.ID)
+		template_task_id,template_version,district,levels,title,due_on,actor,actor_id,actor_role)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NULLIF($10,'')::uuid,NULLIF($11,'')) RETURNING id::text`,
+		token, hash, input.TemplateTaskID, input.TemplateVersion, input.District, input.Levels, input.Title,
+		input.DueOn, name, actor.ID, actor.Role).Scan(&result.ID)
 	if err != nil {
 		return batchResult{}, err
 	}
@@ -101,10 +113,12 @@ func (s *Service) publishBatchChild(ctx context.Context, tx pgx.Tx, batchID stri
 	var child string
 	err := tx.QueryRow(ctx, `INSERT INTO supervision_tasks(request_id,dispatch_batch_id,filing_id,
 		filing_number,system_name,organization_name,title,due_on,cycle_year,status,version,published_at)
-		VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,EXTRACT(YEAR FROM $7::date)::int,'open',2,clock_timestamp())
+		SELECT gen_random_uuid(),$1,$2::uuid,$3,$4,$5,$6,$7::date,EXTRACT(YEAR FROM $7::date)::int,
+		       'open',2,clock_timestamp()
+		WHERE `+access.FilingDistrictScope("$2::uuid", "$8", true)+`
 		ON CONFLICT (filing_id,cycle_year) WHERE lead_alert_id IS NULL AND status<>'cancelled'
 		DO NOTHING RETURNING id::text`, batchID, item.FilingID, item.Number, item.SystemName,
-		item.OrganizationName, plan.input.Title, plan.input.DueOn).Scan(&child)
+		item.OrganizationName, plan.input.Title, plan.input.DueOn, access.Districts(ctx)).Scan(&child)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", errScope
 	}
@@ -126,10 +140,12 @@ func (s *Service) publishBatchChild(ctx context.Context, tx pgx.Tx, batchID stri
 // 返回值 任一引用或留痕落库错误。
 func (s *Service) persistBatchChild(ctx context.Context, tx pgx.Tx, child string, sources [2]string) error {
 	batch := &pgx.Batch{}
+	name, actor := supervisionAuditActor(ctx, s.actor, "")
 	batch.Queue(`INSERT INTO supervision_dispatched_templates(task_id,kind,source_attachment_id)
 		VALUES($1,'inspection_template',$2),($1,'summary_template',$3)`, child, sources[0], sources[1])
-	batch.Queue(`INSERT INTO supervision_events(task_id,version,action,from_status,to_status,actor)
-		VALUES($1,1,'create',NULL,'draft',$2),($1,2,'publish','draft','open',$2)`, child, s.actor)
+	batch.Queue(`INSERT INTO supervision_events(task_id,version,action,from_status,to_status,actor,actor_id,actor_role)
+		VALUES($1,1,'create',NULL,'draft',$2,NULLIF($3,'')::uuid,NULLIF($4,'')),
+		      ($1,2,'publish','draft','open',$2,NULLIF($3,'')::uuid,NULLIF($4,''))`, child, name, actor.ID, actor.Role)
 	return tx.SendBatch(ctx, batch).Close()
 }
 

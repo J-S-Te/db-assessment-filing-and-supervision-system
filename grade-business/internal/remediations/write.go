@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"grade-business/internal/access"
 )
 
 type lockedPlan struct {
@@ -87,9 +88,11 @@ func checkReportChange(ctx context.Context, tx pgx.Tx, current lockedPlan, id, r
 // 返回值 当前事务内的一致计划状态，或记录不存在与读取错误。
 func lockPlan(ctx context.Context, tx pgx.Tx, id string) (lockedPlan, error) {
 	var out lockedPlan
-	err := tx.QueryRow(ctx, `SELECT status,report_id::text,to_char(deadline,'YYYY-MM-DD'),
-		version,submission FROM remediation_plans WHERE id=$1
-		AND ($2='' OR frozen_organization_name IS NULL) FOR UPDATE`, id, operatorOrganization(ctx)).
+	err := tx.QueryRow(ctx, `SELECT p.status,p.report_id::text,to_char(p.deadline,'YYYY-MM-DD'),
+		p.version,p.submission `+joins+` WHERE p.id=$1
+		AND ($2='' OR p.frozen_organization_name IS NULL)
+		AND `+access.FilingDistrictScope("f.id", "$3", true)+` FOR UPDATE OF p`,
+		id, operatorOrganization(ctx), access.Districts(ctx)).
 		Scan(&out.Status, &out.ReportID, &out.Deadline, &out.Version, &out.Submission)
 	if organization := operatorOrganization(ctx); err == nil && organization != "" {
 		err = lockOrganization(ctx, tx, out.ReportID, organization)

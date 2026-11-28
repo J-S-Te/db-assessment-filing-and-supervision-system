@@ -5,7 +5,68 @@ info:
   version: 1.32.0
 servers:
 - url: "/api/v1"
+security:
+- AccessSession: []
 paths:
+  "/auth/login":
+    post:
+      operationId: login
+      summary: 创建当前账号的会话
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: 已登录并设置会话 Cookie，首次登录时需先改密
+        default:
+          "$ref": "#/components/responses/Error"
+  "/auth/session":
+    get:
+      operationId: currentSession
+      summary: 校验会话并读取角色、辖区及页面权限
+      responses:
+        '200':
+          description: 当前账号及服务器确认的权限
+        default:
+          "$ref": "#/components/responses/Error"
+  "/auth/logout":
+    post:
+      operationId: logout
+      summary: 撤销当前会话并清理 Cookie
+      responses:
+        '204':
+          description: 已退出
+        default:
+          "$ref": "#/components/responses/Error"
+  "/auth/password":
+    post:
+      operationId: changePassword
+      summary: 验证当前口令后更新口令并撤销既有会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: {type: string, format: password}
+                newPassword: {type: string, format: password}
+      responses:
+        '204':
+          description: 口令已更新，请重新登录
+        default:
+          "$ref": "#/components/responses/Error"
   "/institution-accounts":
     post:
       operationId: createInstitutionAccount
@@ -3274,6 +3335,7 @@ paths:
         format: uuid
     post:
       operationId: actOnImplementation
+      description: 初终审须由不同账号完成。旧记录缺少可信审核身份时可填写原因并重新初审。
       responses:
         '200':
           description: 业务操作结果
@@ -3298,6 +3360,7 @@ paths:
                   - accept
                   - approve
                   - return_for_correction
+                  - restart_initial
                   - withdraw
                   - archive
                 expectedVersion:
@@ -13561,6 +13624,7 @@ components:
       properties:
         name: {type: string, maxLength: 200}
         code: {type: string, maxLength: 80}
+        codeManaged: {type: boolean, description: 机构端已核定单位的信用代码由系统管理员维护}
         classification: {type: string}
         district: {type: string}
         qualification: {type: string}
@@ -16436,6 +16500,8 @@ components:
           type: integer
           format: int64
           minimum: 1
+        reviewBlockReason:
+          type: string
         allowedActions:
           type: array
           items:
@@ -16471,6 +16537,11 @@ components:
         action:
           type: string
         operator:
+          type: string
+        operatorId:
+          type: string
+          format: uuid
+        operatorRole:
           type: string
         occurredAt:
           type: string

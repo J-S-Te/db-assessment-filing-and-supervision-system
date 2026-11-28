@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"grade-business/internal/access"
 	"grade-business/internal/hazards"
 	"grade-business/internal/reviewinbox"
 )
@@ -27,16 +28,25 @@ const lockedAlertInstitution = `COALESCE(h.retest_institution,
 // 返回值 当前来源、归属与期限，或访问及数据库错误。
 func lockAlertSource(ctx context.Context, tx pgx.Tx, id pgtype.UUID) (lockedAlertSource, error) {
 	var result lockedAlertSource
+	var filing string
 	scope := currentAlertScope(ctx)
+	districts := access.Districts(ctx)
 	err := tx.QueryRow(ctx, `SELECT h.id::text,h.status,to_char(h.deadline,'YYYY-MM-DD'),
-	  to_char(`+alertBusinessDateSQL+`,'YYYY-MM-DD'),f.organization_name,`+lockedAlertInstitution+`,f.number,f.system_name
+	  to_char(`+alertBusinessDateSQL+`,'YYYY-MM-DD'),f.organization_name,`+lockedAlertInstitution+`,f.number,f.system_name,
+	  f.id::text
 	  FROM local_alerts a`+alertSourceJoins+`
 	  JOIN business_cases anchor ON anchor.id=COALESCE(hc.report_id,hc.filing_id)
 	  WHERE a.id=$1 AND ($2::text='' OR ($2='operator' AND f.organization_name COLLATE "C"=$3)
 	    OR ($2='institution' AND (`+lockedAlertInstitution+`) COLLATE "C"=$3))
-	  FOR UPDATE OF h FOR SHARE OF anchor,f`, id, scope.audience, scope.recipient).
+	  AND `+access.FilingDistrictScope("f.id", "$4", false)+`
+	  FOR UPDATE OF h FOR SHARE OF anchor,f`, id, scope.audience, scope.recipient, districts).
 		Scan(&result.HazardID, &result.Status, &result.Deadline, &result.Today, &result.Organization,
-			&result.Institution, &result.FilingNumber, &result.SystemName)
+			&result.Institution, &result.FilingNumber, &result.SystemName, &filing)
+	if err == nil && districts != nil {
+		var visible bool
+		err = tx.QueryRow(ctx, "SELECT true WHERE "+access.FilingDistrictScope("$1::uuid", "$2", true),
+			filing, districts).Scan(&visible)
+	}
 	return result, err
 }
 

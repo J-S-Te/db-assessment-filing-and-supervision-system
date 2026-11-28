@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/cases"
 )
 
@@ -182,9 +183,10 @@ func (s *Service) discardUnused(ctx context.Context, key string) {
 func (s *Service) download(w http.ResponseWriter, r *http.Request, id, owner string) error {
 	var item cases.Attachment
 	var key string
+	districtScope := " AND " + access.FilingDistrictScope("t.filing_id", "$4", false)
 	err := s.db.QueryRow(r.Context(), `SELECT `+materialColumns+`,a.file_key
 		FROM supervision_attachments a JOIN supervision_tasks t ON t.id=a.task_id
-		WHERE t.id=$1 AND `+readableScope+` AND a.id=$3
+		WHERE t.id=$1 AND `+readableScope+districtScope+` AND a.id=$3
 		 AND CASE WHEN a.kind IN ('inspection_template','summary_template')
 		   THEN ($2='' OR a.task_version=(SELECT max(latest.task_version) FROM supervision_attachments latest
 		          WHERE latest.task_id=a.task_id AND latest.kind=a.kind))
@@ -197,7 +199,8 @@ func (s *Service) download(w http.ResponseWriter, r *http.Request, id, owner str
 		SELECT `+materialColumns+`,a.file_key FROM supervision_dispatched_templates st
 		JOIN supervision_attachments a ON a.id=st.source_attachment_id
 		JOIN supervision_tasks t ON t.id=st.task_id
-		WHERE t.id=$1 AND `+readableScope+` AND a.id=$3 LIMIT 1`, id, owner, r.PathValue("attachmentId")).
+		WHERE t.id=$1 AND `+readableScope+districtScope+` AND a.id=$3 LIMIT 1`,
+		id, owner, r.PathValue("attachmentId"), access.Districts(r.Context())).
 		Scan(append(materialTargets(&item), &key)...)
 	if err != nil {
 		return err

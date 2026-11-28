@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"grade-business/internal/access"
 	"grade-business/internal/httpx"
 )
 
@@ -147,6 +148,11 @@ func (s *Service) reviewApplicationHTTP(w http.ResponseWriter, r *http.Request) 
 		respondError(w, err)
 		return
 	}
+	if actor, ok := access.Current(r.Context()); ok && actor.Role == access.Regulator &&
+		input.Decision != approve && input.Decision != returnForFix {
+		httpx.Error(w, http.StatusForbidden, "permission_denied", "监管席位仅能审核或退回备案申请。")
+		return
+	}
 	result, err := s.changeApplicationStatus(r.Context(), r.PathValue("id"), input)
 	respondApplication(w, result, err)
 }
@@ -156,6 +162,8 @@ func (s *Service) reviewApplicationHTTP(w http.ResponseWriter, r *http.Request) 
 // 返回值 无。
 func respondApplication(w http.ResponseWriter, result mutation, err error) {
 	switch {
+	case errors.Is(err, errApplicationOwnerChange):
+		httpx.Error(w, http.StatusForbidden, "filing_owner_change_requires_admin", "涉及备案所属单位变更的申请须由系统管理员审批。")
 	case errors.Is(err, errApplicationRetest):
 		httpx.Error(w, http.StatusConflict, "retest_required", "换机构复测须先通过同一备案及目标机构的变更实施报备。")
 	case errors.Is(err, errApplicationMaterials):

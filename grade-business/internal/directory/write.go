@@ -3,11 +3,14 @@ package directory
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"grade-business/internal/geoarea"
 )
+
+var regulatorAreas = geoarea.RegulatorAreas()
 
 // create 完成主档登记、机构关联和首条历史的同一事务。
 // 参数 ctx 为写入上下文，kind、scope 指定目录和机构范围，input 为登记字段。
@@ -62,6 +65,14 @@ func prepareCreate(ctx context.Context, tx pgx.Tx, kind, scope string, item entr
 	}
 	if !validEntry(kind, item) {
 		return entry{}, errInvalid
+	}
+	if kind == unit {
+		if scope != "" {
+			// 机构登记用于开始报送，系统管理员或注册审批核实后才建立监管辖区。
+			item.District = ""
+		} else {
+			item.District = canonicalUnitDistrict(item.District)
+		}
 	}
 	if kind == person {
 		return item, nil
@@ -127,6 +138,15 @@ func (s service) patch(ctx context.Context, kind, scope, id string, input change
 			return err
 		}
 		candidate := mergeChange(before, input)
+		switch {
+		case kind == unit && scope != "":
+			candidate, err = prepareInstitutionUnitChange(before, candidate)
+			if err != nil {
+				return err
+			}
+		case kind == unit && input.District != nil:
+			candidate.District = canonicalUnitDistrict(candidate.District)
+		}
 		if candidate == before {
 			result = before
 			return nil
@@ -140,19 +160,47 @@ func (s service) patch(ctx context.Context, kind, scope, id string, input change
 	return result, err
 }
 
+// canonicalUnitDistrict 统一受支持的监管区划并兼容原有通用区县名称。
+// 参数 district 为已登记或候选的区县。
+// 返回值 标准监管区划名称或去除首尾空白的原有区县名称。
+func canonicalUnitDistrict(district string) string {
+	if name := regulatorAreas[geoarea.RegulatorAreaCode(district)]; name != "" {
+		return name
+	}
+	return strings.TrimSpace(district)
+}
+
+// unitCreditCodeManaged 判断单位信用代码是否已随监管区划交由管理员维护。
+// 参数 item 为已有的单位档案。
+// 返回值 当前单位已登记受支持的监管区划时为真。
+func unitCreditCodeManaged(item entry) bool {
+	return geoarea.RegulatorAreaCode(item.District) != ""
+}
+
+// prepareInstitutionUnitChange 保护可信辖区及其绑定的单位身份，并保留机构兼容的等价输入。
+// 参数 before、candidate 为已锁定的原值和候选值。
+// 返回值 通过单位身份核对的候选值，或提交了由系统管理员维护的修改。
+func prepareInstitutionUnitChange(before, candidate entry) (entry, error) {
+	if canonicalUnitDistrict(before.District) != canonicalUnitDistrict(candidate.District) {
+		return entry{}, errDistrictManaged
+	}
+	candidate.District = before.District
+	sameCode := strings.EqualFold(strings.TrimSpace(before.Code), candidate.Code)
+	if !sameCode && unitCreditCodeManaged(before) {
+		return entry{}, errUnitCodeManaged
+	}
+	if sameCode {
+		candidate.Code = before.Code
+	}
+	return candidate, nil
+}
+
 // applyChange 验证新归属和状态，并在提交前检查是否妨碍进行中的业务。
 // 参数 ctx、tx 为修改事务，kind、scope 为目录范围，before、candidate 为修改前后值。
 // 返回值 新值或不符合资质、业务时序、数据库约束的错误。
 func applyChange(ctx context.Context, tx pgx.Tx, kind, scope string, before, candidate entry) (entry, error) {
 	if !validEntry(kind, candidate) {
 		return entry{}, errInvalid
-	}
-	if kind == unit && scope != "" {
-		oldArea := geoarea.QuzhouAreaCode(before.District)
-		newArea := geoarea.QuzhouAreaCode(candidate.District)
-		if oldArea != newArea {
-			return entry{}, errDistrictManaged
-		}
 	}
 	moving := before.InstitutionID != candidate.InstitutionID
 	if kind == person && (moving || candidate.Status == active && before.Status != active) {

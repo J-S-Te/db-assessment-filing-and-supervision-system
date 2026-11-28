@@ -59,8 +59,24 @@ WITH operations (event_key, resource, resource_id, title, reference, action,
 	SELECT 'workday-calendar:'||e.request_id::text,'workday-calendar',e.request_id,
 		'工作日历',to_char(e.day,'YYYY-MM-DD'),e.mode,'',e.operator,e.changed_at,e.reason
 	FROM workflow_calendar_events e
+	UNION ALL
+	SELECT 'access:'||e.id::text,'access',NULL::uuid,
+		CASE WHEN e.event LIKE 'operator_registration_%' THEN '运营单位注册'
+		     WHEN e.event='account_provisioned' THEN '账号开通'
+		     WHEN e.event='denied' THEN '权限检查' ELSE '身份认证' END,
+		CASE e.role_code WHEN 'ROLE_SYS_ADMIN' THEN '系统管理员' WHEN 'ROLE_REGULATOR' THEN '监管员'
+		     WHEN 'ROLE_ORG_ADMIN' THEN '测评机构管理员' WHEN 'ROLE_OPERATOR' THEN '运营者' ELSE '' END,
+		e.event,'',
+		CASE WHEN e.event='account_provisioned' AND e.target='database_operator' THEN '运维入口'
+		     WHEN e.operator_id IS NULL THEN '未认证'
+		     ELSE COALESCE(NULLIF(regexp_replace(a.display_name,'[[:cntrl:]]','','g'),''),'已认证账号') END,
+		e.occurred_at,e.event
+	FROM access_events e LEFT JOIN access_accounts a ON a.id=e.operator_id
+	WHERE e.event IN ('login','login_failed','login_throttled','logout','password_changed',
+		'password_change_failed','password_change_throttled','denied','account_provisioned',
+		'operator_registration_submitted','operator_registration_approved','operator_registration_rejected')
 )
-SELECT event_key,resource,resource_id::text,title,reference,action,stage,operator,occurred_at
+SELECT event_key,resource,COALESCE(resource_id::text,''),title,reference,action,stage,operator,occurred_at
 FROM operations
 WHERE ($1::text='' OR resource=$1)
   AND ($2::text='' OR

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"grade-business/internal/access"
 	"grade-business/internal/cases"
 	"grade-business/internal/httpx"
 )
@@ -208,9 +209,10 @@ func (s *Service) siteDownloadHTTP(w http.ResponseWriter, r *http.Request, id, o
 		JOIN supervision_tasks t ON t.id=a.task_id
 		JOIN supervision_site_inspections s ON s.task_id=t.id
 		WHERE t.id=$1 AND `+readableScope+` AND a.id=$3 AND `+visibleSiteFile+`
+		AND `+access.FilingDistrictScope("t.filing_id", "$4", false)+`
 		AND CASE WHEN `+originalTaskOwner+` THEN a.version<=s.merge_history_version
 		         WHEN $2<>'' THEN a.version>COALESCE(s.merge_history_version,0) ELSE true END`,
-		id, owner, attachment).
+		id, owner, attachment, access.Districts(r.Context())).
 		Scan(append(materialTargets(&item), &key)...)
 	if err == nil {
 		err = s.files.ServeBusinessAttachment(w, r, item, key)

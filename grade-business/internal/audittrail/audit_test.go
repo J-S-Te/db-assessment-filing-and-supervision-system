@@ -18,6 +18,15 @@ import (
 
 const auditEndpoint = "/api/v1/audit"
 
+// TestAuditLabelsImplementationRestartInitial 核对实施报备重新初审的审计动作名称。
+// 参数 t 为审计动作名称的测试上下文。
+// 返回值 无。
+func TestAuditLabelsImplementationRestartInitial(t *testing.T) {
+	if label := actionLabel("implementations", "restart_initial", "pending_final"); label != "重新进入初审" {
+		t.Errorf("重新初审的审计动作名称 = %q", label)
+	}
+}
+
 // TestAuditRejectsUnknownFilters 核对只读审计接口在查询数据库前拒绝无效筛选。
 // 参数 t 为测试上下文。
 // 返回值 无。

@@ -12,7 +12,7 @@ import (
 // 返回值 无。
 func TestInstitutionImplementationScope(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-机构范围", approved)
 	item := testInput(filing, routine)
 	item.AssessmentOrg = "实际实施机构"
@@ -42,7 +42,7 @@ func TestInstitutionImplementationScope(t *testing.T) {
 // 返回值 无。
 func TestInstitutionImplementationCorrection(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-机构补正", approved)
 	otherFiling := implementationTestFiling(t, pool, "测试备案-禁止重关联", approved)
 	item := testInput(filing, change)
@@ -67,7 +67,7 @@ func TestInstitutionImplementationCorrection(t *testing.T) {
 // 返回值 无。
 func TestInstitutionImplementationDraftState(t *testing.T) {
 	pool := isolatedImplementationPool(t)
-	mux := implementationTestMux(pool)
+	mux := implementationTestMux(t, pool)
 	filing := implementationTestFiling(t, pool, "测试备案-实施草稿", approved)
 	item := testInput(filing, routine)
 	record := decodeResponse[mutation](t, callImplementation(mux, "POST", path, item), 201)

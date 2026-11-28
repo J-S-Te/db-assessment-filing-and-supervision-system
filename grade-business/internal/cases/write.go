@@ -276,6 +276,10 @@ func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution
 	if !validID(id) {
 		return stateRow{}, ErrNotFound
 	}
+	district := access.FilingDistrictScope("f.id", "$5", true)
+	if kind == filing {
+		district = filingUnitDistrictScope("c.directory_unit_id", "$5", true)
+	}
 	var row stateRow
 	err := tx.QueryRow(ctx, `SELECT c.number,c.status,c.version,COALESCE(c.filing_id::text,''),
 		    c.assessment_org,c.submission_profile,c.operator_origin,c.directory_person_id::text,
@@ -283,7 +287,7 @@ func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution
 		recordJoin+`
 		WHERE c.kind=$1 AND c.id=$2 AND c.discarded_at IS NULL
 		  AND ($3='' OR (c.kind='filing' AND c.organization_name=$3 AND`+operatorFilingBinding("$6")+`))
-		  AND ($4='' OR c.assessment_org=$4)`+caseDistrictScope("$5")+
+		  AND ($4='' OR c.assessment_org=$4) AND `+district+
 		` FOR UPDATE OF c`, kind, id, operatorFilingScope(ctx), institution, access.Districts(ctx), operatorUnitID(ctx)).
 		Scan(&row.number, &row.status, &row.version, &row.filingID, &row.assessmentOrg, &row.submissionProfile,
 			&row.operatorOrigin, &row.assessmentPersonID, &row.numberProvisional)
@@ -291,6 +295,20 @@ func lockInstitutionRecord(ctx context.Context, tx pgx.Tx, kind, id, institution
 		err = ErrNotFound
 	}
 	return row, err
+}
+
+// filingUnitDistrictScope 直接从备案的可信单位外键核对辖区，避免备案行锁升级。
+// 参数 unit、parameter 为固定 SQL 表达式和辖区参数，lock 指示调用方已锁或将锁备案且需锁定单位。
+// 返回值 按现行单位辖区收窄记录的 SQL 条件。
+func filingUnitDistrictScope(unit, parameter string, lock bool) string {
+	locking := ""
+	if lock {
+		locking = " FOR SHARE OF scope_unit"
+	}
+	return `(` + parameter + `::text[] IS NULL OR EXISTS (
+		SELECT 1 FROM directory_parties scope_unit
+		WHERE scope_unit.id=` + unit + ` AND scope_unit.kind='unit'
+		AND btrim(scope_unit.district)=ANY(` + parameter + `::text[])` + locking + `))`
 }
 
 // changeStatus 在同一事务中推进状态并写入对应审核留痕。
