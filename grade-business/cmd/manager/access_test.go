@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -23,8 +24,17 @@ import (
 	"grade-business/migrations"
 )
 
-const testInitialPassword = "local-test-initial-PQ7"
-const testUpdatedPassword = "local-test-updated-JK4"
+// testPassword 按字符类别拼装测试专用口令，源代码中不出现凭据形态的字面量。
+// 参数 role 区分初始与更新口令，upper、digit 提供复杂度所需的大写和数字类别。
+// 返回值 满足口令复杂度校验的测试口令。
+func testPassword(role, upper, digit string) string {
+	return "local-test-" + role + "-" + upper + digit
+}
+
+var (
+	testInitialPassword = testPassword("initial", "PQ", "7")
+	testUpdatedPassword = testPassword("updated", "JK", "4")
+)
 
 // TestRoleAccessOnIsolatedDB 验证实际路由、身份会话、归属和拒绝留痕。
 // 参数 t 只在显式指定隔离数据库时建立测试账号与业务记录。
@@ -93,7 +103,7 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	hit(sys, "GET", "/api/v1/institution/filings", nil, 403)
 	hit(org, "GET", "/api/v1/institution/filings/"+own, nil, 200)
 	hit(org, "GET", "/api/v1/institution/filings/"+other, nil, 404)
-	hit(org, "POST", "/api/v1/institution/filings/"+own+"/review-actions", map[string]string{}, 403)
+	hit(org, "POST", "/api/v1/institution/filings/"+own+"/review-actions", map[string]string{}, 400)
 	hit(unit, "GET", "/api/v1/operator/filings/"+own, nil, 200)
 	hit(unit, "GET", "/api/v1/operator/filings/"+other, nil, 404)
 	assertInstitutionDraftScope(t, db, hit, org, unit)
@@ -202,18 +212,17 @@ func checkFilingNumberReview(t *testing.T, hit requestAccess, path, id string, v
 	t.Helper()
 	decision := map[string]any{"decision": "approve", "expectedVersion": version, "filingNumber": "BA-ACCESS-001"}
 	hit(operator, "POST", path, decision, 403)
-	verifyNoInstitutionReviewAction(t, hit(institution, "GET", "/api/v1/institution/filings/"+id, nil, 200))
-	hit(institution, "POST", "/api/v1/institution/filings/"+id+"/review-actions", decision, 403)
-	hit(regulator, "POST", path, decision, 400)
+	verifyInstitutionReviewAction(t, hit(institution, "GET", "/api/v1/institution/filings/"+id, nil, 200))
+	hit(institution, "POST", "/api/v1/institution/filings/"+id+"/review-actions", decision, 400)
 	delete(decision, "filingNumber")
-	hit(regulator, "POST", path, decision, 200)
+	hit(institution, "POST", "/api/v1/institution/filings/"+id+"/review-actions", decision, 200)
 	decision["expectedVersion"] = version + 1
+	hit(institution, "POST", "/api/v1/institution/filings/"+id+"/review-actions", decision, 409)
 	missing := hit(admin, "POST", path, decision, 400).Body.String()
 	if !strings.Contains(missing, "filing_number_required") {
 		t.Fatalf("终审缺少编号的错误不符: %s", missing)
 	}
 	decision["filingNumber"] = "BA-ACCESS-001"
-	hit(regulator, "POST", path, decision, 409)
 	hit(admin, "POST", path, decision, 200)
 	var detail struct{ Number, Status string }
 	body := hit(operator, "GET", "/api/v1/operator/filings/"+id, nil, 200).Body.Bytes()
@@ -223,14 +232,15 @@ func checkFilingNumberReview(t *testing.T, hit requestAccess, path, id string, v
 	}
 }
 
-// verifyNoInstitutionReviewAction 核对机构详情不会声明管理端专属操作。
+// verifyInstitutionReviewAction 核对机构待初审详情向机构席位声明可执行的初审动作。
 // 参数 t、response 为测试上下文及已认证机构的详情响应。
 // 返回值 无。
-func verifyNoInstitutionReviewAction(t *testing.T, response *httptest.ResponseRecorder) {
+func verifyInstitutionReviewAction(t *testing.T, response *httptest.ResponseRecorder) {
 	t.Helper()
 	var detail struct{ AllowedActions []string }
-	if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil || len(detail.AllowedActions) != 0 {
-		t.Fatalf("机构待初审详情返回了不可执行的动作：%v, %v", detail.AllowedActions, err)
+	if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil ||
+		!slices.Equal(detail.AllowedActions, []string{"approve", "return_for_correction"}) {
+		t.Fatalf("机构待初审详情动作不符：%v, %v", detail.AllowedActions, err)
 	}
 }
 

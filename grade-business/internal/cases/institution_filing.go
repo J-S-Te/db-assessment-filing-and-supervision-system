@@ -40,8 +40,8 @@ func (h endpoint) institutionFilingDetail(w http.ResponseWriter, r *http.Request
 	item, err := h.service.detailInScope(r.Context(), filing, r.PathValue("id"), institution)
 	item.AllowedActions = institutionEditActions(item.Status)
 	if item.InitialReviewAudience != "" {
-		_, authenticated := access.Current(r.Context())
-		item.AllowedActions = initialReviewActions(item.Status, !authenticated)
+		actor, authenticated := access.Current(r.Context())
+		item.AllowedActions = initialReviewActions(item.Status, !authenticated || actor.Role == access.OrgAdmin)
 	}
 	if item.withdrawalPending {
 		item.AllowedActions = []string{}

@@ -40,15 +40,23 @@ func LoadDeepSeek(path, key string) (*DeepSeek, error) {
 		return nil, err
 	}
 	config := deepSeekFile{DeepSeekConfig: defaultDeepSeekConfig()}
-	file, err := os.Open(path)
-	if err == nil {
-		defer file.Close()
-		config, err = readDeepSeekConfig(file)
-		if err != nil {
-			return nil, err
+	root, rootErr := os.OpenRoot(filepath.Dir(path))
+	if rootErr != nil {
+		if !errors.Is(rootErr, os.ErrNotExist) || path != LocalDeepSeekConfig {
+			return nil, errors.New("无法读取 DeepSeek 预审配置文件")
 		}
-	} else if !errors.Is(err, os.ErrNotExist) || path != LocalDeepSeekConfig {
-		return nil, errors.New("无法读取 DeepSeek 预审配置文件")
+	} else {
+		defer root.Close()
+		file, err := root.Open(filepath.Base(path))
+		if err == nil {
+			defer file.Close()
+			config, err = readDeepSeekConfig(file)
+			if err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(err, os.ErrNotExist) || path != LocalDeepSeekConfig {
+			return nil, errors.New("无法读取 DeepSeek 预审配置文件")
+		}
 	}
 	key = strings.TrimSpace(key)
 	if key == "" {

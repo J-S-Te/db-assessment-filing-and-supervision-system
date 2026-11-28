@@ -48,6 +48,7 @@ import (
 
 type settings struct {
 	address, dsn, assets, attachments, operator string
+	tlsCert, tlsKey                             string
 	reviewWindows                               app.ReviewWindows
 	lan                                         netip.Prefix
 	filingAI                                    *filingaudit.DeepSeek
@@ -98,6 +99,11 @@ func loadSettings() (settings, error) {
 	if err != nil {
 		return settings{}, errors.New("GRADE_BUSINESS_COOKIE_SECURE 必须是布尔值")
 	}
+	cfg.tlsCert = strings.TrimSpace(os.Getenv("GRADE_BUSINESS_TLS_CERT"))
+	cfg.tlsKey = strings.TrimSpace(os.Getenv("GRADE_BUSINESS_TLS_KEY"))
+	if (cfg.tlsCert == "") != (cfg.tlsKey == "") {
+		return settings{}, errors.New("业务 HTTPS 需同时配置 GRADE_BUSINESS_TLS_CERT 与 GRADE_BUSINESS_TLS_KEY")
+	}
 	if proxy := strings.TrimSpace(os.Getenv("GRADE_BUSINESS_AUTH_TRUSTED_PROXY")); proxy != "" {
 		addr, parseErr := netip.ParseAddr(proxy)
 		if parseErr != nil || addr.Zone() != "" || addr.IsUnspecified() {
@@ -105,6 +111,11 @@ func loadSettings() (settings, error) {
 		}
 		cfg.accessOptions.TrustedProxy = addr.Unmap()
 	}
+	idleMinutes, idleErr := strconv.Atoi(env("GRADE_BUSINESS_SESSION_IDLE_MINUTES", "30"))
+	if idleErr != nil || idleMinutes < 1 || idleMinutes > 720 {
+		return settings{}, errors.New("GRADE_BUSINESS_SESSION_IDLE_MINUTES 需为 1 至 720 之间的整数")
+	}
+	cfg.accessOptions.IdleTimeout = time.Duration(idleMinutes) * time.Minute
 	cfg.reviewWindows, err = loadReviewWindows()
 	if err != nil {
 		return settings{}, err
@@ -222,7 +233,7 @@ func serve(ctx context.Context, cfg settings) error {
 		<-assessmentDueStopped
 		<-remindersStopped
 	}()
-	return listen(ctx, cfg.address, handler)
+	return listen(ctx, cfg, handler)
 }
 
 // connect 建立本地业务数据库连接池并检查连通性。
@@ -378,18 +389,29 @@ func ready(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool) {
 }
 
 // listen 在指定的本机地址提供业务 HTTP 并等待平滑停止。
-// 参数 ctx 控制运行，address 为回环地址，handler 为业务应用入口。
+// 配置了 GRADE_BUSINESS_TLS_CERT 与 GRADE_BUSINESS_TLS_KEY 时直接以 HTTPS 提供，会话 Cookie 自动携带 Secure。
+// 参数 ctx 控制运行，cfg 为含监听地址与可选证书的业务配置，handler 为业务应用入口。
 // 返回值 监听、服务或关停错误。
-func listen(ctx context.Context, address string, handler http.Handler) error {
-	socket, err := net.Listen("tcp", address)
+func listen(ctx context.Context, cfg settings, handler http.Handler) error {
+	socket, err := net.Listen("tcp", cfg.address)
 	if err != nil {
 		return errors.New("本机业务端口无法使用，请选择空闲端口")
 	}
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 2 * time.Minute,
 		WriteTimeout: 2 * time.Minute, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	done := make(chan error, 1)
-	go func() { done <- server.Serve(socket) }()
-	slog.Info("本地业务管理端可访问", "address", "http://"+address)
+	go func() {
+		if cfg.tlsCert != "" {
+			done <- server.ServeTLS(socket, cfg.tlsCert, cfg.tlsKey)
+			return
+		}
+		done <- server.Serve(socket)
+	}()
+	scheme := "http"
+	if cfg.tlsCert != "" {
+		scheme = "https"
+	}
+	slog.Info("本地业务管理端可访问", "address", scheme+"://"+cfg.address)
 	select {
 	case err := <-done:
 		return err

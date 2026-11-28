@@ -21,7 +21,9 @@ func TestPolicy(t *testing.T) {
 		{Regulator, "GET /api/v1/archives/units", false},
 		{Regulator, "GET /api/v1/filings/{id}", true},
 		{OrgAdmin, "GET /api/v1/institution/reports/{id}", true},
-		{OrgAdmin, "POST /api/v1/institution/filings/{id}/review-actions", false},
+		{OrgAdmin, "POST /api/v1/institution/filings/{id}/review-actions", true},
+		{OrgAdmin, "POST /api/v1/institution/filing-applications/{id}/review-actions", true},
+		{OrgAdmin, "POST /api/v1/institution/reports/{id}/review-actions", false},
 		{OrgAdmin, "GET /api/v1/dashboard/statistics", false},
 		{Operator, "GET /api/v1/operator/filings", true},
 		{Operator, "GET /api/v1/institution/filings", false},
@@ -47,6 +49,27 @@ func TestBindSubject(t *testing.T) {
 		want := query == "" || query == "?organization=单位甲"
 		if ok != want || ok && r.URL.Query().Get("organization") != "单位甲" {
 			t.Errorf("bindSubject(%q) = %v, want %v", query, ok, want)
+		}
+	}
+}
+
+// TestBindSubjectAssignedReview 核对机构待初审筛选只对机构备案集合开放。
+// 参数 t 用于报告待初审筛选的越权进入偏差。
+// 返回值 无。
+func TestBindSubjectAssignedReview(t *testing.T) {
+	actor := Principal{Role: OrgAdmin, Subject: "机构甲"}
+	for _, item := range []struct {
+		pattern, query string
+		want           bool
+	}{
+		{"GET /api/v1/institution/filings", "?review=assigned", true},
+		{"GET /api/v1/institution/filing-applications", "?review=assigned", true},
+		{"GET /api/v1/institution/hazards", "?review=assigned", false},
+		{"GET /api/v1/institution/filings", "?review=assigned&institution=机构乙", false},
+	} {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/institution/filings"+item.query, nil)
+		if ok := bindSubject(r, actor, item.pattern); ok != item.want {
+			t.Errorf("bindSubject(%q %q) = %v, want %v", item.pattern, item.query, ok, item.want)
 		}
 	}
 }

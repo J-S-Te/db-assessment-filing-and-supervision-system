@@ -157,9 +157,10 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 // 返回值 无。
 func (s *Service) changePassword(w http.ResponseWriter, r *http.Request) {
 	var input passwordInput
-	if httpx.Decode(w, r, &input) != nil || !validPassword(input.Next) ||
+	if httpx.Decode(w, r, &input) != nil || !strongPassword(input.Next) ||
 		!validPassword(input.Current) || input.Current == input.Next {
-		httpx.Error(w, 400, "invalid_password", "请填写当前密码，新密码至少 12 位且须与当前密码不同。")
+		httpx.Error(w, 400, "invalid_password",
+			"请填写当前密码，新密码至少 12 位且含大小写字母、数字、符号四类中的三类，并须与当前密码不同。")
 		return
 	}
 	actor, _ := Current(r.Context())

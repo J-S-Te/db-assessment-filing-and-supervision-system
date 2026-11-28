@@ -1,7 +1,6 @@
 package access
 
 import (
-	"crypto/rand"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -37,9 +36,15 @@ func (s *Service) createInstitutionAccount(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	actor, _ := Current(r.Context())
+	password, passwordErr := temporaryPassword()
+	if passwordErr != nil {
+		slog.Error("机构账号临时口令生成失败", "operatorId", actor.ID)
+		httpx.Error(w, 503, "institution_account_unavailable", "暂时无法开通机构账号，请稍后重试。")
+		return
+	}
 	account := AccountInput{
 		Role: OrgAdmin, SubjectID: input.InstitutionID, Name: input.Name,
-		Username: strings.ToLower(strings.TrimSpace(input.Username)), Password: rand.Text(),
+		Username: strings.ToLower(strings.TrimSpace(input.Username)), Password: password,
 	}
 	id, err := provisionAccount(r.Context(), s.db, account, actor)
 	switch {
