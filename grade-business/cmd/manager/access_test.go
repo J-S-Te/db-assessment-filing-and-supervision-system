@@ -87,7 +87,7 @@ func TestRoleAccessOnIsolatedDB(t *testing.T) {
 	hit := accessRequest(t, handler)
 	hit(nil, "GET", "/api/v1/filings", nil, 401)
 	sys := accessLogin(t, hit, admin.Username)
-	area := accessLogin(t, hit, "access-area")
+	area := accessLogin(t, hit, "access-area", regulator.AreaCode)
 	org := accessLogin(t, hit, institution.Username)
 	unit := accessLogin(t, hit, "access-unit")
 	snapshot := hit(area, "GET", "/api/v1/filings", nil, 200).Body.String()
@@ -431,12 +431,16 @@ func accessRequest(t *testing.T, handler http.Handler) requestAccess {
 }
 
 // accessLogin 执行首次登录、改密、旧会话撤销与正式重登。
-// 参数 t 为测试，hit 为实际 HTTP 请求入口，username 为测试账号。
+// 参数 t 为测试，hit 为请求入口，username 为账号，area 为监管账号的可选绑定辖区。
 // 返回值 已完成首登要求的新会话 Cookie。
-func accessLogin(t *testing.T, hit requestAccess, username string) *http.Cookie {
+func accessLogin(t *testing.T, hit requestAccess, username string, area ...string) *http.Cookie {
 	t.Helper()
+	credentials := map[string]string{"username": username, "password": testInitialPassword}
+	if len(area) > 0 {
+		credentials["areaCode"] = area[0]
+	}
 	first := hit(nil, "POST", "/api/v1/auth/login",
-		map[string]string{"username": username, "password": testInitialPassword}, 200).Result().Cookies()[0]
+		credentials, 200).Result().Cookies()[0]
 	if !first.HttpOnly || first.SameSite != http.SameSiteStrictMode {
 		t.Fatal("会话 Cookie 缺少浏览器防护")
 	}
@@ -444,6 +448,7 @@ func accessLogin(t *testing.T, hit requestAccess, username string) *http.Cookie 
 	hit(first, "POST", "/api/v1/auth/password",
 		map[string]string{"currentPassword": testInitialPassword, "newPassword": testUpdatedPassword}, 204)
 	hit(first, "GET", "/api/v1/auth/session", nil, 401)
+	credentials["password"] = testUpdatedPassword
 	return hit(nil, "POST", "/api/v1/auth/login",
-		map[string]string{"username": username, "password": testUpdatedPassword}, 200).Result().Cookies()[0]
+		credentials, 200).Result().Cookies()[0]
 }

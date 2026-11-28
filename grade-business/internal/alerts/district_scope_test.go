@@ -97,7 +97,7 @@ func districtAlertSession(t *testing.T, db *pgxpool.Pool, router *http.ServeMux)
 	}
 	api := access.New(db).Protect(router)
 	login := httptest.NewRequestWithContext(t.Context(), "POST", "/api/v1/auth/login",
-		strings.NewReader(`{"username":"`+username+`","password":"`+password+`"}`))
+		strings.NewReader(`{"username":"`+username+`","password":"`+password+`","areaCode":"330802"}`))
 	login.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, login)

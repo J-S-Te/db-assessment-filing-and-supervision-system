@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router'
 import CopyrightFooter from '../components/CopyrightFooter.vue'
 import SignInClock from '../components/SignInClock.vue'
@@ -11,6 +11,12 @@ import '../features/signin3d/styles.css'
 const route = useRoute()
 const router = useRouter()
 const changing = computed(() => route.path === '/account/password')
+const nonDistrictAccount = 'non-district'
+const loginArea = ref('')
+const loginAreas = ref<{ code: string; label: string }[]>([])
+const areasLoading = ref(false)
+const areasFailed = ref(false)
+const areaField = ref<HTMLSelectElement>()
 const username = ref('')
 const password = ref('')
 const nextPassword = ref('')
@@ -69,6 +75,28 @@ function togglePassword() {
   passwordField.value?.focus()
 }
 
+/**
+ * 用途 从服务端加载当前支持的登录辖区。
+ * 参数 无。
+ * 返回值 名录读取任务，失败时显示可重试提示。
+ */
+async function loadLoginAreas() {
+  areasLoading.value = true
+  areasFailed.value = false
+  try {
+    const response = await api<{ items: { code: string; label: string }[] }>('/auth/login-areas')
+    loginAreas.value = response.items
+  } catch {
+    areasFailed.value = true
+  } finally {
+    areasLoading.value = false
+  }
+}
+
+watch(changing, (isChanging) => {
+  if (!isChanging && !loginAreas.value.length && !areasLoading.value) void loadLoginAreas()
+}, { immediate: true })
+
 onMounted(() => {
   if (changing.value) return
   try {
@@ -113,6 +141,11 @@ async function enterAfterLogin(actor: Session, signInRoute: RouteLocationNormali
 async function submit() {
   if (pending.value) return
   failure.value = ''
+  if (!changing.value && !loginArea.value) {
+    showNotice('请先选择登录辖区或非辖区账号。')
+    areaField.value?.focus()
+    return
+  }
   if (!changing.value && (!username.value || !password.value)) {
     showNotice('请先填写用户名与密码。')
     const missing = username.value ? passwordField.value : usernameField.value
@@ -135,6 +168,7 @@ async function submit() {
     }
     const actor = await api<Session>('/auth/login', { method: 'POST', body: {
       username: username.value, password: password.value,
+      areaCode: loginArea.value === nonDistrictAccount ? undefined : loginArea.value,
     } })
     saveUsername(remember.value ? username.value : '')
     await enterAfterLogin(actor, signInRoute)
@@ -207,6 +241,24 @@ async function logout() {
         </div>
 
         <form class="login-form" :novalidate="!changing" @submit.prevent="submit">
+          <div v-if="!changing" class="signin-field">
+            <label for="signin-area" class="field__label">登录辖区</label>
+            <span class="field__control">
+              <svg class="field__icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 10c0 4.5-7 10-7 10S5 14.5 5 10a7 7 0 0 1 14 0Z" />
+                <circle cx="12" cy="10" r="2.2" />
+              </svg>
+              <select id="signin-area" ref="areaField" v-model="loginArea" :disabled="pending" required>
+                <option disabled value="">{{ areasLoading ? '正在加载辖区…' : '请选择登录辖区' }}</option>
+                <option v-for="area in loginAreas" :key="area.code" :value="area.code">{{ area.label }}</option>
+                <option :value="nonDistrictAccount">非辖区账号（系统管理员、机构、运营单位）</option>
+              </select>
+            </span>
+            <button v-if="areasFailed" type="button" class="link-btn" @click="loadLoginAreas">
+              辖区加载失败，重试
+            </button>
+          </div>
+
           <label v-if="!changing" class="signin-field">
             <span class="field__label">用户名</span>
             <span class="field__control">
@@ -269,33 +321,6 @@ async function logout() {
           </button>
 
           <button v-if="changing" type="button" class="link-btn" :disabled="pending" @click="logout">退出登录</button>
-          <div v-else class="login-form__alt">
-            <span class="login-form__divider"><i></i>其他认证方式<i></i></span>
-            <div class="login-form__methods">
-              <button type="button" class="method" aria-label="指纹登录"
-                @click="showNotice('当前暂未开通生物识别，请使用账号密码登录。')">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3a6 6 0 016 6v3M12 3a6 6 0 00-6 6v3M9 12v3.5a3 3 0 006 0V12M8 21h8" />
-                </svg>
-                <span>指纹</span>
-              </button>
-              <button type="button" class="method" aria-label="短信验证码"
-                @click="showNotice('当前暂未开通短信验证，请使用账号密码登录。')">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="6" y="2.8" width="12" height="18.4" rx="2.4" /><path d="M10.5 18.6h3" />
-                </svg>
-                <span>短信</span>
-              </button>
-              <button type="button" class="method" aria-label="证书认证"
-                @click="showNotice('当前暂未开通证书认证，请使用账号密码登录。')">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3.5" y="4.5" width="17" height="13" rx="2" />
-                  <path d="M8 20.5h8M12 17.5v3M7.5 11l2.2 2.2 4.3-4.3" />
-                </svg>
-                <span>证书</span>
-              </button>
-            </div>
-          </div>
         </form>
 
         <div class="login-card__foot">

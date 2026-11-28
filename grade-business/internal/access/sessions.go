@@ -82,20 +82,27 @@ func fields(actor *Principal) []any {
 	return []any{&actor.ID, &actor.Name, &actor.Role, &actor.AreaCode, &actor.SubjectID, &actor.Subject, &actor.MustChange}
 }
 
-// authenticate 验证密码并重新核对账号及主体是否可用。
-// 参数 ctx 为请求上下文，username、password 为提交的账号和密码。
+// authenticate 验证凭据、账号可用性和登录辖区。
+// 参数 ctx 为请求上下文，input 为提交的账号、密码和登录辖区。
 // 返回值 当前账号身份及校验过的密码哈希，或统一凭据错误。
-func (s *Service) authenticate(ctx context.Context, username, password string) (Principal, []byte, error) {
+func (s *Service) authenticate(ctx context.Context, input loginInput) (Principal, []byte, error) {
 	var actor Principal
 	salt, hash := make([]byte, 16), make([]byte, 32)
 	err := s.db.QueryRow(ctx, "SELECT "+principalFields+
 		",a.password_salt,a.password_hash FROM access_accounts a"+principalJoin+
-		" WHERE a.username=$1 AND "+loginEligible, username).
+		" WHERE a.username=$1 AND "+loginEligible, input.Username).
 		Scan(append(fields(&actor), &salt, &hash)...)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Principal{}, nil, err
 	}
-	if !passwordMatches(password, salt, hash) || err != nil {
+	if !passwordMatches(input.Password, salt, hash) || err != nil {
+		return Principal{}, nil, errCredential
+	}
+	matches := input.AreaCode == ""
+	if actor.Role == Regulator {
+		matches = districtNames[input.AreaCode] != "" && input.AreaCode == actor.AreaCode
+	}
+	if !matches {
 		return Principal{}, nil, errCredential
 	}
 	return actor, hash, nil
@@ -115,8 +122,9 @@ func (s *Service) issue(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	tag, err := s.db.Exec(ctx, `
 		INSERT INTO access_sessions(token_hash,account_id,expires_at)
 		SELECT $1,a.id,statement_timestamp()+interval '8 hours'
-		FROM access_accounts a WHERE a.id=$2 AND a.password_hash=$3 AND a.enabled FOR UPDATE OF a`,
-		hash[:], actor.ID, fingerprint)
+		FROM access_accounts a WHERE a.id=$2 AND a.password_hash=$3 AND a.enabled
+		AND a.role_code=$4 AND COALESCE(a.area_code,'')=$5 FOR UPDATE OF a`,
+		hash[:], actor.ID, fingerprint, actor.Role, actor.AreaCode)
 	if err != nil {
 		return err
 	}

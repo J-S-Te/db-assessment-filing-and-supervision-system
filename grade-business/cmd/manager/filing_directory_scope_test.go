@@ -99,9 +99,9 @@ func TestAdminFilingUsesDirectoryDistrict(t *testing.T) {
 		}
 	}
 	admin := accessLogin(t, hit, "scope-admin")
-	city := accessLogin(t, hit, "scope-city")
-	county := accessLogin(t, hit, "scope-county")
-	other := accessLogin(t, hit, "scope-other")
+	city := accessLogin(t, hit, "scope-city", "331000")
+	county := accessLogin(t, hit, "scope-county", "331002")
+	other := accessLogin(t, hit, "scope-other", "330800")
 	institution := accessLogin(t, hit, "scope-institution")
 	assertAdminFilingDistrictReview(t, handler, hit, admin, city, county, other, institution)
 }
