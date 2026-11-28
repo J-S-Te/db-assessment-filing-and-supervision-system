@@ -85,11 +85,15 @@ type event struct {
 }
 
 type change struct {
+	personChange
+	Code           *string `json:"code"`
+	Classification *string `json:"classification"`
+	District       *string `json:"district"`
+}
+
+type personChange struct {
 	ExpectedVersion int64   `json:"expectedVersion"`
 	Name            *string `json:"name"`
-	Code            *string `json:"code"`
-	Classification  *string `json:"classification"`
-	District        *string `json:"district"`
 	Qualification   *string `json:"qualification"`
 	ValidUntil      *string `json:"validUntil"`
 	InstitutionID   *string `json:"institutionId"`
@@ -138,7 +142,7 @@ func textAllowed(raw string, limit int, optional bool) bool {
 		utf8.RuneCountInString(raw) <= limit && strings.IndexFunc(raw, unicode.IsControl) < 0
 }
 
-// validateChangeKind 禁止提交其他目录才有的字段及超出角色的归属变更。
+// validateChangeKind 限定目录字段和角色权限，禁止写入测评师工号。
 // 参数 kind 为目标类型，scope 为机构范围，input 为请求修改。
 // 返回值 字段集合及角色范围合法时为真。
 func validateChangeKind(kind, scope string, input change) bool {
@@ -149,7 +153,7 @@ func validateChangeKind(kind, scope string, input change) bool {
 	case institution:
 		return scope == "" && input.CertificateNo == nil && input.InstitutionID == nil
 	case person:
-		return input.Classification == nil && input.District == nil &&
+		return input.Code == nil && input.Classification == nil && input.District == nil &&
 			(scope == "" || input.InstitutionID == nil)
 	default:
 		return false
@@ -170,7 +174,9 @@ func mergeChange(current entry, input change) entry {
 			*update.oldValue = strings.TrimSpace(*update.newValue)
 		}
 	}
-	current.Code = strings.ToUpper(current.Code)
+	if input.Code != nil {
+		current.Code = strings.ToUpper(current.Code)
+	}
 	current.CertificateNo = strings.ToUpper(current.CertificateNo)
 	return current
 }
@@ -179,7 +185,7 @@ func mergeChange(current entry, input change) entry {
 // 参数 kind 为记录类型，item 为规范化后的拟保存行。
 // 返回值 记录的数据有效时为真。
 func validEntry(kind string, item entry) bool {
-	if !textAllowed(item.Name, 200, false) || !textAllowed(item.Code, 80, false) ||
+	if !textAllowed(item.Name, 200, false) || !textAllowed(item.Code, 80, kind == person) ||
 		!textAllowed(item.Classification, 80, true) || !textAllowed(item.District, 80, true) ||
 		!textAllowed(item.Qualification, 100, true) || !textAllowed(item.CertificateNo, 100, true) ||
 		(item.Status != active && item.Status != inactive) {

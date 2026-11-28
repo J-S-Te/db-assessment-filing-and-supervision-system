@@ -223,14 +223,18 @@ func (e endpoint) request(r *http.Request, fields ...string) (string, string, ur
 	return kind, scope, values, err
 }
 
-// decodeWrite 防止机构替监管审批资质，并解码名录修改字段。
-// 参数 w、r 为 HTTP 请求与响应，kind 为目录类型，input 为解码目标。
+// decodeWrite 按目录字段白名单解码，拒绝测评师工号及越权的资质维护。
+// 参数 w、r 为 HTTP 响应与请求，kind 为目录类型，input 为解码目标。
 // 返回值 请求结构或越权错误。
 func (e endpoint) decodeWrite(w http.ResponseWriter, r *http.Request, kind string, input *change) error {
 	if e.scoped && kind == institution {
 		return errForbidden
 	}
-	if httpx.Decode(w, r, input) != nil {
+	target := any(input)
+	if kind == person {
+		target = &input.personChange
+	}
+	if httpx.Decode(w, r, target) != nil {
 		return errInvalid
 	}
 	return nil

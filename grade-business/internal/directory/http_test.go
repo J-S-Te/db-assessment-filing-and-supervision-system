@@ -207,11 +207,11 @@ func TestDirectoryPersonnelHistoryAndReviewGuard(t *testing.T) {
 	old := registerTestInstitution(t, mux, "原测评机构", "CERT-OLD")
 	next := registerTestInstitution(t, mux, "新测评机构", "CERT-NEXT")
 	peoplePath := scopedDirectory("people", "", old.ScopeName)
-	personInput := map[string]any{"name": "在审人员", "code": "staff-07", "certificateNo": "T-TEST-202"}
+	personInput := map[string]any{"name": "在审人员", "certificateNo": "T-TEST-202"}
 	staff := testJSON[testEntry](t, testRequest(t, mux, "POST", peoplePath, personInput, 201))
 	testRequest(t, mux, "POST", peoplePath, personInput, 409)
 	testRequest(t, mux, "POST", scopedDirectory("people", "", next.ScopeName),
-		map[string]any{"name": "证书重复", "code": "staff-09", "certificateNo": "t-test-202"}, 409)
+		map[string]any{"name": "证书重复", "certificateNo": "t-test-202"}, 409)
 	if staff.InstitutionID != old.ID || !staff.CanEdit {
 		t.Fatalf("机构登记人员归属错误: %+v", staff)
 	}
@@ -232,33 +232,94 @@ func TestDirectoryPersonnelHistoryAndReviewGuard(t *testing.T) {
 	assertDirectoryTransfer(t, mux, staff, old, next)
 }
 
-// TestInstitutionRegistersAssessorWithoutCode 验证机构登记、编辑测评师时可省略工号。
+// TestRegisterAssessorsWithBlankCode 验证监管和机构可连续登记无工号测评师。
 // 参数 t 为隔离 PostgreSQL 与实际名录路由的测试上下文。
 // 返回值 无。
-func TestInstitutionRegistersAssessorWithoutCode(t *testing.T) {
+func TestRegisterAssessorsWithBlankCode(t *testing.T) {
+	pool := directoryTestPool(t)
 	mux := http.NewServeMux()
-	Register(mux, directoryTestPool(t))
+	Register(mux, pool)
 	org := registerTestInstitution(t, mux, "免工号登记测试机构", "ORG-NO-STAFF-CODE")
+	registry := "/api/v1/directory/people"
+	first := testJSON[entry](t, testRequest(t, mux, "POST", registry, map[string]any{
+		"name": "监管登记测评师", "institutionId": org.ID, "certificateNo": "cert-1128",
+	}, 201))
 	people := scopedDirectory("people", "", org.ScopeName)
-	input := map[string]any{"name": "新测评师", "certificateNo": "cert-1128"}
-	first := testJSON[entry](t, testRequest(t, mux, "POST", people, input, 201))
-	second := testJSON[entry](t, testRequest(t, mux, "POST", people,
-		map[string]any{"name": "待补证书测评师"}, 201))
-	if first.Code == "" || second.Code == "" || first.Code == second.Code ||
-		first.CertificateNo != "CERT-1128" || second.CertificateNo != "" {
-		t.Fatalf("内部编号或证书编号不正确：%+v，%+v", first, second)
+	second := testJSON[entry](t, testRequest(t, mux, "POST", people, map[string]any{
+		"name": "机构登记测评师",
+	}, 201))
+	if first.ID == second.ID || first.CertificateNo != "CERT-1128" || second.InstitutionID != org.ID {
+		t.Fatalf("登记结果不正确：%+v，%+v", first, second)
 	}
-
-	personPath := scopedDirectory("people", first.ID, org.ScopeName)
-	updated := testJSON[entry](t, testRequest(t, mux, "PATCH", personPath, map[string]any{
+	updated := testJSON[entry](t, testRequest(t, mux, "PATCH", registry+"/"+first.ID, map[string]any{
 		"expectedVersion": first.Version, "certificateNo": "cert-1129",
 	}, 200))
-	if updated.Code != first.Code || updated.CertificateNo != "CERT-1129" {
-		t.Fatalf("修改证书编号后内部工号未保留：%+v", updated)
+	if updated.CertificateNo != "CERT-1129" {
+		t.Fatalf("证书编号未更新：%+v", updated)
 	}
-	testRequest(t, mux, "POST", "/api/v1/directory/people", map[string]any{
-		"name": "管理端无工号记录", "institutionId": org.ID,
-	}, 400)
+	var count int
+	err := pool.QueryRow(t.Context(),
+		"SELECT count(*) FROM directory_people WHERE institution_id=$1 AND code=''", org.ID,
+	).Scan(&count)
+	if err != nil || count != 2 {
+		t.Fatalf("两条新档案的数据库工号应为空，实际记录数 %d，错误 %v", count, err)
+	}
+}
+
+// TestDecodeAssessorWriteRejectsCode 验证工号字段无论大小写和取值均不在请求白名单内。
+// 参数 t 为名录请求解码测试上下文。
+// 返回值 无。
+func TestDecodeAssessorWriteRejectsCode(t *testing.T) {
+	for _, body := range []string{
+		`{"name":"测评师","code":"INJECTED"}`,
+		`{"name":"测评师","Code":""}`,
+		`{"name":"测评师","CODE":null}`,
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/directory/people", bytes.NewBufferString(body))
+		request.Header.Set("Content-Type", "application/json")
+		if err := (endpoint{}).decodeWrite(httptest.NewRecorder(), request, person, &change{}); err != errInvalid {
+			t.Errorf("测评师请求包含工号，应在读写数据库前拒绝：%s，错误 %v", body, err)
+		}
+	}
+}
+
+// TestAssessorWritesRejectCode 验证两个入口拒收工号且保留已有值。
+// 参数 t 为隔离 PostgreSQL 与实际名录路由的测试上下文。
+// 返回值 无。
+func TestAssessorWritesRejectCode(t *testing.T) {
+	pool := directoryTestPool(t)
+	mux := http.NewServeMux()
+	Register(mux, pool)
+	org := registerTestInstitution(t, mux, "工号防写测试机构", "ORG-CODE-READONLY")
+	var id string
+	err := pool.QueryRow(t.Context(), `INSERT INTO directory_people(institution_id,name,code)
+		VALUES ($1,'存量测评师','HISTORICAL') RETURNING id::text`, org.ID).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := "/api/v1/directory/people"
+	for _, paths := range [][2]string{
+		{registry, registry + "/" + id},
+		{scopedDirectory("people", "", org.ScopeName), scopedDirectory("people", id, org.ScopeName)},
+	} {
+		for key, value := range map[string]any{"code": "INJECTED", "Code": "", "CODE": nil} {
+			create := map[string]any{"name": "带工号的测评师", key: value}
+			if paths[0] == registry {
+				create["institutionId"] = org.ID
+			}
+			testRequest(t, mux, "POST", paths[0], create, 400)
+			testRequest(t, mux, "PATCH", paths[1], map[string]any{
+				"expectedVersion": 1, "name": "未经允许的修改", key: value,
+			}, 400)
+		}
+	}
+	testRequest(t, mux, "PATCH", registry+"/"+id,
+		map[string]any{"expectedVersion": 1, "name": "正常修改姓名"}, 200)
+	var code string
+	err = pool.QueryRow(t.Context(), "SELECT code FROM directory_people WHERE id=$1", id).Scan(&code)
+	if err != nil || code != "HISTORICAL" {
+		t.Fatalf("存量工号未保留：%q，错误 %v", code, err)
+	}
 }
 
 // assertDirectoryReviewGuard 验证一条未结业务就能阻止名录停用或人员调离。
@@ -310,18 +371,21 @@ func assertDirectoryTransfer(t *testing.T, mux *http.ServeMux, staff, old, next 
 	}
 }
 
-// TestDirectoryPersonPickerHidesCertificateSearch 验证同名人员可按工号辨识且资格证号保持在档案接口中。
+// TestDirectoryPersonPickerHidesCertificateSearch 验证业务选择器兼容按历史编号辨识且不暴露证书。
 // 参数 t 为隔离数据库测试上下文。
 // 返回值 无。
 func TestDirectoryPersonPickerHidesCertificateSearch(t *testing.T) {
 	mux := http.NewServeMux()
-	Register(mux, directoryTestPool(t))
+	pool := directoryTestPool(t)
+	Register(mux, pool)
 	org := registerTestInstitution(t, mux, "人员选项测试机构", "CERT-CHOICE")
-	scope := scopedDirectory("people", "", org.ScopeName)
-	testRequest(t, mux, "POST", scope,
-		map[string]any{"name": "同名测评师", "code": "work-one", "certificateNo": "private-certificate"}, 201)
-	testRequest(t, mux, "POST", scope,
-		map[string]any{"name": "同名测评师", "code": "work-two", "certificateNo": "other-certificate"}, 201)
+	_, err := pool.Exec(t.Context(),
+		`INSERT INTO directory_people(institution_id,name,code,certificate_no) VALUES
+			($1,'同名测评师','WORK-ONE','PRIVATE-CERTIFICATE'),
+			($1,'同名测评师','WORK-TWO','OTHER-CERTIFICATE')`, org.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := "/api/v1/directory/options?kind=person&institution=" + url.QueryEscape(org.ScopeName)
 	body := testRequest(t, mux, "GET", path+"&q=work-two", nil, 200)
 	result := testJSON[testPage[map[string]any]](t, body).Items

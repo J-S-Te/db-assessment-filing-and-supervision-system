@@ -21,7 +21,7 @@ const tabs = computed(() => props.institutional
 const collection = computed<DirectoryCollection>(() => (
   tabs.value.find(item => item.key === route.query.tab)?.key ?? tabs.value[0].key
 ))
-const institutionPeople = computed(() => props.institutional && collection.value === 'people')
+const isPeople = computed(() => collection.value === 'people')
 const title = computed(() => tabs.value.find(item => item.key === collection.value)?.name ?? '')
 const institution = computed(() => props.institutional ? queryValue(route.query.institution).trim() : '')
 const scope = computed(() => props.institutional ? { institution: institution.value } : {})
@@ -143,7 +143,8 @@ function openEditor(item?: DirectoryEntry, kind: 'edit' | 'status' | 'link' = 'e
   if (item) {
     const { name, code, classification, district, qualification, validUntil, institutionId, certificateNo } = item
     Object.assign(fields, {
-      name, code: code ?? '', classification: classification ?? '', district: district ?? '',
+      name, code: isPeople.value ? '' : code ?? '',
+      classification: classification ?? '', district: district ?? '',
       qualification: qualification ?? '', validUntil: validUntil ?? '', institutionId: institutionId ?? '',
       certificateNo: certificateNo ?? '',
     })
@@ -177,7 +178,7 @@ function entryBody(kind: DirectoryCollection) {
   return {
     name: common.name, qualification: fields.qualification.trim(),
     certificateNo: fields.certificateNo.trim(), validUntil: fields.validUntil,
-    ...(!props.institutional ? { code: common.code, institutionId: fields.institutionId } : {}),
+    ...(!props.institutional ? { institutionId: fields.institutionId } : {}),
   }
 }
 
@@ -267,7 +268,7 @@ function openHistory(item: DirectoryEntry) {
  */
 function historyText(item?: DirectoryEntry) {
   if (!item) return '—'
-  const identifier = institutionPeople.value ? item.certificateNo : item.code
+  const identifier = isPeople.value ? item.certificateNo : item.code
   return [
     item.name, item.institutionName || item.institutionId, identifier, item.qualification, item.validUntil,
     item.status === 'inactive' ? '停用' : '启用',
@@ -343,7 +344,7 @@ onScopeDispose(() => {
         <div class="v2-toolbar-row">
           <label class="field filter-keyword"><span>检索{{ title }}</span>
             <input v-model="keyword" type="search" maxlength="120"
-              :placeholder="institutionPeople ? '输入姓名或证书编号' : '输入名称或编号'">
+              :placeholder="isPeople ? '输入姓名或证书编号' : '输入名称或编号'">
           </label>
           <label class="field"><span>状态</span><select v-model="status">
             <option value="">全部状态</option><option value="active">启用</option><option value="inactive">停用</option>
@@ -361,8 +362,7 @@ onScopeDispose(() => {
           <table class="data-table">
             <thead><tr>
               <th>{{ collection === 'people' ? '姓名' : '名称' }}</th>
-              <th v-if="institutionPeople">证书编号</th>
-              <th v-else>{{ collection === 'units' ? '统一社会信用代码' : collection === 'people' ? '工号／证书编号' : '资质证书编号' }}</th>
+              <th>{{ isPeople ? '证书编号' : collection === 'units' ? '统一社会信用代码' : '资质证书编号' }}</th>
               <th>{{ collection === 'units' ? '类型／区县' : '资质' }}</th>
               <th v-if="collection === 'people'">归属机构</th>
               <th v-if="collection === 'units'">所属系统</th>
@@ -372,9 +372,7 @@ onScopeDispose(() => {
             <tbody><tr v-for="item in page.items" :key="item.id || item.scopeName || item.name">
               <td><strong>{{ item.name }}</strong>
                 <small v-if="item.scopeName && item.scopeName !== item.name" class="muted subtext">办理名称 {{ item.scopeName }}</small></td>
-              <td v-if="institutionPeople" class="code">{{ item.certificateNo || '—' }}</td>
-              <td v-else class="code">{{ item.code || '—' }}
-                <small v-if="item.certificateNo" class="muted subtext">{{ item.certificateNo }}</small></td>
+              <td class="code">{{ (isPeople ? item.certificateNo : item.code) || '—' }}</td>
               <td>{{ collection === 'units' ? [item.classification, item.district].filter(Boolean).join('／') || '—' : item.qualification || '—' }}</td>
               <td v-if="collection === 'people'">{{ item.institutionName || '—' }}</td>
               <td>{{ collection === 'units' ? item.systemCount ?? '—' : item.validUntil || '—' }}</td>
@@ -418,8 +416,8 @@ onScopeDispose(() => {
           <label class="field"><span>{{ collection === 'people' ? '姓名' : '名称' }}</span>
             <input v-model="fields.name" maxlength="200" required>
           </label>
-          <label v-if="!institutionPeople" class="field">
-            <span>{{ collection === 'units' ? '统一社会信用代码' : collection === 'people' ? '工号' : '资质证书编号' }}</span>
+          <label v-if="!isPeople" class="field">
+            <span>{{ collection === 'units' ? '统一社会信用代码' : '资质证书编号' }}</span>
             <input v-model="fields.code" :maxlength="collection === 'units' ? 18 : 80"
               :pattern="collection === 'units' ? '[0-9A-Za-z]{18}' : undefined"
               :readonly="selected?.codeManaged" required>

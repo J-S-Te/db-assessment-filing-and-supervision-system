@@ -2,7 +2,6 @@ package directory
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"strings"
 
@@ -13,7 +12,7 @@ import (
 
 var regulatorAreas = geoarea.RegulatorAreas()
 
-// create 完成主档登记、机构关联和首条历史，并为机构端补齐省略的人员内部编号。
+// create 在同一事务中完成主档登记、机构关联和首条历史。
 // 参数 ctx 为写入上下文，kind、scope 指定目录和机构范围，input 为登记字段。
 // 返回值 新目录条目或校验、并发和数据库错误。
 func (s service) create(ctx context.Context, kind, scope string, input change) (entry, error) {
@@ -21,9 +20,6 @@ func (s service) create(ctx context.Context, kind, scope string, input change) (
 		return entry{}, errInvalid
 	}
 	item := mergeChange(entry{Status: active}, input)
-	if kind == person && scope != "" && input.Code == nil {
-		item.Code = "AUTO-" + rand.Text()
-	}
 	var result entry
 	err := s.write(ctx, func(tx pgx.Tx) error {
 		var err error
@@ -104,7 +100,7 @@ func stableScopeName(ctx context.Context, tx pgx.Tx, kind, name string) (string,
 	return result, err
 }
 
-// insertEntry 将校验后的名录候选写入对应的主表。
+// insertEntry 写入校验后的名录档案，测评师工号使用数据库空值默认值。
 // 参数 ctx、tx 为登记事务，kind、item 为类型和目录字段。
 // 返回值 新记录标识或数据库错误。
 func insertEntry(ctx context.Context, tx pgx.Tx, kind string, item entry) (string, error) {
@@ -112,9 +108,9 @@ func insertEntry(ctx context.Context, tx pgx.Tx, kind string, item entry) (strin
 	var row pgx.Row
 	if kind == person {
 		row = tx.QueryRow(ctx, `INSERT INTO directory_people(
-			institution_id,name,code,certificate_no,qualification,valid_until,status)
-			VALUES ($1,$2,$3,$4,$5,NULLIF($6,'')::date,$7) RETURNING id::text`,
-			item.InstitutionID, item.Name, item.Code, item.CertificateNo, item.Qualification,
+			institution_id,name,certificate_no,qualification,valid_until,status)
+			VALUES ($1,$2,$3,$4,NULLIF($5,'')::date,$6) RETURNING id::text`,
+			item.InstitutionID, item.Name, item.CertificateNo, item.Qualification,
 			item.ValidUntil, item.Status)
 	} else {
 		row = tx.QueryRow(ctx, `INSERT INTO directory_parties(
@@ -131,13 +127,14 @@ func insertEntry(ctx context.Context, tx pgx.Tx, kind string, item entry) (strin
 // 参数 ctx 为修改上下文，kind、scope、id 为条目范围，input 为预期版本和修改字段。
 // 返回值 更新条目，或权限、冲突和数据库错误。
 func (s service) patch(ctx context.Context, kind, scope, id string, input change) (entry, error) {
-	if input.ExpectedVersion < 1 || input == (change{ExpectedVersion: input.ExpectedVersion}) ||
-		!validateChangeKind(kind, scope, input) {
+	version := input.ExpectedVersion
+	input.ExpectedVersion = 0
+	if version < 1 || input == (change{}) || !validateChangeKind(kind, scope, input) {
 		return entry{}, errInvalid
 	}
 	var result entry
 	err := s.write(ctx, func(tx pgx.Tx) error {
-		before, err := editableEntry(ctx, tx, kind, scope, id, input.ExpectedVersion)
+		before, err := editableEntry(ctx, tx, kind, scope, id, version)
 		if err != nil {
 			return err
 		}
@@ -300,14 +297,14 @@ func eligibleInstitution(ctx context.Context, tx pgx.Tx, scope, id string) (stri
 	return result, err
 }
 
-// updateEntry 按已锁定条目保存名录字段并递增版本。
+// updateEntry 保存已锁定的名录条目并递增版本，保留测评师的历史工号。
 // 参数 ctx、tx 为修改事务，kind、item 为目标主表和待保存字段。
 // 返回值 修改操作的数据库错误。
 func updateEntry(ctx context.Context, tx pgx.Tx, kind string, item entry) error {
 	if kind == person {
-		_, err := tx.Exec(ctx, `UPDATE directory_people SET institution_id=$2,name=$3,code=$4,
-			certificate_no=$5,qualification=$6,valid_until=NULLIF($7,'')::date,status=$8,version=version+1
-			WHERE id=$1`, item.ID, item.InstitutionID, item.Name, item.Code, item.CertificateNo,
+		_, err := tx.Exec(ctx, `UPDATE directory_people SET institution_id=$2,name=$3,
+			certificate_no=$4,qualification=$5,valid_until=NULLIF($6,'')::date,status=$7,version=version+1
+			WHERE id=$1`, item.ID, item.InstitutionID, item.Name, item.CertificateNo,
 			item.Qualification, item.ValidUntil, item.Status)
 		return err
 	}

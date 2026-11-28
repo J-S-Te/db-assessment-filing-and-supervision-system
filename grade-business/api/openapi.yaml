@@ -9140,6 +9140,7 @@ paths:
           "$ref": "#/components/responses/Error"
     post:
       operationId: createDirectoryRegistry
+      description: 登记测评人员时须提供归属机构，且请求禁止包含 code。登记被测单位和测评机构时须提供对应的证件编号。
       requestBody:
         required: true
         content:
@@ -9172,6 +9173,7 @@ paths:
           "$ref": "#/components/responses/Error"
     patch:
       operationId: updateDirectoryRegistry
+      description: 更新测评人员时，请求禁止包含 code。
       requestBody:
         required: true
         content:
@@ -9225,7 +9227,7 @@ paths:
           "$ref": "#/components/responses/Error"
     post:
       operationId: createDirectoryInstitution
-      description: 登记测评人员时可省略 code，由服务端生成内部编号。登记被测单位时须提供统一社会信用代码。
+      description: 登记测评人员时，请求禁止包含 code。登记被测单位时须提供统一社会信用代码。
       requestBody:
         required: true
         content:
@@ -9259,6 +9261,7 @@ paths:
           "$ref": "#/components/responses/Error"
     patch:
       operationId: updateDirectoryInstitution
+      description: 更新测评人员时，请求禁止包含 code。
       requestBody:
         required: true
         content:
@@ -13653,14 +13656,13 @@ components:
       description: 单位使用十八位信用代码。监管登记测评机构时提供资质证书编号及有效期，资质等级可留空。
       allOf:
       - "$ref": "#/components/schemas/DirectoryCreateFields"
-      - required: [code]
     DirectoryCreateFields:
       type: object
       additionalProperties: false
       required: [name]
       properties:
         name: {type: string, maxLength: 200}
-        code: {type: string, maxLength: 80}
+        code: {type: string, maxLength: 80, description: 被测单位和测评机构的证件编号。测评人员请求禁止此字段。}
         classification: {type: string}
         district: {type: string}
         qualification: {type: string}
@@ -13675,7 +13677,7 @@ components:
       properties:
         expectedVersion: {type: integer, minimum: 1, format: int64}
         name: {type: string, maxLength: 200}
-        code: {type: string, maxLength: 80}
+        code: {type: string, maxLength: 80, description: 被测单位和测评机构的证件编号。测评人员请求禁止此字段。}
         classification: {type: string}
         district: {type: string}
         qualification: {type: string}
