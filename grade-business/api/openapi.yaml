@@ -13650,7 +13650,7 @@ components:
       properties:
         expectedVersion: {type: integer, minimum: 1, format: int64}
     DirectoryCreate:
-      description: 单位使用十八位信用代码，监管登记测评机构时提供资质及有效期。
+      description: 单位使用十八位信用代码。监管登记测评机构时提供资质证书编号及有效期，资质等级可留空。
       allOf:
       - "$ref": "#/components/schemas/DirectoryCreateFields"
       - required: [code]

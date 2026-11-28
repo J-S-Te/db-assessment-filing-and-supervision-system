@@ -27,6 +27,28 @@ type testPage[T any] struct {
 	NextCursor string `json:"nextCursor"`
 }
 
+// TestRegisterInstitutionWithoutQualification 用途 验证监管可在暂缺资质等级时登记和维护机构。
+// 参数 t 为隔离 PostgreSQL 的测试上下文。
+// 返回值 无。
+func TestRegisterInstitutionWithoutQualification(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, directoryTestPool(t))
+	const path = "/api/v1/directory/institutions"
+	input := map[string]any{"name": "待补等级机构", "code": "CERT-OPTIONAL-LEVEL"}
+	testRequest(t, mux, "POST", path, input, 400)
+	input["validUntil"] = nextYear()
+	item := testJSON[entry](t, testRequest(t, mux, "POST", path, input, 201))
+	if item.Qualification != "" || item.ValidUntil != input["validUntil"] || !item.Usable {
+		t.Fatalf("应保留有效期并允许登记空等级机构：%+v", item)
+	}
+	updated := testJSON[entry](t, testRequest(t, mux, "PATCH", path+"/"+item.ID, map[string]any{
+		"expectedVersion": item.Version, "name": "待补等级机构新名称",
+	}, 200))
+	if updated.Qualification != "" || updated.Name == item.Name {
+		t.Fatalf("未填写的等级应保持为空：%+v", updated)
+	}
+}
+
 // TestDirectoryRegistryScope 验证重复登记、稳定归属、机构维护权限和共享单位停用。
 // 参数 t 为隔离数据库的测试上下文。
 // 返回值 无。
