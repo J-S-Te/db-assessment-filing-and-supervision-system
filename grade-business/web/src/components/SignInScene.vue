@@ -89,7 +89,7 @@ onUnmounted(() => {
 <template>
   <picture class="scene-preview" aria-hidden="true">
     <source :srcset="shortPreview"
-      media="(min-aspect-ratio: 1/1) and (max-width: 900px), (min-aspect-ratio: 1/1) and (max-height: 620px)">
+      media="(min-aspect-ratio: 1/2) and (max-width: 900px), (min-aspect-ratio: 1/2) and (max-height: 620px)">
     <source :srcset="portraitPreview" media="(max-width: 900px), (max-height: 620px)">
     <img :src="widePreview" alt="" fetchpriority="high" decoding="async">
   </picture>
